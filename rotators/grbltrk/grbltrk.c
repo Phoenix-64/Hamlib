@@ -564,7 +564,7 @@ const struct rot_caps grbltrk_serial_rot_caps =
 
     .min_az =     0,
     .max_az =     360,
-    .min_el =     0,
+    .min_el =     -90,
     .max_el =     90,
 
     .rot_init     =  grbltrk_rot_init,
