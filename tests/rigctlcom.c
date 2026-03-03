@@ -226,6 +226,14 @@ int main(int argc, char *argv[])
     int status;
 
     printf("rigctlcom Version 1.6\n");
+    printf(
+    "\n"
+    "============================================================\n"
+    "  WARNING: This is a MODIFIED rigctlcom build\n"
+    "  Single-VFO mode enforced (FR/FB switching disabled)\n"
+    "  For internal / experimental use only\n"
+    "============================================================\n"
+    "\n");
 
     rig_set_debug(verbose);
     while (1)
@@ -742,9 +750,7 @@ static int handle_ts2000(void *arg)
         int p13 = 0;            // P13(1) Tone dummy value for now
         int p14 = 0;            // P14(2) Tone Freq dummy value for now
         int p15 = 0;            // P15(1) Shift status dummy value for now
-        int retval = rig_get_freq(my_rig, vfo_fixup(my_rig, RIG_VFO_A,
-                                  CACHE(my_rig)->split),
-                                  &freq);
+        int retval = rig_get_freq(my_rig, RIG_VFO_CURR, &freq);
         char response[64];
         char *fmt =
             // cppcheck-suppress *
@@ -841,9 +847,7 @@ static int handle_ts2000(void *arg)
         freq_t freq = 0;
         char response[32];
 
-        int retval = rig_get_freq(my_rig, vfo_fixup(my_rig, RIG_VFO_A,
-                                  CACHE(my_rig)->split),
-                                  &freq);
+        int retval = rig_get_freq(my_rig, RIG_VFO_CURR, &freq);
 
         if (retval != RIG_OK)
         {
@@ -857,18 +861,12 @@ static int handle_ts2000(void *arg)
     }
     else if (strcmp(arg, "FB;") == 0)
     {
-        char response[32];
         freq_t freq = 0;
-        int retval = rig_get_freq(my_rig, vfo_fixup(my_rig, RIG_VFO_B,
-                                  CACHE(my_rig)->split),
-                                  &freq);
+        char response[32];
 
+        int retval = rig_get_freq(my_rig, RIG_VFO_CURR, &freq);
         if (retval != RIG_OK)
-        {
-            rig_debug(RIG_DEBUG_ERR, "%s: get freqB failed: %s\n", __func__,
-                      rigerror(retval));
             return retval;
-        }
 
         SNPRINTF(response, sizeof(response), "FB%011"PRIll";", (uint64_t)freq);
         return write_block2((void *)__func__, &my_com, response, strlen(response));
@@ -930,42 +928,20 @@ static int handle_ts2000(void *arg)
     }
     else if (strcmp(arg, "FR0;") == 0)
     {
-        return rig_set_vfo(my_rig, vfo_fixup(my_rig, RIG_VFO_A, CACHE(my_rig)->split));
+        // Ignore VFO switch request
+        return RIG_OK;
     }
     else if (strcmp(arg, "FR1;") == 0)
     {
-        return rig_set_vfo(my_rig, vfo_fixup(my_rig, RIG_VFO_B, CACHE(my_rig)->split));
+        // Ignore VFO switch request
+        return RIG_OK;
     }
     else if (strcmp(arg, "FR;") == 0)
     {
-        char response[32];
-        vfo_t vfo;
-        int retval = rig_get_vfo(my_rig, &vfo);
-        int nvfo = 0;
-
-        if (retval != RIG_OK)
-        {
-            vfo = RIG_VFO_A;
-#if 0 // so we work with rigs (like Icom) that have no get_vfo
-            rig_debug(RIG_DEBUG_ERR, "%s: get vfo failed: %s\n", __func__,
-                      rigerror(retval));
-            return retval;
-#endif
-        }
-
-
-        if (vfo == vfo_fixup(my_rig, RIG_VFO_A, CACHE(my_rig)->split)) { nvfo = 0; }
-        else if (vfo == vfo_fixup(my_rig, RIG_VFO_B, CACHE(my_rig)->split)) { nvfo = 1; }
-        else
-        {
-            retval = -RIG_EPROTO;
-            return retval;
-        }
-
-        SNPRINTF(response, sizeof(response), "FR%c;", nvfo + '0');
+        // Always report VFO A as active
+        char response[8];
+        SNPRINTF(response, sizeof(response), "FR0;");
         return write_block2((void *)__func__, &my_com, response, strlen(response));
-
-        return retval;
     }
     else if (strcmp(arg, "FT;") == 0)
     {
@@ -1477,34 +1453,9 @@ static int handle_ts2000(void *arg)
     }
     else if (strncmp(arg, "DC", 2) == 0)
     {
-        vfo_t vfo_curr = vfo_fixup(my_rig, RIG_VFO_A, CACHE(my_rig)->split);
-        split_t split;
-        int isplit;
-        int retval;
         char response[32];
-        // Expecting DCnn -- but we don't care about the control param
-        int n = sscanf(arg, "DC%d", &isplit);
-
-        if (n != 1)
-        {
-            rig_debug(RIG_DEBUG_ERR, "%s: error parsing '%s'\n", __func__, (char *)arg);
-            return -RIG_EPROTO;
-        }
-
-        split = isplit;
-        retval = rig_set_split_vfo(my_rig, vfo_curr, split, RIG_VFO_SUB);
-
-        if (retval != RIG_OK)
-        {
-            rig_debug(RIG_DEBUG_ERR, "%s: rig set split vfo failed '%s'\n", __func__,
-                      rigerror(retval));
-            return retval;
-        }
-
-        SNPRINTF(response, sizeof(response), "DC%c;", split + '0');
+        SNPRINTF(response, sizeof(response), "DC0;");
         return write_block2((void *)__func__, &my_com, response, strlen(response));
-
-        return retval;
     }
     else if (strcmp(arg, "FT0;") == 0)
     {
