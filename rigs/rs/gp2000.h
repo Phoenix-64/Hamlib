@@ -27,7 +27,7 @@
 #undef BACKEND_VER
 #define BACKEND_VER "20210901"
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 
 int gp2000_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt);
@@ -43,6 +43,6 @@ int gp2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
 int gp2000_reset(RIG *rig, reset_t reset);
 const char * gp2000_get_info(RIG *rig);
 
-extern const struct rig_caps xk2100_caps;
+extern struct rig_caps xk2100_caps;
 
 #endif /* XK2000_H */

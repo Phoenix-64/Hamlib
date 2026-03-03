@@ -99,7 +99,7 @@ static int icr30_r2i_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width,
  * This function handles the -N modes for IC-R30
  */
 
-int icr30_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
+static int icr30_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
     if (mode & (RIG_MODE_AMN | RIG_MODE_FMN))
     {
@@ -124,14 +124,14 @@ static struct icom_priv_caps icr30_priv_caps =
     .extcmds = icr30_extcmds      /* Custom ext_parm parameters */
 };
 
-const struct rig_caps icr30_caps =
+struct rig_caps icr30_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR30),
     .model_name = "IC-R30",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_RECEIVER | RIG_FLAG_HANDHELD,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

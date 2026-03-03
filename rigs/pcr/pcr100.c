@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #include "pcr.h"
 #include "idx_builtin.h"
@@ -53,7 +53,7 @@ static const struct pcr_priv_caps pcr100_priv =
 /*
  * IC PCR100 rigs capabilities.
  */
-const struct rig_caps pcr100_caps =
+struct rig_caps pcr100_caps =
 {
     RIG_MODEL(RIG_MODEL_PCR100),
     .model_name     = "IC-PCR100",

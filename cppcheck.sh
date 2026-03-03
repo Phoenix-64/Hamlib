@@ -1,10 +1,23 @@
 #!/bin/sh
-set -x
+# set -x
 # Author Michael Black W9MDB
 # This SUPPRESS setting results in no warnings as of 2020-01-14
 # There are things that could still be done...especially in the C++ area
 echo "Ideally there should be no errors or warnings"
 
+# We need the generated include files, not just the base
+# If this is not the build directory, try to find one
+BUILDINC=""
+if ! test -f Makefile; then
+    # Find mine, YMMV
+    if test -d build; then
+	BUILDINC="-I build/src -I build/include -I build/include/hamlib"
+    # Put code here to find your build directory and set BUILDINC
+    else
+	echo "Unknown build directory, some includes won't be found"
+    fi
+fi
+	
 # We do suppress some errors which are expected or other code
 # There are quite a few C++ items to take care of still if anybody cares
 SUPPRESS="\
@@ -21,11 +34,9 @@ SUPPRESS="\
 --suppress=*:extra/gnuradio/am.h \
 --suppress=*:extra/gnuradio/ssb.h \
 --suppress=*:extra/gnuradio/wfm.h \
---suppress=*:extra/gnuradio/wfm.h \
---suppress=*:extra/gnuradio/HrAGC.h \
 --suppress=*:extra/gnuradio/gnuradio.cc \
 --suppress=missingIncludeSystem \
---suppress=*:style/rigs/adat/adat.c
+"
 
 #CHECK="\
 #-D RIG_LEVEL_LINEOUT=1 \
@@ -50,9 +61,9 @@ CHECK="\
 -D BACKEND_EXPORT \
 -D PRId64 \
 -D DECLARE_INITRIG_BACKEND \
--D DECLARE_INITRROT_BACKEND \
+-D DECLARE_INITROT_BACKEND \
 -D DECLARE_INITAMP_BACKEND \
--D B230400
+-D B230400 \
 -U RIG_LEVEL_LINEOUT \
 -U O_ASYNC \
 -U F_SETSIG \
@@ -85,10 +96,11 @@ if test $# -eq 0 ; then
                  -I include/hamlib/ \
                  -I lib \
                  -I security \
+		 $BUILDINC \
                  -q \
                  --force \
                  --enable=all \
-                 --std=c99 \
+                 --std=c11 \
                  $SUPPRESS \
                  $CHECK \
                  --template='{file}:{line},{severity},{id},{message}' \
@@ -102,10 +114,11 @@ else
                  -I include/hamlib/ \
                  -I lib \
                  -I security \
+		 $BUILDINC \
                  -q \
                  --force \
                  --enable=all \
-                 --std=c99 \
+                 --std=c11 \
                  $SUPPRESS \
                  $CHECK \
                  --template='{file}:{line},{severity},{id},{message}'\

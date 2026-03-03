@@ -32,7 +32,7 @@
  * \file serial.c
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
 #include <stdio.h>   /* Standard input/output definitions */
@@ -40,15 +40,10 @@
 #include <unistd.h>  /* UNIX standard function definitions */
 #include <fcntl.h>   /* File control definitions */
 #include <errno.h>   /* Error number definitions */
-#include <sys/types.h>
 #include <ctype.h>
 
 #ifdef HAVE_SYS_IOCTL_H
 #  include <sys/ioctl.h>
-#endif
-
-#ifdef HAVE_SYS_PARAM_H
-#  include <sys/param.h>
 #endif
 
 #ifdef HAVE_TERMIOS_H
@@ -63,7 +58,8 @@
 #  endif
 #endif
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
+#include "hamlib/port.h"
 
 //! @cond Doxygen_Suppress
 #if defined(WIN32) && !defined(HAVE_TERMIOS_H)
@@ -126,9 +122,93 @@ int is_uh_radio_fd(int fd)
 }
 //! @endcond
 
+#if defined(WIN32)
+#include <windows.h>
+#include <strsafe.h>
+
+static void WinErrorShow(LPCTSTR lpszFunction, DWORD dw)
+{
+    // Retrieve the system error message for the last-error code
+
+    LPVOID lpMsgBuf;
+    LPVOID lpDisplayBuf;
+//    DWORD dw = GetLastError();
+
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER |
+        FORMAT_MESSAGE_FROM_SYSTEM |
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        dw,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+	// cppcheck-suppress uninitvar
+        (LPTSTR) &lpMsgBuf,
+        0, NULL);
+
+    // Display the error message and exit the process
+
+    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT,
+                                      (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(
+                                          TCHAR));
+    StringCchPrintf((LPTSTR)lpDisplayBuf,
+                    LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+                    TEXT("%s failed with error %d: %s"),
+                    lpszFunction, dw, lpMsgBuf);
+    //MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
+    rig_debug(RIG_DEBUG_ERR, "%s: %s", __func__, (char *)lpDisplayBuf);
+
+    LocalFree(lpMsgBuf);
+    LocalFree(lpDisplayBuf);
+}
+
+enum serial_status
+{
+    SER_NO_EXIST,
+    SER_IN_USE,
+    SER_UNKNOWN_ERR,
+    SER_AVAILABLE
+};
+
+static int check_com_port_in_use(const char *port)
+{
+    char device[1024];
+    snprintf(device, sizeof(device), "\\\\.\\%s", port);
+    HANDLE hCom = CreateFileA(
+        device,
+        GENERIC_READ | GENERIC_WRITE,
+        0,    // No sharing
+        NULL, // Default security
+        OPEN_EXISTING,
+        0,    // Non-overlapped mode
+        NULL  // No template file
+    );
+
+    if (hCom == INVALID_HANDLE_VALUE)
+    {
+        DWORD error = GetLastError();
+
+        if (error == ERROR_FILE_NOT_FOUND)
+        {
+            return SER_NO_EXIST;
+        }
+        else if (error == ERROR_ACCESS_DENIED)
+        {
+            return SER_IN_USE;
+        }
+        else
+        {
+            WinErrorShow("serial error on CreateFileA: ", error);
+            return SER_IN_USE;
+        }
+    }
+    CloseHandle(hCom);
+
+    return SER_AVAILABLE;
+}
+#endif
 
 /**
- * \brief Open serial port using rig.state data
+ * \brief Open serial port using port data only
  * \param rp port data structure (must spec port id eg /dev/ttyS1)
  * \return RIG_OK or < 0 if error
  */
@@ -142,6 +222,28 @@ int HAMLIB_API serial_open(hamlib_port_t *rp)
     {
         return (-RIG_EINVAL);
     }
+
+#if defined(WIN32)
+    int retcode = check_com_port_in_use(rp->pathname);
+
+    switch (retcode)
+    {
+    case SER_IN_USE:
+        rig_debug(RIG_DEBUG_ERR, "%s: serial port %s is already open\n", __func__,
+                  rp->pathname);
+        return -RIG_EACCESS;
+
+    case SER_NO_EXIST:
+        rig_debug(RIG_DEBUG_ERR, "%s: serial port %s does not exist\n", __func__,
+                  rp->pathname);
+        return -RIG_EIO;
+
+    case SER_AVAILABLE:
+        rig_debug(RIG_DEBUG_VERBOSE, "%s: serial port %s is OK\n", __func__, rp->pathname);
+        break;
+    }
+
+#endif
 
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: %s\n", __func__, rp->pathname);
@@ -227,7 +329,8 @@ int HAMLIB_API serial_open(hamlib_port_t *rp)
 
         if (fd == -1) // some serial ports fail to open 1st time for some unknown reason
         {
-            rig_debug(RIG_DEBUG_WARN, "%s(%d): open failed#%d\n", __func__, __LINE__, i);
+            rig_debug(RIG_DEBUG_WARN, "%s(%d): open failed#%d %s\n", __func__, __LINE__, i,
+                      strerror(errno));
             hl_usleep(500 * 1000);
             fd = OPEN(rp->pathname, O_RDWR | O_NOCTTY | O_NDELAY);
         }
@@ -464,7 +567,6 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: unsupported rate specified: %d\n",
                   __func__,
                   rp->parm.serial.rate);
-        CLOSE(fd);
 
         return (-RIG_ECONF);
     }
@@ -511,16 +613,17 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: unsupported serial_data_bits specified: %d\n",
                   __func__,
                   rp->parm.serial.data_bits);
-        CLOSE(fd);
 
         return (-RIG_ECONF);
-        break;
     }
 
     /*
      * Set stop bits to requested values.
      *
      */
+    rig_debug(RIG_DEBUG_TRACE, "%s: stopbits=%d\n", __func__,
+              rp->parm.serial.stop_bits);
+
     switch (rp->parm.serial.stop_bits)
     {
     case 1:
@@ -536,10 +639,8 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: unsupported serial_stop_bits specified: %d\n",
                   __func__,
                   rp->parm.serial.stop_bits);
-        CLOSE(fd);
 
         return (-RIG_ECONF);
-        break;
     }
 
     /*
@@ -582,10 +683,8 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: unsupported serial_parity specified: %d\n",
                   __func__,
                   rp->parm.serial.parity);
-        CLOSE(fd);
 
         return (-RIG_ECONF);
-        break;
     }
 
 
@@ -618,10 +717,8 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: unsupported flow_control specified: %d\n",
                   __func__,
                   rp->parm.serial.handshake);
-        CLOSE(fd);
 
         return (-RIG_ECONF);
-        break;
     }
 
     /*
@@ -663,7 +760,6 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: tcsetattr failed: %s\n",
                   __func__,
                   strerror(errno));
-        CLOSE(fd);
 
         return (-RIG_ECONF);      /* arg, so close! */
     }
@@ -678,7 +774,6 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: ioctl(TCSETA) failed: %s\n",
                   __func__,
                   strerror(errno));
-        CLOSE(fd);
 
         return (-RIG_ECONF);      /* arg, so close! */
     }
@@ -694,7 +789,6 @@ int HAMLIB_API serial_setup(hamlib_port_t *rp)
                   "%s: ioctl(TIOCSETP) failed: %s\n",
                   __func__,
                   strerror(errno));
-        CLOSE(fd);
 
         return (-RIG_ECONF);      /* arg, so close! */
     }
@@ -739,9 +833,10 @@ int HAMLIB_API serial_flush(hamlib_port_t *p)
         rig_debug(RIG_DEBUG_ERR, "%s: No WIN32 index for port???\n", __func__);
         return -1;
     }
+
     PurgeComm(index->hComm, PURGE_RXCLEAR);
     return RIG_OK;
-    
+
 #endif
 
     if (p->fd == uh_ptt_fd || p->fd == uh_radio_fd || p->flushx)
@@ -776,13 +871,13 @@ int HAMLIB_API serial_flush(hamlib_port_t *p)
     timeout_retry_save = p->timeout_retry;
     p->timeout = 0;
     p->timeout_retry = 0;
-    
+
 
     do
     {
         // we pass an empty stopset so read_string can determine
         // the appropriate stopset for async data
-        const char stopset[1];
+        const char stopset[1] = "";
         len = read_string(p, buf, sizeof(buf) - 1, stopset, 0, 1, 1);
 
         if (len > 0)
@@ -817,7 +912,7 @@ int HAMLIB_API serial_flush(hamlib_port_t *p)
 
 //    rig_debug(RIG_DEBUG_VERBOSE, "tcflush%s\n", "");
     // we also do this flush https://github.com/Hamlib/Hamlib/issues/1241
-    tcflush(p->fd,TCIFLUSH);
+    tcflush(p->fd, TCIFLUSH);
 
     return RIG_OK;
 }
@@ -1048,7 +1143,7 @@ int HAMLIB_API ser_set_rts(hamlib_port_t *p, int state)
 
 /**
  * \brief Get RTS bit
- * \param p supposed to be &rig->state.rigport
+ * \param p supposed to be RIGPORT(rig)
  * \param state non-NULL
  */
 int HAMLIB_API ser_get_rts(hamlib_port_t *p, int *state)
@@ -1131,7 +1226,7 @@ int HAMLIB_API ser_set_dtr(hamlib_port_t *p, int state)
 
 /**
  * \brief Get DTR bit
- * \param p supposed to be &rig->state.rigport
+ * \param p supposed to be RIGPORT(rig)
  * \param state non-NULL
  */
 int HAMLIB_API ser_get_dtr(hamlib_port_t *p, int *state)
@@ -1183,7 +1278,7 @@ int HAMLIB_API ser_set_brk(const hamlib_port_t *p, int state)
 
 /**
  * \brief Get Carrier (CI?) bit
- * \param p supposed to be &rig->state.rigport
+ * \param p supposed to be RIGPORT(rig)
  * \param state non-NULL
  */
 int HAMLIB_API ser_get_car(hamlib_port_t *p, int *state)
@@ -1206,7 +1301,7 @@ int HAMLIB_API ser_get_car(hamlib_port_t *p, int *state)
 
 /**
  * \brief Get Clear to Send (CTS) bit
- * \param p supposed to be &rig->state.rigport
+ * \param p supposed to be RIGPORT(rig)
  * \param state non-NULL
  */
 int HAMLIB_API ser_get_cts(hamlib_port_t *p, int *state)
@@ -1229,7 +1324,7 @@ int HAMLIB_API ser_get_cts(hamlib_port_t *p, int *state)
 
 /**
  * \brief Get Data Set Ready (DSR) bit
- * \param p supposed to be &rig->state.rigport
+ * \param p supposed to be RIGPORT(rig)
  * \param state non-NULL
  */
 int HAMLIB_API ser_get_dsr(hamlib_port_t *p, int *state)

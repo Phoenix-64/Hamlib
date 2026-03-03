@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
-#include "serial.h"
+#include "hamlib/rig.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 
@@ -32,8 +32,8 @@
 
 #define MAXCMDLEN 32
 
-extern const struct rig_caps mds_4710_caps;
-extern const struct rig_caps mds_9710_caps;
+extern struct rig_caps mds_4710_caps;
+extern struct rig_caps mds_9710_caps;
 
 DECLARE_INITRIG_BACKEND(mds)
 {
@@ -50,15 +50,15 @@ int mds_transaction(RIG *rig, char *cmd, int expected, char **result)
 {
     char cmd_buf[MAXCMDLEN];
     int retval;
-    struct rig_state *rs = &rig->state;
-    struct mds_priv_data *priv = rig->state.priv;
+    hamlib_port_t *rp = RIGPORT(rig);
+    struct mds_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: cmd=%s\n", __func__, cmd);
 
     SNPRINTF(cmd_buf, sizeof(cmd_buf), "%s\n", cmd);
 
-    rig_flush(&rs->rigport);
-    retval = write_block(&rs->rigport, (unsigned char *) cmd_buf, strlen(cmd_buf));
+    rig_flush(rp);
+    retval = write_block(rp, (unsigned char *) cmd_buf, strlen(cmd_buf));
 
     if (retval < 0)
     {
@@ -74,7 +74,7 @@ int mds_transaction(RIG *rig, char *cmd, int expected, char **result)
         char cmdtrm_str[2];   /* Default Command/Reply termination char */
         cmdtrm_str[0] = 0x0d;
         cmdtrm_str[1] = 0x00;
-        retval = read_string(&rs->rigport, (unsigned char *) priv->ret_data,
+        retval = read_string(rp, (unsigned char *) priv->ret_data,
                              sizeof(priv->ret_data), cmdtrm_str, strlen(cmdtrm_str), 0, expected);
 
         if (retval < 0)
@@ -101,10 +101,10 @@ int mds_init(RIG *rig)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s version %s\n", __func__, rig->caps->version);
     // cppcheck claims leak here but it's freed in cleanup
-    rig->state.priv = (struct mds_priv_data *)calloc(1,
-                      sizeof(struct mds_priv_data));
+    STATE(rig)->priv = (struct mds_priv_data *)calloc(1,
+                       sizeof(struct mds_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         return -RIG_ENOMEM;
     }
@@ -127,19 +127,19 @@ int mds_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
 
 /*
  * mds_get_freq
- * Assumes rig!=NULL, rig->state.priv!=NULL, freq!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, freq!=NULL
  */
 int mds_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
@@ -171,7 +171,7 @@ int mds_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 // TC command does not work on 4050 -- not implemented as of 2022-01-12
 /*
  * mds_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int mds_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
@@ -303,7 +303,7 @@ int mds_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     rmode_t tmode;
     pbwidth_t twidth;
 
-    //struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    //struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s mode=%s width=%d\n", __func__,
               rig_strvfo(vfo), rig_strrmode(mode), (int)width);
@@ -563,10 +563,13 @@ int mds_open(RIG *rig)
     ENTERFUNC;
     mds_get_info(rig);
     retval = mds_transaction(rig, "MODEM NONE", 0, &response);
+
     if (retval != RIG_OK)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: MODEM cmd failed: %s\n", __func__, rigerror(retval));
+        rig_debug(RIG_DEBUG_ERR, "%s: MODEM cmd failed: %s\n", __func__,
+                  rigerror(retval));
     }
-    else retval = mds_transaction(rig, "PTT 0", 0, &response);
+    else { retval = mds_transaction(rig, "PTT 0", 0, &response); }
+
     RETURNFUNC(retval);
 }

@@ -22,7 +22,7 @@
 #include "indi_wrapper.hpp"
 
 #include <math.h>
-#include <limits.h>
+#include <float.h>
 
 #define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
 
@@ -462,9 +462,7 @@ int RotINDIClient::setPosition(azimuth_t az, elevation_t el)
     return RIG_OK;
 }
 
-// cppcheck-suppress unusedFunction
 void RotINDIClient::removeDevice(INDI::BaseDevice *dp) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newProperty(INDI::Property *property)
 {
     std::string name(property->getName());
@@ -481,8 +479,8 @@ void RotINDIClient::newProperty(INDI::Property *property)
             connectDevice(mTelescope->getDeviceName());
         }
 
-        mDstAz = INT_MAX;
-        mDstEl = INT_MAX;
+        mDstAz = FLT_MAX;
+        mDstEl = FLT_MAX;
     }
 
     if (name == "HORIZONTAL_COORD")
@@ -491,13 +489,9 @@ void RotINDIClient::newProperty(INDI::Property *property)
         mEl = property->getNumber()->np[1].value;
     }
 }
-// cppcheck-suppress unusedFunction
 void RotINDIClient::removeProperty(INDI::Property *property) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newBLOB(IBLOB *bp) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newSwitch(ISwitchVectorProperty *svp) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newNumber(INumberVectorProperty *nvp)
 {
     std::string name(nvp->name);
@@ -508,22 +502,16 @@ void RotINDIClient::newNumber(INumberVectorProperty *nvp)
         mEl = nvp->np[1].value;
     }
 }
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newMessage(INDI::BaseDevice *dp, int messageID) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newText(ITextVectorProperty *tvp) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newLight(ILightVectorProperty *lvp) {}
-// cppcheck-suppress unusedFunction
 void RotINDIClient::newDevice(INDI::BaseDevice *dp) {}
 
-// cppcheck-suppress unusedFunction
 void RotINDIClient::serverConnected()
 {
     rig_debug(RIG_DEBUG_VERBOSE, "indi: server connected\n");
 }
 
-// cppcheck-suppress unusedFunction
 void RotINDIClient::serverDisconnected(int exit_code)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "indi: server disconnected\n");
@@ -609,9 +597,20 @@ extern "C" const char *indi_wrapper_get_info(ROT *rot)
 
 extern "C" int indi_wrapper_open(ROT *rot)
 {
+    hamlib_port_t *rotp = ROTPORT(rot);
+    char host[256];
+    char port[6];
+
     rig_debug(RIG_DEBUG_TRACE, "%s called\n", __func__);
 
-    indi_wrapper_client->setServer("localhost", 7624);
+    if (parse_hoststr(rotp->pathname, strlen(rotp->pathname), host, port) == RIG_OK)
+    {
+        indi_wrapper_client->setServer(host, atoi(port));
+    }
+    else
+    {
+        indi_wrapper_client->setServer("localhost", 7624);
+    }
 
     if (!indi_wrapper_client->connectServer())
     {

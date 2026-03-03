@@ -30,9 +30,14 @@ INPUT            = @top_srcdir@/doc/index.doxygen \
                    @top_srcdir@/include/hamlib/ \
                    @top_srcdir@/src/
 
-EXCLUDE          = @top_srcdir@/src/amp_conf.h \
-                   @top_srcdir@/include/hamlib/ampclass.h \
-                   @top_srcdir@/include/hamlib/rotclass.h
+EXCLUDE          = @top_srcdir@/include/hamlib/ampclass.h \
+                   @top_srcdir@/include/hamlib/multicast.h \
+                   @top_srcdir@/include/hamlib/rigclass.h \
+                   @top_srcdir@/include/hamlib/rig_dll.h \
+                   @top_srcdir@/include/hamlib/rotclass.h \
+                   @top_srcdir@/include/hamlib/winpthreads.h \
+                   @top_srcdir@/src/amp_conf.h \
+                   @top_srcdir@/src/multicast.c
 
 INCLUDE_PATH     = @top_srcdir@/include
 
@@ -52,10 +57,15 @@ EXTRACT_STATIC        = NO
 HIDE_UNDOC_MEMBERS    = NO
 SHOW_INCLUDE_FILES    = YES
 INHERIT_DOCS          = YES
-ENABLED_SECTIONS      = ""
+ENABLED_SECTIONS      = "hl_static"
 PREDEFINED            = DOXYGEN "DOC_HIDDEN"
 JAVADOC_AUTOBRIEF     = NO
 OPTIMIZE_OUTPUT_FOR_C = YES
+# Allow anonymous group for related macro definitions
+DISTRIBUTE_GROUP_DOC  = YES
+# Later versions default to NO
+HAVE_DOT              = YES
+CALL_GRAPH            = YES
 
 MAN_LINKS             = NO
 MACRO_EXPANSION       = YES

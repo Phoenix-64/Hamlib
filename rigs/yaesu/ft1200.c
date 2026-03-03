@@ -142,7 +142,7 @@ int ftdx1200_ext_tokens[] =
 /*
  * FTDX 1200 rig capabilities
  */
-const struct rig_caps ftdx1200_caps =
+struct rig_caps ftdx1200_caps =
 {
     RIG_MODEL(RIG_MODEL_FTDX1200),
     .model_name =         "FTDX-1200",
@@ -172,15 +172,23 @@ const struct rig_caps ftdx1200_caps =
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran =
     {
+#define NO_LVL_NOTCHF
+#define NO_LVL_MICGAIN
+#define NO_LVL_MONITOR_GAIN
+#define NO_LVL_RFPOWER
 #include "level_gran_yaesu.h"
+#undef NO_LVL_NOTCHF
+#undef NO_LVL_MICGAIN
+#undef NO_LVL_MONITOR_GAIN
+#undef NO_LVL_RFPOWER
         [LVL_NOTCHF] = { .min = { .i = 1 }, .max = { .i = 4000 }, .step = { .i = 10 } },
-        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
+        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BANDUNUSED,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -202,6 +210,7 @@ const struct rig_caps ftdx1200_caps =
     .chan_list =          {
         {   1,  99, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP },
         { 100, 117, RIG_MTYPE_EDGE, NEWCAT_MEM_CAP },    /* two by two */
+        {   1,  5,  RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 

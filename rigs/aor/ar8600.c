@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "aor.h"
 
 
@@ -86,7 +86,7 @@ static const struct aor_priv_caps ar8600_priv_caps =
  *
  * part of info from http://www.aoruk.com/8600.htm
  */
-const struct rig_caps ar8600_caps =
+struct rig_caps ar8600_caps =
 {
     RIG_MODEL(RIG_MODEL_AR8600),
     .model_name = "AR8600",
@@ -171,7 +171,7 @@ const struct rig_caps ar8600_caps =
         {RIG_MODE_SSB | RIG_MODE_CW | RIG_MODE_AM, kHz(3)},
         {RIG_MODE_FM | RIG_MODE_AM, kHz(12)},
         {RIG_MODE_FM, kHz(9)},
-        {RIG_MODE_WFM, kHz(230)}, /* 150kHz at -3dB, 380kHz at -20dB */
+        {RIG_MODE_WFM, kHz(230)}, /* 150 kHz at -3dB, 380 kHz at -20dB */
         RIG_FLT_END,
     },
 

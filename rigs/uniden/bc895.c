@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "uniden.h"
 
 
@@ -56,14 +56,14 @@
  *
  * TODO: check this with manual or web site.
  */
-const struct rig_caps bc895_caps =
+struct rig_caps bc895_caps =
 {
     RIG_MODEL(RIG_MODEL_BC895),
     .model_name = "BC895xlt",
     .mfg_name =  "Uniden",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRUNKSCANNER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

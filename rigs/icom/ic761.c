@@ -51,7 +51,7 @@ static const struct icom_priv_caps ic761_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic761_caps =
+struct rig_caps ic761_caps =
 {
     RIG_MODEL(RIG_MODEL_IC761),
     .model_name = "IC-761",
@@ -174,7 +174,7 @@ const struct rig_caps ic761_caps =
     .rig_init = icom_init,
     .rig_cleanup =  icom_cleanup,
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,

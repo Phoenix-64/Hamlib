@@ -53,10 +53,11 @@
 #endif
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "yaesu.h"
 #include "ft817.h"
 #include "misc.h"
+#include "cache.h"
 #include "tones.h"
 #include "bandplan.h"
 #include "cal.h"
@@ -128,6 +129,7 @@ struct ft817_priv_data
     /* Digi mode is not part of regular fm_status response.
      * So keep track of it in a separate variable. */
     unsigned char dig_mode;
+    float swr;
 };
 
 static int ft817_init(RIG *rig);
@@ -261,15 +263,15 @@ enum ft817_digi
 // Thanks to Olivier Schmitt sc.olivier@gmail.com for these tables
 #define FT817_PWR_CAL { 9, \
                 { \
-                    { 0x00, 0 }, \
-                    { 0x01, 10 }, \
-                    { 0x02, 14 }, \
-                    { 0x03, 20 }, \
-                    { 0x04, 34 }, \
-                    { 0x05, 50 }, \
-                    { 0x06, 66 }, \
-                    { 0x07, 82 }, \
-                    { 0x08, 100 } \
+                    { 0x00, 0.0f }, \
+                    { 0x01, 0.5f }, \
+                    { 0x02, 0.75f }, \
+                    { 0x03, 1.0f }, \
+                    { 0x04, 1.7f }, \
+                    { 0x05, 2.5f }, \
+                    { 0x06, 3.3f }, \
+                    { 0x07, 4.1f }, \
+                    { 0x08, 5.0f } \
                 } }
 
 #define FT817_ALC_CAL { 6, \
@@ -282,19 +284,34 @@ enum ft817_digi
                     { 0x05, 100 } \
                 } }
 
-#define FT817_SWR_CAL { 2, \
+// SWR values from Christian WA4YA, DL4YA
+#define FT817_SWR_CAL { 16, \
                 { \
-                    { 0, 0 }, \
-                    { 15, 100 } \
+                    { 0, 1.0f }, \
+                    { 1, 1.4f }, \
+                    { 2, 1.8f }, \
+                    { 3, 2.13f }, \
+                    { 4, 2.25f }, \
+                    { 5, 3.7f }, \
+                    { 6, 6.0f }, \
+                    { 7, 7.0f }, \
+                    { 8, 8.0f }, \
+                    { 9, 9.0f }, \
+                    { 10, 10.0f }, \
+                    { 11, 10.0f }, \
+                    { 12, 10.0f }, \
+                    { 13, 10.0f }, \
+                    { 14, 10.0f }, \
+                    { 15, 10.0f } \
                 } }
 
 
-const struct rig_caps ft817_caps =
+struct rig_caps ft817_caps =
 {
     RIG_MODEL(RIG_MODEL_FT817),
     .model_name =          "FT-817",
     .mfg_name =            "Yaesu",
-    .version =             "20230607.0",
+    .version =             "20241117.0",
     .copyright =           "LGPL",
     .status =              RIG_STATUS_STABLE,
     .rig_type =            RIG_TYPE_TRANSCEIVER,
@@ -315,7 +332,7 @@ const struct rig_caps ft817_caps =
     .has_set_func =        RIG_FUNC_LOCK | RIG_FUNC_TONE | RIG_FUNC_TSQL | RIG_FUNC_CSQL | RIG_FUNC_RIT,
     .has_get_level =
     RIG_LEVEL_STRENGTH | RIG_LEVEL_RAWSTR | RIG_LEVEL_RFPOWER |
-    RIG_LEVEL_ALC | RIG_LEVEL_SWR,
+    RIG_LEVEL_ALC | RIG_LEVEL_SWR | RIG_LEVEL_RFPOWER_METER_WATTS,
     .has_set_level =       RIG_LEVEL_BAND_SELECT,
     .has_get_parm =        RIG_PARM_NONE,
     .has_set_parm =        RIG_PARM_NONE,
@@ -439,12 +456,13 @@ const struct rig_caps ft817_caps =
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };
 
-const struct rig_caps ft818_caps =
+
+struct rig_caps ft818_caps =
 {
     RIG_MODEL(RIG_MODEL_FT818),
     .model_name =          "FT-818",
     .mfg_name =            "Yaesu",
-    .version =             "20220424.0",
+    .version =             "20221117.0",
     .copyright =           "LGPL",
     .status =              RIG_STATUS_STABLE,
     .rig_type =            RIG_TYPE_TRANSCEIVER,
@@ -600,13 +618,18 @@ const struct rig_caps ft818_caps =
 
 static int ft817_init(RIG *rig)
 {
+    struct ft817_priv_data *p;
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called, version %s\n", __func__,
               rig->caps->version);
 
-    if ((rig->state.priv = calloc(1, sizeof(struct ft817_priv_data))) == NULL)
+    if ((STATE(rig)->priv = calloc(1, sizeof(struct ft817_priv_data))) == NULL)
     {
         return -RIG_ENOMEM;
     }
+
+    p = (struct ft817_priv_data *) STATE(rig)->priv;
+
+    p->swr = 10;
 
     return RIG_OK;
 }
@@ -615,9 +638,9 @@ static int ft817_cleanup(RIG *rig)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
-    free(rig->state.priv);
+    free(STATE(rig)->priv);
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -640,7 +663,8 @@ static int ft817_close(RIG *rig)
 
 /* ---------------------------------------------------------------------- */
 
-static inline long timediff(const struct timeval *tv1, const struct timeval *tv2)
+static inline long timediff(const struct timeval *tv1,
+                            const struct timeval *tv2)
 {
     struct timeval tv;
 
@@ -650,7 +674,7 @@ static inline long timediff(const struct timeval *tv1, const struct timeval *tv2
     return ((tv.tv_sec * 1000L) + (tv.tv_usec / 1000L));
 }
 
-static int check_cache_timeout(struct timeval *tv)
+static int check_cache_timeout(const struct timeval *tv)
 {
     struct timeval curr;
     long t;
@@ -678,6 +702,7 @@ static int check_cache_timeout(struct timeval *tv)
 static int ft817_read_eeprom(RIG *rig, unsigned short addr, unsigned char *out)
 {
     unsigned char data[YAESU_CMD_LENGTH];
+    hamlib_port_t *rp = RIGPORT(rig);
     int n;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
@@ -687,9 +712,9 @@ static int ft817_read_eeprom(RIG *rig, unsigned short addr, unsigned char *out)
     data[0] = addr >> 8;
     data[1] = addr & 0xff;
 
-    write_block(&rig->state.rigport, data, YAESU_CMD_LENGTH);
+    write_block(rp, data, YAESU_CMD_LENGTH);
 
-    if ((n = read_block(&rig->state.rigport, data, 2)) < 0)
+    if ((n = read_block(rp, data, 2)) < 0)
     {
         return n;
     }
@@ -717,12 +742,13 @@ static int ft817_read_eeprom(RIG *rig, unsigned short addr, unsigned char *out)
 
 static int ft817_get_status(RIG *rig, int status)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
+    hamlib_port_t *rp = RIGPORT(rig);
     struct timeval *tv;
     unsigned char *data;
     int len;
     int n;
-    int retries = rig->state.rigport.retry;
+    int retries = rp->retry;
     unsigned char result[2];
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
@@ -762,10 +788,9 @@ static int ft817_get_status(RIG *rig, int status)
 
     do
     {
-        rig_flush(&rig->state.rigport);
-        write_block(&rig->state.rigport, ncmd[status].nseq,
-                    YAESU_CMD_LENGTH);
-        n = read_block(&rig->state.rigport, data, len);
+        rig_flush(rp);
+        write_block(rp, ncmd[status].nseq, YAESU_CMD_LENGTH);
+        n = read_block(rp, data, len);
     }
     while (retries-- && n < 0);
 
@@ -812,9 +837,9 @@ static int ft817_get_status(RIG *rig, int status)
         /* FT-817 returns 2 bytes with 4 nibbles.
          * Extract raw values here;
          * convert to float when they are requested. */
-        p->swr_level = result[0] & 0xF;
-        p->pwr_level = result[0] >> 4;
-        p->alc_level = result[1] & 0xF;
+        p->swr_level = (result[1] & 0xF0) >> 4;
+        p->pwr_level = (result[0] & 0xF0) >> 4;
+        p->alc_level = result[0] & 0x0F;
         p->mod_level = result[1] >> 4;
         rig_debug(RIG_DEBUG_TRACE, "%s: swr: %d, pwr %d, alc %d, mod %d\n",
                   __func__,
@@ -834,18 +859,19 @@ static int ft817_get_status(RIG *rig, int status)
 
 static int ft817_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
     freq_t f1 = 0, f2 = 0;
-    int retries = rig->state.rigport.retry +
+    struct rig_cache *cachep = CACHE(rig);
+    int retries = RIGPORT(rig)->retry +
                   1; // +1 because, because 2 steps are needed even in best scenario
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called, vfo=%s, ptt=%d, split=%d\n", __func__,
-              rig_strvfo(vfo), rig->state.cache.ptt, rig->state.cache.split);
+              rig_strvfo(vfo), cachep->ptt, cachep->split);
 
     // we can't query VFOB while in transmit and split mode
-    if (rig->state.cache.ptt && vfo == RIG_VFO_B && rig->state.cache.split)
+    if (cachep->ptt && vfo == RIG_VFO_B && cachep->split)
     {
-        *freq = rig->state.cache.freqMainB;
+        *freq = cachep->freqMainB;
         return RIG_OK;
     }
 
@@ -886,7 +912,7 @@ static int ft817_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 static int ft817_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -972,7 +998,7 @@ static int ft817_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 static int ft817_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
                                vfo_t *tx_vfo)
 {
-    const struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    const struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
     ptt_t ptt;
     int n;
 
@@ -1000,10 +1026,12 @@ static int ft817_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
         }
 
         *split = (c[0] & 0x80) ? RIG_SPLIT_ON : RIG_SPLIT_OFF;
+        *tx_vfo = RIG_VFO_A;
     }
     else
     {
         *split = (p->tx_status & 0x20) ? RIG_SPLIT_ON : RIG_SPLIT_OFF;
+        *tx_vfo = RIG_VFO_B;
     }
 
     return RIG_OK;
@@ -1011,7 +1039,7 @@ static int ft817_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
 
 static int ft817_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -1025,7 +1053,8 @@ static int ft817_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
         }
     }
 
-    *ptt = ((p->tx_status & 0x80) == 0);
+    *ptt = p->tx_status  != 0xff;
+
 
     return RIG_OK;
 }
@@ -1033,7 +1062,7 @@ static int ft817_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 static int ft817_get_tx_level(RIG *rig, value_t *val, unsigned char *tx_level,
                               const cal_table_float_t *cal)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -1059,8 +1088,9 @@ static int ft817_get_tx_level(RIG *rig, value_t *val, unsigned char *tx_level,
 
         if (ptt == RIG_PTT_OFF)
         {
-            rig_debug(RIG_DEBUG_VERBOSE, "%s: rig not keyed\n", __func__);
-            return -RIG_ERJCTED; //Or return OK?
+
+            val->f = p->swr;
+            return RIG_OK;
         }
 
         n = ft817_get_status(rig, FT817_NATIVE_CAT_GET_TX_METERING);
@@ -1071,7 +1101,8 @@ static int ft817_get_tx_level(RIG *rig, value_t *val, unsigned char *tx_level,
         }
     }
 
-    val->f = rig_raw2val_float(*tx_level, cal);
+    p->swr = val->f = rig_raw2val_float(*tx_level, cal);
+
     rig_debug(RIG_DEBUG_VERBOSE, "%s: level %f\n", __func__, val->f);
 
     return RIG_OK;
@@ -1080,7 +1111,7 @@ static int ft817_get_tx_level(RIG *rig, value_t *val, unsigned char *tx_level,
 /* frontend will always use RAWSTR+cal_table */
 static int ft817_get_smeter_level(RIG *rig, value_t *val)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
     int n;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
@@ -1121,7 +1152,7 @@ static int ft817_get_smeter_level(RIG *rig, value_t *val)
 
 static int ft817_get_raw_smeter_level(RIG *rig, value_t *val)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -1143,7 +1174,7 @@ static int ft817_get_raw_smeter_level(RIG *rig, value_t *val)
 
 static int ft817_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     switch (level)
     {
@@ -1165,6 +1196,10 @@ static int ft817_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     case RIG_LEVEL_SWR:
         return ft817_get_tx_level(rig, val, &p->swr_level, &rig->caps->swr_cal);
 
+    case RIG_LEVEL_RFPOWER_METER_WATTS:
+        return ft817_get_tx_level(rig, val, &p->pwr_level,
+                                  &rig->caps->rfpower_meter_cal);
+
     default:
         return -RIG_EINVAL;
     }
@@ -1174,7 +1209,7 @@ static int ft817_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 static int ft817_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 {
-    struct ft817_priv_data *p = (struct ft817_priv_data *) rig->state.priv;
+    struct ft817_priv_data *p = (struct ft817_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -1230,7 +1265,7 @@ static int ft818_817_get_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t *option,
     /* if CURR then get real VFO before parsing EEPROM */
     if (vfo == RIG_VFO_CURR)
     {
-        vfo = rig->state.current_vfo;
+        vfo = STATE(rig)->current_vfo;
     }
 
     /* band info is 4 bit per VFO, for A lower nibble, B is upper nible */
@@ -1289,7 +1324,7 @@ static int ft818_817_get_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t *option,
         eeprom_ant[0] &= 1 << 1;
         break;
 
-    case 0xB:  /* FM BCB 76Mhz - 108Mhz, bit 2 */
+    case 0xB:  /* FM BCB 76 MHz - 108 MHz, bit 2 */
         eeprom_ant[0] &= 1 << 2;
         break;
 
@@ -1337,26 +1372,31 @@ static int ft818_get_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t *option,
 int ft817_read_ack(RIG *rig)
 {
     unsigned char dummy;
+    hamlib_port_t *rp = RIGPORT(rig);
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
-    if (rig->state.rigport.post_write_delay == 0)
+    if (rp->post_write_delay == 0)
     {
-        if (read_block(&rig->state.rigport, &dummy, 1) < 0)
+        if (read_block(rp, &dummy, 1) < 0)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: error reading ack\n", __func__);
             rig_debug(RIG_DEBUG_ERR, "%s: adjusting post_write_delay to avoid ack\n",
                       __func__);
-            rig->state.rigport.post_write_delay =
+            rp->post_write_delay =
                 10; // arbitrary choice right now of max 100 cmds/sec
             return RIG_OK; // let it continue without checking for ack now
         }
 
-        rig_debug(RIG_DEBUG_TRACE, "%s: ack received (%d)\n", __func__, dummy);
+        rig_debug(RIG_DEBUG_TRACE, "%s: ack value=0x%x\n", __func__, dummy);
+
+#if 0 // don't know of any reject codes -- none documented
 
         if (dummy != 0)
         {
             return -RIG_ERJCTED;
         }
+
+#endif
     }
 
     return RIG_OK;
@@ -1368,6 +1408,7 @@ int ft817_read_ack(RIG *rig)
  */
 static int ft817_send_cmd(RIG *rig, int index)
 {
+    hamlib_port_t *rp = RIGPORT(rig);
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
     if (ncmd[index].ncomp == 0)
@@ -1376,8 +1417,8 @@ static int ft817_send_cmd(RIG *rig, int index)
         return -RIG_EINTERNAL;
     }
 
-    rig_flush(&rig->state.rigport);
-    write_block(&rig->state.rigport, ncmd[index].nseq, YAESU_CMD_LENGTH);
+    rig_flush(rp);
+    write_block(rp, ncmd[index].nseq, YAESU_CMD_LENGTH);
     return ft817_read_ack(rig);
 }
 
@@ -1399,7 +1440,7 @@ static int ft817_send_icmd(RIG *rig, int index, const unsigned char *data)
     cmd[YAESU_CMD_LENGTH - 1] = ncmd[index].nseq[YAESU_CMD_LENGTH - 1];
     memcpy(cmd, data, YAESU_CMD_LENGTH - 1);
 
-    write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
     return ft817_read_ack(rig);
 }
 
@@ -1463,10 +1504,11 @@ static int ft817_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     rig_debug(RIG_DEBUG_VERBOSE, "ft817: requested freq = %"PRIfreq" Hz\n", freq);
 
     /* fill in the frequency */
-    to_bcd_be(data, (freq + 5) / 10, 8);
+    /* changed to truncate the freq for gpredict compatibility */
+    to_bcd_be(data, (freq + 0) / 10, 8);
 
     rig_force_cache_timeout(
-        &((struct ft817_priv_data *)rig->state.priv)->fm_status_tv);
+        &((struct ft817_priv_data *)STATE(rig)->priv)->fm_status_tv);
 
     retval = ft817_send_icmd(rig, FT817_NATIVE_CAT_SET_FREQ, data);
     hl_usleep(50 * 1000); // FT817 needs a little time after setting freq
@@ -1520,11 +1562,15 @@ static int ft817_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         digmode[0] = digmode[0] >> 5; // shift 5 bits
 
         // check if we're already in the mode and return if so
-        if (digmode[0] == 0x00 &&  mode == RIG_MODE_RTTY) { return RIG_OK; }
-        else if (digmode[0] == 0x01 &&  mode == RIG_MODE_PSKR) { return RIG_OK; }
-        else if (digmode[0] == 0x02 &&  mode == RIG_MODE_PSK) { return RIG_OK; }
-        else if (digmode[0] == 0x03 &&  mode == RIG_MODE_PKTLSB) { return RIG_OK; }
-        else if (digmode[0] == 0x04 &&  mode == RIG_MODE_PKTUSB) { return RIG_OK; }
+        // the memory check was failing when in FM mode -- still showing digmode
+        if (STATE(rig)->current_mode == mode)
+        {
+            if (digmode[0] == 0x00 &&  mode == RIG_MODE_RTTY) { return RIG_OK; }
+            else if (digmode[0] == 0x01 &&  mode == RIG_MODE_PSKR) { return RIG_OK; }
+            else if (digmode[0] == 0x02 &&  mode == RIG_MODE_PSK) { return RIG_OK; }
+            else if (digmode[0] == 0x03 &&  mode == RIG_MODE_PKTLSB) { return RIG_OK; }
+            else if (digmode[0] == 0x04 &&  mode == RIG_MODE_PKTUSB) { return RIG_OK; }
+        }
 
         memcpy(data, ncmd[FT817_NATIVE_CAT_EEPROM_WRITE].nseq, YAESU_CMD_LENGTH);
 
@@ -1586,7 +1632,7 @@ static int ft817_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     /*      return -RIG_EINVAL; */
 
     rig_force_cache_timeout(
-        &((struct ft817_priv_data *)rig->state.priv)->fm_status_tv);
+        &((struct ft817_priv_data *)STATE(rig)->priv)->fm_status_tv);
 
     return ft817_send_cmd(rig, index);
 }
@@ -1595,7 +1641,7 @@ static int ft817_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {
     int index;
     ptt_t ptt_response = -1;
-    int retries = rig->state.rigport.retry;
+    int retries = RIGPORT(rig)->retry;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -1833,7 +1879,7 @@ static int ft817_set_rptr_shift(RIG *rig, vfo_t vfo, rptr_shift_t shift)
     /* Note: this doesn't have effect unless FT817 is in FM mode
        although the command is accepted in any mode.
     */
-    rig_debug(RIG_DEBUG_VERBOSE, "ft817: set repeter shift = %i\n", shift);
+    rig_debug(RIG_DEBUG_VERBOSE, "ft817: set repeater shift = %i\n", shift);
 
     switch (shift)
     {
@@ -1856,7 +1902,7 @@ static int ft817_set_rptr_offs(RIG *rig, vfo_t vfo, shortfreq_t offs)
 {
     unsigned char data[YAESU_CMD_LENGTH - 1];
 
-    rig_debug(RIG_DEBUG_VERBOSE, "ft817: set repeter offs = %li\n", offs);
+    rig_debug(RIG_DEBUG_VERBOSE, "ft817: set repeater offs = %li\n", offs);
 
     /* fill in the offset freq */
     to_bcd_be(data, offs / 10, 8);
@@ -1908,10 +1954,10 @@ int ft817_set_powerstat(RIG *rig, powerstat_t status)
 
     case RIG_POWER_ON:
         // send 5 bytes first, snooze a bit, then PWR_ON
-        write_block(&rig->state.rigport,
+        write_block(RIGPORT(rig),
                     ncmd[FT817_NATIVE_CAT_PWR_WAKE].nseq, YAESU_CMD_LENGTH);
         hl_usleep(200 * 1000);
-        write_block(&rig->state.rigport, ncmd[FT817_NATIVE_CAT_PWR_ON].nseq,
+        write_block(RIGPORT(rig), ncmd[FT817_NATIVE_CAT_PWR_ON].nseq,
                     YAESU_CMD_LENGTH);
         return RIG_OK;
 
@@ -1931,7 +1977,7 @@ static int ft817_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 
     case RIG_OP_TOGGLE:
         rig_force_cache_timeout(&((struct ft817_priv_data *)
-                                  rig->state.priv)->fm_status_tv);
+                                  STATE(rig)->priv)->fm_status_tv);
         n = ft817_send_cmd(rig, FT817_NATIVE_CAT_SET_VFOAB);
         hl_usleep(100 * 1000); // rig needs a little time to do this
         return n;
@@ -1973,7 +2019,7 @@ static int ft817_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
         return n;
     }
 
-    rig->state.cache.split = split;
+    CACHE(rig)->split = split;
 
     return RIG_OK;
 

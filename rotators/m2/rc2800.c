@@ -23,7 +23,8 @@
 #include <string.h>
 
 #include "hamlib/rotator.h"
-#include "serial.h"
+#include "hamlib/port.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 #include "num_stdio.h"
@@ -151,7 +152,7 @@ int testmain()
  * cmdstr - Command to be sent to the rig.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed, but answer will still be read.
- * data_len - in: Size of buffer. It is the caller's responsibily to provide
+ * data_len - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -163,20 +164,18 @@ static int
 rc2800_transaction(ROT *rot, const char *cmdstr,
                    char *data, size_t data_len)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int retval;
     int retry_read = 0;
     char replybuf[BUFSZ];
 
-    rs = &rot->state;
-
 transaction_write:
 
-    rig_flush(&rs->rotport);
+    rig_flush(rotp);
 
     if (cmdstr)
     {
-        retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+        retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
         if (retval != RIG_OK)
         {
@@ -197,7 +196,7 @@ transaction_write:
 
     /* then comes the answer */
     memset(data, 0, data_len);
-    retval = read_string(&rs->rotport, (unsigned char *) data, data_len, CR LF,
+    retval = read_string(rotp, (unsigned char *) data, data_len, CR LF,
                          strlen(CR LF), 0, 1);
 
     // some models seem to echo -- so we'll check and read again if echoed
@@ -205,7 +204,7 @@ transaction_write:
     if (cmdstr && strncmp(data, cmdstr, strlen(data) - 1) == 0)
     {
         memset(data, 0, data_len);
-        retval = read_string(&rs->rotport, (unsigned char *) data, data_len, CR LF,
+        retval = read_string(rotp, (unsigned char *) data, data_len, CR LF,
                              strlen(CR LF), 0, 1);
     }
 
@@ -213,13 +212,13 @@ transaction_write:
     if (strlen(data) == 1)
     {
         memset(data, 0, data_len);
-        retval = read_string(&rs->rotport, (unsigned char *) data, data_len, CR LF,
+        retval = read_string(rotp, (unsigned char *) data, data_len, CR LF,
                              strlen(CR LF), 0, 1);
     }
 
     if (retval < 0)
     {
-        if (retry_read++ < rot->state.rotport.retry)
+        if (retry_read++ < rotp->retry)
         {
             goto transaction_write;
         }

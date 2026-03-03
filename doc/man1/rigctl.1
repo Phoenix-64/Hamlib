@@ -5,15 +5,15 @@
 .\"
 .\" Note: Please keep this page in sync with the source, rigctl.c
 .\"
-.TH RIGCTL "1" "2020-09-09" "Hamlib" "Hamlib Utilities"
+.TH RIGCTL "1" "2026-01-06" "Hamlib" "Hamlib Utilities"
 .
 .
 .SH NAME
 .
 rigctl \- control radio transceivers and receivers
 .
-.SH SYNOPSIS
 .
+.SH SYNOPSIS
 .
 .SY rigctl
 .OP \-hiIlLnouV
@@ -32,7 +32,9 @@ rigctl \- control radio transceivers and receivers
 .RB [ command | \- ]
 .YS
 .
+.
 .SH DESCRIPTION
+.
 Control radio transceivers and receivers.
 .B rigctl
 accepts
@@ -81,14 +83,15 @@ Use
 .I device
 as the file name of the port connected to the radio.
 .IP
-Often a serial port, but could be a USB to serial adapter.  Typically
+Typically
 .IR /dev/ttyS0 ", " /dev/ttyS1 ", " /dev/ttyUSB0 ,
 etc. on Linux,
 .IR COM1 ", " COM2 ,
 etc. on MS Windows.  The BSD flavors and Mac OS/X have their own designations.
 See your system's documentation.
 .IP
-Can be a network address:port, e.g. 127.0.0.1:12345
+Can be a network address:port, e.g.
+.IR 127.0.0.1:12345
 .IP
 The special string \(lquh\-rig\(rq may be given to enable micro-ham device
 support.
@@ -183,34 +186,35 @@ below.
 .BR \-L ", " \-\-show\-conf
 List all config parameters for the radio defined with
 .B \-m
-above. Note the dummy device has no serial parameters.
+above.
 .
 .TP
 .BR \-C ", " \-\-set\-conf = \fIparm=val\fP [ \fI,parm=val\fP ]
 Set configuration parameter(s). Some common ones are:
-.in +4n
+.in +4
 .EX
-.RB   async: "True enables asynchronous data transfer for backends that support it. This allows use of transceive and spectrum data."
-.RB   auto_power_on: "True enables compatible rigs to be powered up on open"
-.RB   auto_power_off: "True enables compatible rigs to be powered down on close"
-.RB   auto_disable_screensaver: "True enables compatible rigs to have their screen saver disabled on open"
-.RB   dcd_type: "Data Carrier Detect (or squelch) interface type override"
-.RB   dcd_pathname: "Path name to the device file of the Data Carrier Detect (or squelch)"
-.RB   disable_yaesu_bandselect: "True disables the automatic band select on band change for Yaesu rigs"
-.RB   dtr_state:  "ON turns on DTR, OFF turns it off, Unset disables it"
-.RB   lo_freq: "Frequency to add to the VFO frequency for use with a transverter"
-.RB   post_write_delay: "Delay in ms between each command sent out"
-.RB   ptt_share: "True enables ptt port to be shared with other apps"
-.RB   ptt_type: "Push-To-Talk interface type override"
-.RB   ptt_pathname: "Path name to the device file of the Push-To-Talk"
-.RB   ptt_bitnum: "Push-To-Talk GPIO bit number"
-.RB   retry: "Max number of retry"
-.RB   rts_state:  "ON turns on DTR, OFF turns it off, Unset disables it"
-.RB   twiddle_timeout: "For satellite ops when VFOB is twiddled will pause VFOB commands until timeout"
-.RB   twiddle_rit: "Suppress get_freq on VFOB for RIT tuning satellites"
-.RB   timeout: "Timeout in ms"
-.RB   write_delay: "Delay in ms between each byte sent out"
-.RB   tuner_control_pathname: "Path name to a script/program to control a tuner with 1 argument of 0/1 for Tuner Off/On"
+.BR   async: "True enables asynchronous data transfer for backends that support it. This allows use of transceive and spectrum data."
+.BR   auto_power_on: "True enables compatible rigs to be powered up on open"
+.BR   auto_power_off: "True enables compatible rigs to be powered down on close"
+.BR   auto_disable_screensaver: "True enables compatible rigs to have their screen saver disabled on open"
+.BR   dcd_type: "Data Carrier Detect (or squelch) interface type override"
+.BR   dcd_pathname: "Path name to the device file of the Data Carrier Detect (or squelch)"
+.BR   disable_yaesu_bandselect: "True disables the automatic band select on band change for Yaesu rigs"
+.BR   dtr_state:  "ON turns on DTR, OFF turns it off, Unset disables it"
+.BR   freq_skip: "!=0 skips setting freq on TX_VFO when in RX and on RX_VFO when in TX -- for use with gpredict and rigs that do not have TARGETABLE_VFO
+.BR   lo_freq: "Frequency to add to the VFO frequency for use with a transverter"
+.BR   post_write_delay: "Delay in ms between each command sent out"
+.BR   ptt_share: "True enables ptt port to be shared with other apps"
+.BR   ptt_type: "Push-To-Talk interface type override"
+.BR   ptt_pathname: "Path name to the device file of the Push-To-Talk"
+.BR   ptt_bitnum: "Push-To-Talk GPIO bit number"
+.BR   retry: "Max number of retry"
+.BR   rts_state:  "ON turns on DTR, OFF turns it off, Unset disables it"
+.BR   twiddle_timeout: "For satellite ops when VFOB is twiddled will pause VFOB commands until timeout"
+.BR   twiddle_rit: "Suppress get_freq on VFOB for RIT tuning satellites"
+.BR   timeout: "Timeout in ms"
+.BR   write_delay: "Delay in ms between each byte sent out"
+.BR   tuner_control_pathname: "Path name to a script/program to control a tuner with 1 argument of 0/1 for Tuner Off/On"
 .EE
 .in
 .IP
@@ -331,6 +335,14 @@ Show version of
 and exit.
 .
 .TP
+.BR \-! ", " \-\-cookie
+Sets the cookie to be used for remote access security
+.
+.TP
+.BR \-# ", " \-\-skip_init
+Skips most startup initialization.
+.
+.TP
 .B \-
 Stop option processing and read commands from standard input.
 .IP
@@ -375,9 +387,9 @@ Since most of the
 .B Hamlib
 operations have a
 .BR set " and a " get
-method, a single upper case letter will often be used for a
+method, a single upper case letter will be used for
 .B set
-method whereas the corresponding single lower case letter refers to the
+methods whereas the corresponding single lower case letter refers to the
 .B get
 method.  Each operation also has a long name; in interactive mode, prepend a
 backslash, \(oq\\\(cq, to enter a long command name all lower case.
@@ -480,6 +492,7 @@ in Hz.
 Returns an integer value and the VFO hamlib thinks is active.
 Note that some rigs (e.g. all Icoms) cannot track current VFO so hamlib can
 get out of sync with the rig if the user presses rig buttons like the VFO.
+rigctld clients should ensure they set the intended VFO or use vfo mode.
 .
 .TP
 .BR M ", " set_mode " \(aq" \fIMode\fP "\(aq \(aq" \fIPassband\fP \(aq
@@ -495,6 +508,7 @@ Mode is a token: \(oqUSB\(cq, \(oqLSB\(cq, \(oqCW\(cq, \(oqCWR\(cq,
 \(oqDSB\(cq.
 .IP
 Passband is in Hz as an integer, -1 for no change, or \(oq0\(cq for the radio backend default.
+IC7300 can use 1,2,3 to select which filter to use
 .IP
 .BR Note :
 Passing a \(oq?\(cq (query) as the first argument instead of a Mode token will
@@ -518,7 +532,8 @@ Set
 .RI \(aq VFO \(aq.
 .IP
 VFO is a token: \(oqVFOA\(cq, \(oqVFOB\(cq, \(oqVFOC\(cq, \(oqcurrVFO\(cq,
-\(oqVFO\(cq, \(oqMEM\(cq, \(oqMain\(cq, \(oqSub\(cq, \(oqTX\(cq, \(oqRX\(cq.
+\(oqVFO\(cq, \(oqMEM\(cq, \(oqMain\(cq, \(oqSub\(cq, \(oqTX\(cq, \(oqRX\(cq, 
+\(oqMainA\(cq, \(oqMainB\(cq, \(oqMainC\(cq, \(oqSubA\(cq, \(oqSubB\(cq \(oqSubC\(cq.
 .IP
 In VFO mode (see
 .B \-\-vfo
@@ -527,7 +542,7 @@ option above) only a single VFO parameter is required:
 .IP
 .in +4n
 .EX
-.RB $ " rigctl -m 229 -r /dev/rig -o"
+.RB $ " rigctl -m 2029 -r /dev/rig -o"
 
 Rig command: V
 VFO: VFOB
@@ -653,6 +668,22 @@ in Hz.
 Returns an integer value.
 .
 .TP
+.BR K ", " set_split_freq_mode " \(aq" "\fITX Frequency\fP" "\(aq \(aq" "\fITX Mode\fP" "\(aq \(aq" "\fITX Passband\fP" \(aq
+Set
+.RI \(aq "TX Frequency" \(aq
+,
+.RI \(aq "TX Mode" \(aq
+and
+.RI \(aq "TX Passband" \(aq.
+See
+.B set_split_mode
+for more information.
+.
+.TP
+.BR k ", " get_split_freq_mode
+Get the current split settings.
+.
+.TP
 .BR X ", " set_split_mode " \(aq" "\fITX Mode\fP" "\(aq \(aq" "\fITX Passband\fP" \(aq
 Set
 .RI \(aq "TX Mode" \(aq
@@ -693,7 +724,7 @@ and
 .IP
 Number is 1-based antenna# (\(oq1\(cq, \(oq2\(cq, \(oq3\(cq, ...).
 .IP
-Option depends on rig..for Icom it probably sets the Tx & Rx antennas as in the IC-7851. See your manual for rig specific option values. Most rigs don't care about the option.
+Option depends on rig. For Icom it probably sets the Tx & Rx antennas as in the IC-7851. See your manual for rig specific option values. Most rigs don't care about the option.
 .IP
 For the IC-7851, FTDX3000 (and perhaps others) it means this:
 .IP
@@ -716,19 +747,23 @@ Get
 A value of 0 for Antenna will return the current TX antenna
 .IP
 > 0 is 1-based antenna# (\(oq1\(cq, \(oq2\(cq, \(oq3\(cq, ...).
-
-
 .IP
-Option returned depends on rig..for Icom is likely the RX only flag.
+Option returned depends on rig. For Icom it is likely the RX only flag.
 .
 .TP
 .BR b ", " send_morse " \(aq" \fIMorse\fP \(aq
 Send
 .RI \(aq Morse \(aq
-symbols.  For Yaesu rigs use memory#1-5 or up to 50 char msg
+symbols.  For Yaesu rigs use memory# (1-5 for most rigs) or up to 50 char message (which will use memory#1)
+
+Example from command line:
 .EX
-Example from command line:  rigctl -m 3073 -r /dev/ttyUSB0 b "CQ CQ DE ME"
-Yaesu example to send message#1: rigctl -m 1035 -r /dev/ttyUSB0 b 1
+rigctl -m 3073 -r /dev/ttyUSB0 b "CQ CQ DE ME"
+.EE
+Yaesu example to send message#1:
+.EX
+rigctl -m 1035 -r /dev/ttyUSB0 b 1
+.EE
 .
 .TP
 .BR 0xbb ", " stop_morse "
@@ -736,7 +771,7 @@ Stop sending the current morse code.
 .
 .TP
 .BR 0xbc ", " wait_morse "
-Wait for morse to finish -- only works on full break-in
+Wait for morse to finish -- only works on full break-in.
 .
 .TP
 .BR 0x94 ", " send_voice_mem " \(aq" \fIMsgnum\fP \(aq
@@ -744,10 +779,26 @@ Have rig transmit internal message
 .RI \(aq Msgnum \(aq
 .
 .TP
+.BR 0xab ", " stop_voice_mem
+Stop transmission of internal message
+.
+.TP
 .BR 0x8b ", " get_dcd
 Get
 .RI \(aq DCD \(aq
 (squelch) status: \(oq0\(cq (Closed) or \(oq1\(cq (Open).
+.
+.TP
+.BR 0x8d ", " set_twiddle " \(aq" \fITimeout\fP \(aq
+Set the twiddle
+.RI \(aq Timeout \(aq
+in seconds.
+.
+.TP
+.BR 0x8e ", " get_twiddle
+Get the twiddle
+.RI \(aq Timeout \(aq
+in seconds.
 .
 .TP
 .BR R ", " set_rptr_shift " \(aq" "\fIRptr Shift\fP" \(aq
@@ -820,7 +871,21 @@ code.
 .BR 0x93 ", " get_dcs_sql
 Get
 .RI \(aq "DCS Sql" \(aq
- code.
+code.
+.
+.TP
+.BR 0x95 ", " set_cache " \(aq" "\fITimeout\fP" \(aq
+Set cache timeout in ms.
+.
+.TP
+.BR 0x96 ", " get_cache
+Get cache timeout in ms.
+.
+.TP
+.BR 0x97 ", " uplink " \(aq" "\fIUplink\fP" \(aq
+Set the uplink VFO to
+.RI \(aq Uplink \(aq
+(1=Sub, 2=Main).
 .
 .TP
 .BR N ", " set_ts " \(aq" "\fITuning Step\fP" \(aq
@@ -841,65 +906,104 @@ Set
 and
 .RI \(aq "Func Status" \(aq.
 .IP
-Func is a token: \(oqFAGC\(cq, \(oqNB\(cq, \(oqCOMP\(cq, \(oqVOX\(cq,
-\(oqTONE\(cq, \(oqTSQL\(cq, \(oqSBKIN\(cq, \(oqFBKIN\(cq, \(oqANF\(cq,
-\(oqNR\(cq, \(oqAIP\(cq, \(oqAPF\(cq, \(oqMON\(cq, \(oqMN\(cq, \(oqRF\(cq,
-\(oqARO\(cq, \(oqLOCK\(cq, \(oqMUTE\(cq, \(oqVSC\(cq, \(oqREV\(cq,
-\(oqSQL\(cq, \(oqABM\(cq, \(oqBC\(cq, \(oqMBC\(cq, \(oqRIT\(cq, \(oqAFC\(cq,
-\(oqSATMODE\(cq, \(oqSCOPE\(cq, \(oqRESUME\(cq, \(oqTBURST\(cq, \(oqTUNER\(cq,
-\(oqXIT\(cq, \(oqNB2\(cq, \(oqDSQL\(cq, \(oqAFLT\(cq, \(oqANL\(cq, \(oqBC2\(cq,
-\(oqDUAL_WATCH\(cq, \(oqDIVERSITY\(cq, \(oqCSQL\(cq, \(oqSCEN\(cq,
-\(oqTRANSCEIVE\(cq, \(oqSPECTRUM\(cq, \(oqSPECTRUM_HOLD\(cq, \(oqSEND_MORSE\(cq,
-\(oqSEND_VOICE_MEM\(cq, \(oqOVF_STATUS\(cq.
+Func is a token:
+\(oqABM\(cq,
+\(oqAFC\(cq,
+\(oqAFLT\(cq,
+\(oqAIP\(cq,
+\(oqANF\(cq,
+\(oqANL\(cq,
+\(oqAPF\(cq,
+\(oqARO\(cq,
+\(oqBC2\(cq,
+\(oqBC\(cq,
+\(oqCOMP\(cq,
+\(oqCSQL\(cq,
+\(oqDIVERSITY\(cq,
+\(oqDSQL\(cq,
+\(oqDUAL_WATCH\(cq,
+\(oqFAGC\(cq,
+\(oqFBKIN\(cq,
+\(oqLOCK\(cq,
+\(oqMBC\(cq,
+\(oqMN\(cq,
+\(oqMON\(cq,
+\(oqMUTE\(cq,
+\(oqNB2\(cq,
+\(oqNB\(cq,
+\(oqNR\(cq,
+\(oqOVF_STATUS\(cq,
+\(oqRESUME\(cq,
+\(oqREV\(cq,
+\(oqRF\(cq,
+\(oqRIT\(cq,
+\(oqSATMODE\(cq,
+\(oqSBKIN\(cq,
+\(oqSCEN\(cq,
+\(oqSCOPE\(cq,
+\(oqSEND_MORSE\(cq,
+\(oqSEND_VOICE_MEM\(cq,
+\(oqSPECTRUM\(cq,
+\(oqSPECTRUM_HOLD\(cq,
+\(oqSQL\(cq,
+\(oqSYNC\(cq,
+\(oqTBURST\(cq,
+\(oqTONE\(cq,
+\(oqTRANSCEIVE\(cq,
+\(oqTSQL\(cq,
+\(oqTUNER\(cq,
+\(oqVOX\(cq,
+\(oqVSC\(cq,
+\(oqXIT\(cq.
 
- FAGC -- Fast AGC
- NB -- Noise Blanker
- COMP -- Speech Compression
- VOX -- Voice Operated Relay
- TONE -- CTCSS Tone TX
- TSQL -- CTCSS Activate/De-activate RX
- SBKIN -- Semi Break-in (CW mode)
- FBKIN -- Full Break-in (CW mode)
- ANF -- Automatic Notch Filter (DSP)
- NR -- Noise Reduction (DSP)
- AIP -- RF pre-amp (AIP on Kenwood, IPO on Yaesu, etc.)
- APF -- Audio Peak Filter
- MON -- Monitor transmitted signal
- MN -- Manual Notch
- RF -- RTTY Filter
- ARO -- Auto Repeater Offset
- LOCK -- Lock
- MUTE -- Mute
- VSC -- Voice Scan Control
- REV -- Reverse transmit and receive frequencies
- SQL -- Turn Squelch Monitor on/off
  ABM -- Auto Band Mode
- BC -- Beat Canceller
- MBC -- Manual Beat Canceller
- RIT -- Receiver Incremental Tuning
  AFC -- Auto Frequency Control ON/OFF
- SATMODE -- Satellite mode ON/OFF
- SCOPE -- Simple bandscope ON/OFF
- RESUME -- Scan auto-resume
- TBURST -- 1750 Hz tone burst
- TUNER -- Enable automatic tuner
- XIT -- Transmitter Incremental Tuning
- NB2 -- 2nd Noise Blanker
- CSQL -- DCS Squelch setting
  AFLT -- AF Filter setting
+ AIP -- RF pre-amp (AIP on Kenwood, IPO on Yaesu, etc.)
+ ANF -- Automatic Notch Filter (DSP)
  ANL -- Noise limiter setting
+ APF -- Audio Peak Filter
+ ARO -- Auto Repeater Offset
+ BC -- Beat Canceller
  BC2 -- 2nd Beat Cancel
- DUAL_WATCH -- Dual Watch / Sub Receiver
+ COMP -- Speech Compression
+ CSQL -- DCS Squelch setting
  DIVERSITY -- Diversity receive
  DSQL -- Digital modes squelch
+ DUAL_WATCH -- Dual Watch / Sub Receiver
+ FAGC -- Fast AGC
+ FBKIN -- Full Break-in (CW mode)
+ LOCK -- Lock
+ MBC -- Manual Beat Canceller
+ MN -- Manual Notch
+ MON -- Monitor transmitted signal
+ MUTE -- Mute
+ NB -- Noise Blanker
+ NB2 -- 2nd Noise Blanker
+ NR -- Noise Reduction (DSP)
+ OVF_STATUS -- Read overflow status 0=Off, 1=On
+ RESUME -- Scan auto-resume
+ REV -- Reverse transmit and receive frequencies
+ RF -- RTTY Filter
+ RIT -- Receiver Incremental Tuning
+ SATMODE -- Satellite mode ON/OFF
+ SBKIN -- Semi Break-in (CW mode)
  SCEN -- scrambler/encryption
- SLICE -- Rig slice selection -- Flex
- TRANSCEIVE -- Send radio state changes automatically ON/OFF
- SPECTRUM -- Spectrum scope data output ON/OFF
- SPECTRUM_HOLD -- Pause spectrum scope updates ON/OFF
+ SCOPE -- Simple bandscope ON/OFF
  SEND_MORSE -- Send specified characters using CW
  SEND_VOICE_MEM -- Transmit in SSB message stored in memory
- OVF -- Read overflow status 0=Off, 1=On
+ SPECTRUM -- Spectrum scope data output ON/OFF
+ SPECTRUM_HOLD -- Pause spectrum scope updates ON/OFF
+ SQL -- Turn Squelch Monitor on/off
+ SYNC -- Synchronize VFOs
+ TBURST -- 1750 Hz tone burst
+ TONE -- CTCSS Tone TX
+ TRANSCEIVE -- Send radio state changes automatically ON/OFF
+ TSQL -- CTCSS Activate/De-activate RX
+ TUNER -- Enable automatic tuner
+ VOX -- Voice Operated Relay
+ VSC -- Voice Scan Control
+ XIT -- Transmitter Incremental Tuning
 
 .IP
 Func Status is a non null value for \(lqactivate\(rq or \(lqde-activate\(rq
@@ -932,22 +1036,73 @@ Set
 and
 .RI \(aq "Level Value" \(aq.
 .IP
-Level is a token: \(oqPREAMP\(cq, \(oqATT\(cq, \(oqVOXDELAY\(cq, \(oqAF\(cq,
-\(oqRF\(cq, \(oqSQL\(cq, \(oqIF\(cq, \(oqAPF\(cq, \(oqNR\(cq, \(oqPBT_IN\(cq,
-\(oqPBT_OUT\(cq, \(oqCWPITCH\(cq, \(oqRFPOWER\(cq, \(oqMICGAIN\(cq, 
-\(oqKEYSPD\(cq, \(oqNOTCHF\(cq, \(oqCOMP\(cq, \(oqAGC\(cq, \(oqBKINDL\(cq,
-\(oqBAL\(cq, \(oqMETER\(cq, \(oqVOXGAIN\(cq, \(oqANTIVOX\(cq,
-\(oqSLOPE_LOW\(cq, \(oqSLOPE_HIGH\(cq, \(oqBKIN_DLYMS\(cq, \(oqRAWSTR\(cq, \(oqSWR\(cq,
-\(oqALC\(cq, \(oqSTRENGTH\(cq, \(oqRFPOWER_METER\(cq, \(oqCOMPMETER\(cq, \(oqVD_METER\(cq, \(oqID_METER\(cq,
-\(oqNOTCHF_RAW\(cq, \(oqMONITOR_GAIN\(cq, \(oqNQ\(cq, \(oqRFPOWER_METER_WATTS\(cq, \(oqSPECTRUM_MODE\(cq,
-\(oqSPECTRUM_SPAN\(cq, \(oqSPECTRUM_EDGE_LOW\(cq, \(oqSPECTRUM_EDGE_HIGH\(cq, \(oqSPECTRUM_SPEED\(cq,
-\(oqSPECTRUM_REF\(cq, \(oqSPECTRUM_AVG\(cq, \(oqSPECTRUM_ATT\(cq, \(oqTEMP_METER\(cq, \(oqBAND_SELECT\(cq,
-\(oqUSB_AF\(cq.
+Level is a token:
+\(oqAF\(cq,
+\(oqAGC\(cq,
+\(oqAGC_TIME\(cq,
+\(oqALC\(cq,
+\(oqANTIVOX\(cq,
+\(oqAPF\(cq,
+\(oqATT\(cq,
+\(oqBAL\(cq,
+\(oqBAND_SELECT\(cq,
+\(oqBKINDL\(cq,
+\(oqBKIN_DLYMS\(cq,
+\(oqCOMP\(cq,
+\(oqCOMP_METER\(cq,
+\(oqCWPITCH\(cq,
+\(oqID_METER\(cq,
+\(oqIF\(cq,
+\(oqKEYSPD\(cq,
+\(oqMETER\(cq,
+\(oqMGC\(cq,
+\(oqMGF\(cq,
+\(oqMGL\(cq,
+\(oqMICGAIN\(cq,
+\(oqMONITOR_GAIN\(cq,
+\(oqNB\(cq,
+\(oqNOTCHF\(cq,
+\(oqNOTCHF_RAW\(cq,
+\(oqNR\(cq,
+\(oqPBT_IN\(cq,
+\(oqPBT_OUT\(cq,
+\(oqPREAMP\(cq,
+\(oqRAWSTR\(cq,
+\(oqRF\(cq,
+\(oqRFPOWER\(cq,
+\(oqRFPOWER_METER\(cq,
+\(oqRFPOWER_METER_WATTS\(cq,
+\(oqSLOPE_HIGH\(cq,
+\(oqSLOPE_LOW\(cq,
+\(oqSPECTRUM_ATT\(cq,
+\(oqSPECTRUM_AVG\(cq,
+\(oqSPECTRUM_EDGE_HIGH\(cq,
+\(oqSPECTRUM_EDGE_LOW\(cq,
+\(oqSPECTRUM_MODE\(cq,
+\(oqSPECTRUM_REF\(cq,
+\(oqSPECTRUM_SPAN\(cq,
+\(oqSPECTRUM_SPEED\(cq,
+\(oqSQL\(cq,
+\(oqSTRENGTH\(cq,
+\(oqSWR\(cq,
+\(oqTEMP_METER\(cq,
+\(oqUSB_AF\(cq,
+\(oqUSB_AF_INPUT\(cq,
+\(oqVD_METER\(cq,
+\(oqVOXDELAY\(cq,
+\(oqVOXGAIN\(cq.
 .IP
 The Level Value can be a float or an integer value.  For the AGC token the
 value is one of \(oq0\(cq = OFF, \(oq1\(cq = SUPERFAST, \(oq2\(cq = FAST,
 \(oq3\(cq = SLOW, \(oq4\(cq = USER, \(oq5\(cq = MEDIUM, \(oq6\(cq = AUTO.
-Note that not all values work on all rigs.  To list usable values do "rigctl -m [modelnum] -u | grep AGC levels" or for Windows "rigctl -m [modelnum] -u | find "AGC levels"".
+Note that not all values work on all rigs.  To list usable values do
+.EX
+rigctl -m MODEL_ID -u | grep "AGC levels"
+.EE
+or for Windows
+.EX
+rigctl -m MODEL_ID -u | find "AGC levels"
+.EE
 .IP
 Level units
 .in +4n
@@ -967,11 +1122,11 @@ Degrees(temperature)
 Hz
     CWPITCH, IF, NOTCHF, PBT_IN, PBT_OUT, SPECTRUM_EDGE_LOW, SPECTRUM_EDGE_HIGH, SPECTRUM_SPAN
 
-Seconds 
+Seconds
     VOXDELAY(ds), BKINDL(ms), BKIN_DLYMS(ms)
 
 Raw info from rig
-    RAWSTR, BAND_SELECT (subject to change -- index right now but may convert to band name)
+    RAWSTR, BANDSELECT (subject to change -- index right now but may convert to band name)
 
 SWR
     SWR
@@ -995,8 +1150,6 @@ WPM
     KEYSPD
 .in
 .EE
-.IP
- 
 .IP
 .BR Note :
 Passing a \(oq?\(cq (query) as the first argument instead of a Level token
@@ -1024,8 +1177,21 @@ Set
 and
 .RI \(aq "Parm Value" \(aq.
 .IP
-Parm is a token: \(oqANN\(cq, \(oqAPO\(cq, \(oqBACKLIGHT\(cq, \(oqBEEP\(cq,
-\(oqTIME\(cq, \(oqBAT\(cq, \(oqKEYLIGHT\(cq, \(oqSCREENSAVER\(cq, \(oqAFIF\(cq, \(oqBANDSELECT\(cq, \(oqKEYERTYPE\(cq.
+Parm is a token:
+\(oqAFIF\(cq,
+\(oqAFIF_ACC\(cq,
+\(oqAFIF_LAN\(cq,
+\(oqAFIF_WLAN\(cq,
+\(oqANN\(cq,
+\(oqAPO\(cq,
+\(oqBACKLIGHT\(cq,
+\(oqBANDSELECT\(cq,
+\(oqBAT\(cq,
+\(oqBEEP\(cq,
+\(oqKEYERTYPE\(cq,
+\(oqKEYLIGHT\(cq,
+\(oqSCREENSAVER\(cq,
+\(oqTIME\(cq.
 .IP
 .BR Note :
 Passing a \(oq?\(cq (query) as the first argument instead of a Parm token will
@@ -1094,16 +1260,23 @@ Mem/VFO Op tokens.  Use this to determine the supported Mem/VFO Ops of a given
 radio backend.
 .
 .TP
-.BR g ", " scan " \(aq" "\fIScan Fct\fP" "\(aq \(aq" "\fIScan Channel\fP" \(aq
+.BR g ", " scan " \(aq" "\fIScan Function\fP" "\(aq \(aq" "\fIScan Channel\fP" \(aq
 Perform a
-.RI \(aq "Scan Fct" \(aq
+.RI \(aq "Scan Function" \(aq
 on a
 .RI \(aq "Scan Option" \(aq.
 .IP
-Scan Function is a token: \(oqSTOP\(cq, \(oqMEM\(cq, \(oqSLCT\(cq,
-\(oqPRIO\(cq, \(oqPROG\(cq, \(oqDELTA\(cq, \(oqVFO\(cq, \(oqPLT\(cq.
+Scan Function is a token:
+\(oqDELTA\(cq,
+\(oqMEM\(cq,
+\(oqPLT\(cq,
+\(oqPRIO\(cq,
+\(oqPROG\(cq,
+\(oqSLCT\(cq,
+\(oqSTOP\(cq,
+\(oqVFO\(cq.
 .IP
-Scan Option is an integer.  
+Scan Option is an integer.
 .IP
 Scan Option for Yaesu rigs 0=STOP, 1=UP, 2=DOWN.
 .IP
@@ -1126,11 +1299,10 @@ data.
 Sets memory channel information
 .
 .TP
-.BR h ", " get_channel " \(aq" \fIreadonly\fP \(aq
+.BR h ", " get_channel " \(aq" \fIChannel\fP \(aq " \(aq" \fIreadonly\fP \(aq
 Get channel memory.
 .IP
 If readonly!=0 then only channel data is returned and rig remains on the current channel.  If readonly=0 then rig will be set to the channel requested.
-data.
 .
 .TP
 .BR A ", " set_trn " \(aq" \fITransceive\fP \(aq
@@ -1138,7 +1310,7 @@ Set
 .RI \(aq Transceive \(aq
 mode.
 .IP
-Transcieve is a token: \(oqOFF\(cq, \(oqRIG\(cq, \(oqPOLL\(cq.
+Transceive is a token: \(oqOFF\(cq, \(oqRIG\(cq, \(oqPOLL\(cq.
 .IP
 Transceive is a mechanism for radios to report events without a specific call
 for information.
@@ -1169,7 +1341,7 @@ VFO reset, \(oq4\(cq = Memory Clear reset, \(oq8\(cq = Master reset.
 .IP
 Since these values are defined as a bitmask in
 .IR include/hamlib/rig.h ,
-it should be possible to AND these values together to do multiple resets at
+it should be possible to OR these values together to do multiple resets at
 once, if the backend supports it or supports a reset action via rig control at
 all.
 .
@@ -1201,6 +1373,19 @@ Get DTMF
 .RI \(aq Digits \(aq.
 .
 .TP
+.BR 0xac ", " set_conf " \(aq" "\fIToken\fP" \(aq " " \(aq "\fIValue\fP" \(aq
+Set
+.RI \(aq Token \(aq
+to
+.RI \(aq Value \(aq.
+.
+.TP
+.BR 0xad ", " get_conf " \(aq" "\fIToken\fP" \(aq
+Get value
+of
+.RI \(aq Token \(aq.
+.
+.TP
 .BR _ ", " get_info
 Get misc information about the rig.
 .
@@ -1209,8 +1394,32 @@ Get misc information about the rig.
 Get misc information about the rig vfo status and other info.
 .
 .TP
+.BR 0xf1 ", " halt
+When issued inside
+.B rigctl
+it quits it; when issued by another client it quits
+.B rigctld
+instead.
+.
+.TP
 .BR 0xf3 ", " get_vfo_info " \(aq" \fIVFO\fP \(aq
 Get misc information about a specific vfo.
+.
+.TP
+.BR 0xf4 ", " get_vfo_list
+Get the names of the available VFOs.
+.
+.TP
+.BR 0xf6 ", " get_modes
+Get all supported bandwidths for all modes.
+.
+.TP
+.BR 0xf7 ", " get_mode_bandwidths " \(aq" \fIMode\fP \(aq
+Get bandwidths of
+.
+.RI \(aq Mode \(aq.
+See also
+.B get_modes.
 .
 .TP
 .B dump_state
@@ -1229,7 +1438,7 @@ This command will produce many lines of output so be very careful if using a
 fixed length array!  For example, running this command against the Dummy
 backend results in over 5kB of text output.
 .IP
-VFO parameter not used in 'VFO mode'.
+VFO parameter is not used in 'VFO mode'.
 .
 .TP
 .BR 2 ", " power2mW " \(aq" "\fIPower [0.0..1.0]\fP" "\(aq \(aq" \fIFrequency\fP "\(aq \(aq" \fIMode\fP \(aq
@@ -1246,6 +1455,11 @@ and
 also need to be provided as output power may vary according to these values.
 .IP
 VFO parameter is not used in VFO mode.
+.
+.TP
+.BR 3 ", " dump_conf
+Not a real rig remote command, it just dumps the current configuration
+with allowed ranges of values.
 .
 .TP
 .BR 4 ", " mW2power " \(aq" "\fIPower mW\fP" "\(aq \(aq" \fIFrequency\fP "\(aq \(aq" \fIMode\fP \(aq
@@ -1274,7 +1488,8 @@ For binary protocols enter values as \\0xAA\\0xBB.  Expect a
 .RI \(aq Reply \(aq
 from the radio which will likely be a binary block or an ASCII string
 depending on the radio's protocol (see your radio's computer control
-documentation).
+documentation). If you are testing a protocol like SmartSDR where there
+are spaces in the commands use quote, e.g.  w "C0|set slice 0 tx=1"
 .IP
 The command terminator, set by the
 .B send-cmd-term
@@ -1307,9 +1522,9 @@ Set
 .IP
 Sets rig clock -- note that some rigs do not handle seconds or milliseconds.
 If you try to set sec/msec and rig does not support it you will get a debug warning message.
-Format is ISO8601,
-.EX
+Format is ISO8601.
 Formats accepted allow for 2-digit or 4-digit time zone
+.EX
 YYYY-MM-DDTHH:MM:SS.SSS+ZZ (where +ZZ is either -/+ UTC offset HH)
 YYYY-MM-DDTHH:MM:SS.SSS+ZZZZ (where +ZZZZ is either -/+ UTC offset HHMM)
 YYYY-MM-DDTHH:MM:SS+ZZ
@@ -1317,13 +1532,18 @@ YYYY-MM-DDTHH:MM:SS+ZZZZ
 YYYY-MM-DDTHH:MM+ZZ
 YYYY-MM-DDTHH:MM+ZZZZ
 YYYY-MM-DD (sets date only)
+local (sets both clocks to local time)
+utc (sets both clocks to utc time)
+.EE
 Note: Icom rigs expect you to set local time and the hours off to UTC.
-So...4PM EST example would be 2021-12-01T16:00:00+0500
+So...4PM EST example would be 2021-12-01T16:00:00-0500
 But...if you want to display GMT you must set the clock for GMT with zero UTC offset.  
 Hopefully Icom will allow displaying either clock in the future
 
-.EE
-.
+Note: Kenwood rigs only allow setting local clock, and then only if not autoset by NTP.
+Trying to set clock when NTP is in use will set the offset, but not the time -
+and no error status will be returned.
+Time displayed on the auxiliary clock is solely determined by UTC and the aux offset.
 .TP
 .BR get_clock
 Get
@@ -1338,7 +1558,11 @@ Get
 .RI \(aq Status \(aq
 .IP
 Returns Status as 1 if vfo option is on and 0 if vfo option is off.
-This command reflects the -o switch for rigctl and ritctld and can be dynamically changed by
+This command reflects the -o switch for
+.B rigctl
+and
+.B rigctld
+and can be dynamically changed by
 .B set_vfo_opt.
 .
 .TP
@@ -1347,15 +1571,11 @@ Set
 .RI \(aq Status \(aq
 .IP
 Set vfo option Status 1=on or 0=off
-This is the same as using the -o switch for rigctl and ritctld.
-This can be dyamically changed while running.
-.
-.TP
-.BR get_separator 
-Get
-.RI \(aq SeparatorChar \(aq
-.IP
-Shows the current SeparatorChar
+This is the same as using the -o switch for
+.B rigctl
+and
+.B rigctld.
+This can be dynamically changed while running.
 .
 .TP
 .BR set_separator " \(aq" \fISeparatorChar\fP \(aq
@@ -1363,9 +1583,15 @@ Set
 .RI \(aq SeparatorChar \(aq
 .IP
 Change rigctld response to use a special char instead of newline (recommend #).
-This can be dyamically changed while running.
 Handy for node-red's tcprequest node.
-This can be dyamically changed while running.
+This can be dynamically changed while running.
+.
+.TP
+.BR get_separator
+Get
+.RI \(aq SeparatorChar \(aq
+.IP
+Shows the current SeparatorChar.
 .
 .TP
 .BR pause " \(aq" \fISeconds\fP \(aq
@@ -1376,6 +1602,7 @@ before sending the next command to the radio.
 .TP
 .BR password " \(aq" \fIPassword\fP \(aq
 Sends password to rigctld when rigctld has been secured with -A.  Must use the 32-char shared secret from rigctld.
+(NOT IMPLEMENTED)
 .
 .TP
 .BR set_lock_mode " \(aq" \fILocked\fP \(aq
@@ -1390,40 +1617,59 @@ Returns current lock mode status 1=On, 2=Off (only useful when using rigctld)
 .
 .TP
 .BR send_raw " \(aq" \fITerminator\fP "\(aq \(aq" \fIString\fP \(aq
+Can send ASCII string or 0xnn values or xnn values -- there can be no spaces in the command string.
+Possible terminator values are CR, LF, ;, ICOM, 1-100 (bytes to read), or 0 meaning no reply and -1 meaning unknown (will timeout on read).
+Examples (note that a ; must be escaped in Unix/Linux or enclosed in single or double quotes):
+.IP
+For Windows & Unix/Linux we have a new colon-separated format for hex digits
 .EX
-Can send ASCII string or 0xnn values -- there can be no spaces in the command string.
-Possible terminator values are CR, LF, ;, ICOM, 0-100 (bytes to read), or -1 meaning unknown (will timeout on read)
-Examples:
+  send_raw icom 0xFE:0xFE:0x94:0x03:0xFD Note: colon-separated does not have to be escaped on Unix/Linux
+  send_raw -1 0xFE:0xFE:0x94:0x03:0xFD
+  send_raw 14 0xFE:0xFE:0x94:0x03:0xFD
+  Note that ASCII commands still require escaping the semicolon on Unix/Linux
+  send_raw \\; FA\\;MD\\;
+.EE
+For Windows:
+.EX
   send_raw ; FA;MD;
   send_raw icom 0xFE;0xFE;0x94;0x03;0xFD
   send_raw -1 0xFE;0xFE;0x94;0x03;0xFD
   send_raw 14 0xFE;0xFE;0x94;0x03;0xFD
+.EE
+For Unix/Linux
+.EX
+  send_raw icom 0xFE\;0xFE\;0x94\;0x03\;0xFD
+  send_raw \\; FA\\;MD\\;
+  send_raw -1 0xFE\;0xFE\;0x94\;0x03\;0xFD
+  send_raw 14 0xFE\;0xFE\;0x94\;0x03\;0xFD
+.EE
 .
 .TP
 .BR client_version " \(aq" \fIString\fP "\(aq
-.EX
-  Client can send its version to rigctld and get feedback on compatibility, deprecation, and alternatives
+Client can send its version to
+.B rigctld
+and get feedback on compatibility, deprecation, and alternatives
 .TP
 .BR hamlib_version
-.EX
-Returns hamlib version with ISO8601 date/time
+Returns Hamlib version with ISO8601 date/time
 .
 .TP
 .BR test
-.EX
 Performs test routines.  Under development.
 .
 .TP
-.BR set_gpio " \(aq" \fIGPIO#\fP "\(aq
-.EX
+.BR set_gpio " \(aq" \fIGPIO#\fP "\(aq \(aq" \fI0/1\fP "\(aq
 Sets GPIO1, GPIO2, GPIO3, GPIO4 on the GPIO ptt port
 Can also use 1,2,3,4
 .
 .TP
 .BR get_gpio " \(aq" \fIGPIO#\fP "\(aq
-.EX
 Reads GPIO1, GPIO2, GPIO3, GPIO4 on the GPIO ptt port
 Can also use 1,2,3,4
+.
+.TP
+.BR skip_init
+Skips rig initialization -- useful when executing commands with rigctl to speed up things
 .
 .SH READLINE
 .
@@ -1431,7 +1677,7 @@ If
 .B Readline
 library development files are found at configure time,
 .B rigctl
-will be conditonally built with Readline support for command and argument entry.
+will be conditionally built with Readline support for command and argument entry.
 Readline command key bindings are at their defaults as described in the
 .UR https://tiswww.cwru.edu/php/chet/readline/rluserman.html
 Readline manual

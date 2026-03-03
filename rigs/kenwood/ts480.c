@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "cal.h"
 #include "idx_builtin.h"
 #include "iofunc.h"
@@ -36,6 +36,7 @@
 #define TS480_ALL_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_CWR|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY|RIG_MODE_RTTYR)
 #define SDRUNO_ALL_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_CWR|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY|RIG_MODE_RTTYR|RIG_MODE_PKTUSB)
 #define PS8000A_ALL_MODES (RIG_MODE_AM|RIG_MODE_AMS|RIG_MODE_CW|RIG_MODE_CWR|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY|RIG_MODE_RTTYR)
+#define QMX_ALL_MODES (RIG_MODE_CW|RIG_MODE_CWR|RIG_MODE_PKTUSB|RIG_MODE_PKTLSB)
 
 #define TS480_OTHER_TX_MODES (RIG_MODE_CW|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY)
 #define TS480_AM_TX_MODES RIG_MODE_AM
@@ -44,8 +45,14 @@
 #define TS480_LEVEL_GET (RIG_LEVEL_RFPOWER|RIG_LEVEL_AF|RIG_LEVEL_RF|RIG_LEVEL_SQL|RIG_LEVEL_AGC|RIG_LEVEL_MICGAIN|RIG_LEVEL_STRENGTH|RIG_LEVEL_KEYSPD|RIG_LEVEL_CWPITCH| \
     RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
     RIG_LEVEL_SWR|RIG_LEVEL_COMP_METER|RIG_LEVEL_ALC|RIG_LEVEL_RFPOWER_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
+#define PT8000A_LEVEL_GET (RIG_LEVEL_RFPOWER|RIG_LEVEL_AF|RIG_LEVEL_RF|RIG_LEVEL_SQL|RIG_LEVEL_AGC|RIG_LEVEL_MICGAIN|RIG_LEVEL_STRENGTH|RIG_LEVEL_CWPITCH| \
+    RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
+    RIG_LEVEL_SWR|RIG_LEVEL_COMP_METER|RIG_LEVEL_ALC|RIG_LEVEL_RFPOWER_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
 
 #define TS480_LEVEL_SET (RIG_LEVEL_RFPOWER|RIG_LEVEL_AF|RIG_LEVEL_RF|RIG_LEVEL_SQL|RIG_LEVEL_AGC|RIG_LEVEL_MICGAIN|RIG_LEVEL_KEYSPD|RIG_LEVEL_CWPITCH| \
+    RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
+    RIG_LEVEL_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
+#define PT8000A_LEVEL_SET (RIG_LEVEL_RFPOWER|RIG_LEVEL_AF|RIG_LEVEL_RF|RIG_LEVEL_SQL|RIG_LEVEL_AGC|RIG_LEVEL_MICGAIN|RIG_LEVEL_CWPITCH| \
     RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
     RIG_LEVEL_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
 
@@ -162,7 +169,7 @@ const struct confparams ts480_ext_levels[] =
  * kenwood_ts480_get_info
  * Assumes rig!=NULL
  */
-const char *
+static const char *
 kenwood_ts480_get_info(RIG *rig)
 {
     char firmbuf[50];
@@ -247,12 +254,12 @@ static int ts480_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     {
     case RIG_FUNC_MON:
         SNPRINTF(buf, sizeof(buf), "ML00%c", (status == 0) ? '0' : '1');
-        RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
+        RETURNFUNC2(kenwood_transaction(rig, buf, NULL, 0));
 
     case RIG_FUNC_LOCK:
         SNPRINTF(buf, sizeof(buf), "LK%c%c", (status == 0) ? '0' : '1',
                  (status == 0) ? '0' : '1');
-        RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
+        RETURNFUNC2(kenwood_transaction(rig, buf, NULL, 0));
 
     default:
         return kenwood_set_func(rig, vfo, func, status);
@@ -296,7 +303,7 @@ static int ts480_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
         break;
 
     default:
-        return kenwood_get_func(rig, vfo, func, status);
+        RETURNFUNC(kenwood_get_func(rig, vfo, func, status));
     }
 
     RETURNFUNC(RIG_OK);
@@ -306,7 +313,7 @@ static int ts480_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
  * WARNING: The commands differ slightly from the general versions in kenwood.c
  * e.g.: "SQ"=>"SQ0" , "AG"=>"AG0"
  */
-int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+static int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char levelbuf[16];
     int kenwood_val;
@@ -373,7 +380,7 @@ int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_PREAMP:
         if (val.i != 12 && val.i != 0)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "PA%c", (val.i == 12) ? '1' : '0');
@@ -382,7 +389,7 @@ int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_ATT:
         if (val.i != 12 && val.i != 0)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "RA%02d", (val.i == 12) ? 1 : 0);
@@ -404,7 +411,7 @@ int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
             break;
 
         default:
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "RM%d", kenwood_val);
@@ -413,10 +420,10 @@ int kenwood_ts480_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_CWPITCH:
         if (val.i > 1000 || val.i < 400)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
-        RETURNFUNC(ts480_set_ex_menu(rig, 34, 2, (val.i - 400) / 50));
+        RETURNFUNC2(ts480_set_ex_menu(rig, 34, 2, (val.i - 400) / 50));
 
     default:
         return kenwood_set_level(rig, vfo, level, val);
@@ -429,13 +436,13 @@ static int ts480_read_meters(RIG *rig, int *swr, int *comp, int *alc)
 {
     int retval;
     char *cmd = "RM;";
-    struct rig_state *rs = &rig->state;
+    struct hamlib_port *rp = RIGPORT(rig);
     char ackbuf[32];
     int expected_len = 24;
 
     ENTERFUNC;
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, strlen(cmd));
+    retval = write_block(rp, (unsigned char *) cmd, strlen(cmd));
 
     rig_debug(RIG_DEBUG_TRACE, "%s: write_block retval=%d\n", __func__, retval);
 
@@ -446,7 +453,7 @@ static int ts480_read_meters(RIG *rig, int *swr, int *comp, int *alc)
 
     // TS-480 returns values for all meters at the same time, for example: RM10000;RM20000;RM30000;
 
-    retval = read_string(&rs->rigport, (unsigned char *) ackbuf, expected_len + 1,
+    retval = read_string(rp, (unsigned char *) ackbuf, expected_len + 1,
                          NULL, 0, 0, 1);
 
     rig_debug(RIG_DEBUG_TRACE, "%s: read_string retval=%d\n", __func__, retval);
@@ -482,7 +489,7 @@ static int ts480_read_meters(RIG *rig, int *swr, int *comp, int *alc)
  * kenwood_ts480_get_level
  * Assumes rig!=NULL, val!=NULL
  */
-int
+static int
 kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     char ackbuf[50];
@@ -495,30 +502,30 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     switch (level)
     {
     case RIG_LEVEL_AF:
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
 
     case RIG_LEVEL_RF:
         retval = kenwood_transaction(rig, "RG", ackbuf, sizeof(ackbuf));
 
         if (RIG_OK != retval)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (5 != ack_len)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (1 != sscanf(&ackbuf[2], "%d", &levelint))
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         val->f = levelint / (float) 100;
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_SQL:
         retval = kenwood_transaction(rig, "SQ0", ackbuf, sizeof(ackbuf));
@@ -526,23 +533,23 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (RIG_OK != retval)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (ack_len != ack_len_expected)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (1 != sscanf(&ackbuf[ack_len_expected - 3], "%d", &levelint))
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         val->f = (float) levelint / 255.;
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_AGC:
         retval = kenwood_transaction(rig, "GT", ackbuf, sizeof(ackbuf));
@@ -550,14 +557,14 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (RIG_OK != retval)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (ack_len != ack_len_expected)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         switch (ackbuf[ack_len_expected - 1])
@@ -575,19 +582,19 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             break;
 
         default:
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_STRENGTH:
-        if (rig->state.cache.ptt != RIG_PTT_OFF)
+        if (CACHE(rig)->ptt != RIG_PTT_OFF)
         {
             val->i = -9 * 6;
             break;
         }
 
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
 
     case RIG_LEVEL_MONITOR_GAIN:
     {
@@ -698,7 +705,7 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             break;
 
         default:
-            return -RIG_ENAVAIL;
+            RETURNFUNC(-RIG_ENAVAIL);
         }
 
         break;
@@ -708,7 +715,7 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     {
         int raw_value;
 
-        if (rig->state.cache.ptt == RIG_PTT_OFF)
+        if (CACHE(rig)->ptt == RIG_PTT_OFF)
         {
             val->f = 0;
             break;
@@ -742,7 +749,7 @@ kenwood_ts480_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     }
 
     default:
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
     }
 
     RETURNFUNC(RIG_OK);
@@ -823,7 +830,7 @@ static int ts480_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
 {
     int retval;
     char buf[7];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -847,7 +854,8 @@ static int ts480_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
     RETURNFUNC(RIG_OK);
 }
 
-static int ts480_set_ext_func(RIG *rig, vfo_t vfo, token_t token, int status)
+static int ts480_set_ext_func(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                              int status)
 {
     char cmdbuf[20];
     int retval;
@@ -900,7 +908,8 @@ static int ts480_set_ext_func(RIG *rig, vfo_t vfo, token_t token, int status)
     RETURNFUNC(retval);
 }
 
-static int ts480_get_ext_func(RIG *rig, vfo_t vfo, token_t token, int *status)
+static int ts480_get_ext_func(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                              int *status)
 {
     int retval;
 
@@ -945,7 +954,8 @@ static int ts480_get_ext_func(RIG *rig, vfo_t vfo, token_t token, int *status)
     RETURNFUNC(retval);
 }
 
-static int ts480_set_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t val)
+static int ts480_set_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                               value_t val)
 {
     int retval;
     char cmdbuf[20];
@@ -1035,7 +1045,8 @@ static int ts480_set_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t val)
     RETURNFUNC(retval);
 }
 
-static int ts480_get_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t *val)
+static int ts480_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                               value_t *val)
 {
     int retval;
     int value;
@@ -1193,7 +1204,7 @@ static struct kenwood_priv_caps ts480_priv_caps =
     .slope_filter_low = ts480_slope_filter_low,
 };
 
-int ts480_init(RIG *rig)
+static int ts480_init(RIG *rig)
 {
     struct kenwood_priv_data *priv;
     int retval;
@@ -1204,10 +1215,10 @@ int ts480_init(RIG *rig)
 
     if (retval != RIG_OK)
     {
-        return retval;
+        RETURNFUNC(retval);
     }
 
-    priv = (struct kenwood_priv_data *) rig->state.priv;
+    priv = (struct kenwood_priv_data *) STATE(rig)->priv;
 
     priv->ag_format = 2;
     priv->micgain_min = 0;
@@ -1216,9 +1227,36 @@ int ts480_init(RIG *rig)
     RETURNFUNC(RIG_OK);
 }
 
+static int qrplabs_open(RIG *rig)
+{
+    int retval;
+    char buf[64];
+    struct kenwood_priv_data *priv = (struct kenwood_priv_data *) STATE(rig)->priv;
+    ENTERFUNC;
+    retval = kenwood_open(rig);
+
+    if (retval != RIG_OK)
+    {
+        RETURNFUNC(retval);
+    }
+
+    retval = kenwood_transaction(rig, "VN", buf, sizeof(buf));
+
+    if (retval == RIG_OK)
+    {
+        strtok(buf, ";");
+        rig_debug(RIG_DEBUG_VERBOSE, "%s: firmware version %s\n", __func__, &buf[2]);
+    }
+
+    priv->is_emulation = 1;
+    RETURNFUNC(retval);
+}
+
+#if 0
 int qdx_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {
     const char *ptt_cmd;
+    struct hamlib_port *rp = RIGPORT(rig);
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_VERBOSE, "%s: ptt=%d\n", __func__, ptt);
@@ -1234,17 +1272,53 @@ int qdx_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
     int retval = kenwood_transaction(rig, ptt_cmd, NULL, 0);
 
-    //if (ptt == RIG_PTT_OFF) { hl_usleep(100 * 1000); } // a little time for PTT to turn off
+    hl_usleep(100 *
+              1000); // a little time for PTT to return whatever it returns which we ignore
+    rig_flush(rp);
 
     RETURNFUNC(retval);
 }
+
+#endif
+static int qrplabs_get_clock(RIG *rig, int *year, int *month, int *day, int *hour,
+                      int *min, int *sec, double *msec, int *utc_offset)
+{
+    char tm_cmd[32];
+    char tm_buf[32];
+    *year = *month = *day = *hour = *min = *sec = *msec = *utc_offset = 0;
+    *month = 0;
+    *day = 0;
+    sprintf(tm_cmd, "TM;");
+    int retval = kenwood_transaction(rig, tm_cmd, tm_buf, sizeof(tm_buf));
+
+    if (retval == RIG_OK && strlen(tm_buf) >= 8) { sscanf(tm_buf, "TM%02d%02d%02d", hour, min, sec); }
+
+    return retval;
+}
+
+static int qrplabs_set_clock(RIG *rig, int year, int month, int day, int hour, int min,
+                      int sec, double msec, int utc_offset)
+{
+    char tm_cmd[32];
+    sprintf(tm_cmd, "TM%02d%02d%02d;", hour, min, sec);
+    int retval = kenwood_transaction(rig, tm_cmd, NULL, 0);
+
+    if (retval != RIG_OK)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s: error setting time: %s\n", __func__,
+                  rigerror(retval));
+    }
+
+    return retval;
+}
+
 
 
 /*
  * TS-480 rig capabilities
  * Notice that some rigs share the same functions.
  */
-const struct rig_caps ts480_caps =
+struct rig_caps ts480_caps =
 {
     RIG_MODEL(RIG_MODEL_TS480),
     .model_name = "TS-480",
@@ -1257,6 +1331,221 @@ const struct rig_caps ts480_caps =
     .dcd_type = RIG_DCD_RIG,
     .port_type = RIG_PORT_SERIAL,
     .serial_rate_min = 4800,
+    .serial_rate_max = 115200,
+    .serial_data_bits = 8,
+    .serial_stop_bits = 1,
+    .serial_parity = RIG_PARITY_NONE,
+    .serial_handshake = RIG_HANDSHAKE_NONE,
+    .write_delay = 0,
+    .post_write_delay = 0,
+    .timeout = 500,
+    .retry = 3,
+    .preamp = {12, RIG_DBLST_END,},
+    .attenuator = {12, RIG_DBLST_END,},
+    .max_rit = kHz(9.99),
+    .max_xit = kHz(9.99),
+    .max_ifshift = Hz(0),
+    .targetable_vfo = RIG_TARGETABLE_FREQ,
+    .transceive = RIG_TRN_RIG,
+    .agc_level_count = 3,
+    .agc_levels = { RIG_AGC_OFF, RIG_AGC_FAST, RIG_AGC_SLOW },
+    .chan_list = {
+        { 1, 3, RIG_MTYPE_VOICE }, // Only if VGS-1 installed
+        { 1, 3, RIG_MTYPE_MORSE },
+        RIG_CHAN_END
+    },
+
+    .rx_range_list1 = {
+        {kHz(100),   Hz(59999999), TS480_ALL_MODES, -1, -1, TS480_VFO},
+        RIG_FRNG_END,
+    }, /*!< Receive frequency range list for ITU region 1 */
+    .tx_range_list1 = {
+        {kHz(1810),  kHz(1850),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},   /* 100W class */
+        {kHz(1810),  kHz(1850),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},       /* 25W class */
+        {kHz(3500),  kHz(3800),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(3500),  kHz(3800),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(7),     kHz(7200),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(7),     kHz(7200),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(10100), kHz(10150), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(10100), kHz(10150), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(14),    kHz(14350), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(14),    kHz(14350), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(18068), kHz(18168), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(18068), kHz(18168), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(21),    kHz(21450), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(21),    kHz(21450), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(24890), kHz(24990), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(24890), kHz(24990), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(28),    kHz(29700), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(28),    kHz(29700), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(50),    kHz(52000), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(50),    kHz(52000), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        RIG_FRNG_END,
+    },  /*!< Transmit frequency range list for ITU region 1 */
+    .rx_range_list2 = {
+        {kHz(100),   Hz(59999999), TS480_ALL_MODES, -1, -1, TS480_VFO},
+        RIG_FRNG_END,
+    },  /*!< Receive frequency range list for ITU region 2 */
+    .tx_range_list2 = {
+        {kHz(1800),  MHz(2) - 1, TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},  /* 100W class */
+        {kHz(1800),  MHz(2) - 1, TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},      /* 25W class */
+        {kHz(3500),  MHz(4) - 1, TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(3500),  MHz(4) - 1, TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(5250),  kHz(5450),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(5250),  kHz(5450),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(7),     kHz(7300),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(7),     kHz(7300),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(10100), kHz(10150), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(10100), kHz(10150), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(14),    kHz(14350), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(14),    kHz(14350), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(18068), kHz(18168), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(18068), kHz(18168), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(21),    kHz(21450), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(21),    kHz(21450), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {kHz(24890), kHz(24990), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {kHz(24890), kHz(24990), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(28),    kHz(29700), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(28),    kHz(29700), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        {MHz(50),    kHz(52000), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
+        {MHz(50),    kHz(52000), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
+        RIG_FRNG_END,
+    }, /*!< Transmit frequency range list for ITU region 2 */
+    .tuning_steps =  {
+        {TS480_ALL_MODES, kHz(1)},
+        {TS480_ALL_MODES, Hz(2500)},
+        {TS480_ALL_MODES, kHz(5)},
+        {TS480_ALL_MODES, Hz(6250)},
+        {TS480_ALL_MODES, kHz(10)},
+        {TS480_ALL_MODES, Hz(12500)},
+        {TS480_ALL_MODES, kHz(15)},
+        {TS480_ALL_MODES, kHz(20)},
+        {TS480_ALL_MODES, kHz(25)},
+        {TS480_ALL_MODES, kHz(30)},
+        {TS480_ALL_MODES, kHz(100)},
+        {TS480_ALL_MODES, kHz(500)},
+        {TS480_ALL_MODES, MHz(1)},
+        {TS480_ALL_MODES, 0},  /* any tuning step */
+        RIG_TS_END,
+    },
+    /* mode/filter list, remember: order matters! */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.4)},
+        {RIG_MODE_SSB, Hz(270)},
+        {RIG_MODE_SSB, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(200)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(50)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(1000)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(80)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(100)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(150)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(300)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(400)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(600)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(2000)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(1000)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(1500)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(2.4)},
+        {RIG_MODE_FM, kHz(12)},
+        RIG_FLT_END,
+    },
+    .vfo_ops = TS480_VFO_OPS,
+    .level_gran =
+    {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
+#include "level_gran_kenwood.h"
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
+        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
+        [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
+        [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
+        [LVL_BKIN_DLYMS] = {.min = {.i = 0}, .max = {.i = 1000}, .step = {.i = 50}},
+        [LVL_SLOPE_LOW] = {.min = {.i = 0}, .max = {.i = 2400}, .step = {.i = 10}},
+        [LVL_SLOPE_HIGH] = {.min = {.i = 0}, .max = {.i = 5000}, .step = {.i = 10}},
+    },
+    .str_cal = TS480_STR_CAL,
+    .swr_cal = TS480_SWR_CAL,
+
+    .ext_tokens = ts480_ext_tokens,
+    .extfuncs = ts480_ext_funcs,
+    .extlevels = ts480_ext_levels,
+
+    .priv = (void *)& ts480_priv_caps,
+    .rig_init = ts480_init,
+    .rig_open = kenwood_open,
+    .rig_cleanup = kenwood_cleanup,
+    .set_freq = kenwood_set_freq,
+    .get_freq = kenwood_get_freq,
+    .set_rit = ts480_set_rit,
+    .get_rit = ts480_get_rit,
+    .set_xit = ts480_set_rit,
+    .get_xit = ts480_get_rit,
+    .set_mode = kenwood_set_mode,
+    .get_mode = kenwood_get_mode,
+    .set_vfo = kenwood_set_vfo,
+    .get_vfo = kenwood_get_vfo_if,
+    .set_split_vfo = kenwood_set_split_vfo,
+    .get_split_vfo = kenwood_get_split_vfo_if,
+    .get_ptt = kenwood_get_ptt,
+    .set_ptt = kenwood_set_ptt,
+    .get_dcd = kenwood_get_dcd,
+    .set_powerstat = kenwood_set_powerstat,
+    .get_powerstat = kenwood_get_powerstat,
+    .get_info = kenwood_ts480_get_info,
+    .reset = kenwood_reset,
+    .set_ant = kenwood_set_ant,
+    .get_ant = kenwood_get_ant,
+    .scan = kenwood_scan,     /* not working, invalid arguments using rigctl; kenwood_scan does only support on/off and not tone and CTCSS scan */
+    .has_set_level = TS480_LEVEL_SET,
+    .has_get_level = TS480_LEVEL_GET,
+    .set_level = kenwood_ts480_set_level,
+    .get_level = kenwood_ts480_get_level,
+    .set_ext_level = ts480_set_ext_level,
+    .get_ext_level = ts480_get_ext_level,
+    .has_get_func = TS480_FUNC_ALL,
+    .has_set_func = TS480_FUNC_ALL,
+    .set_func = ts480_set_func,
+    .get_func = ts480_get_func,
+    .set_ext_func = ts480_set_ext_func,
+    .get_ext_func = ts480_get_ext_func,
+    .send_morse = kenwood_send_morse,
+    .wait_morse =  rig_wait_morse,
+    .send_voice_mem = kenwood_send_voice_mem,
+    .stop_voice_mem = kenwood_stop_voice_mem,
+    .vfo_op = kenwood_vfo_op,
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+/*
+ * truSDC rig capabilities
+ * Notice that some rigs share the same functions.
+ */
+struct rig_caps trudx_caps =
+{
+    RIG_MODEL(RIG_MODEL_TRUSDX),
+    .model_name = "(tr)uSDX",
+    .mfg_name = "DL2MAN",
+    .version = BACKEND_VER ".1",
+    .copyright = "LGPL",
+    .status = RIG_STATUS_STABLE,
+    .rig_type = RIG_TYPE_TRANSCEIVER,
+    .ptt_type = RIG_PTT_RIG_MICDATA,
+    .dcd_type = RIG_DCD_RIG,
+    .port_type = RIG_PORT_SERIAL,
+    .serial_rate_min = 38400,
     .serial_rate_max = 115200,
     .serial_data_bits = 8,
     .serial_stop_bits = 1,
@@ -1377,8 +1666,19 @@ const struct rig_caps ts480_caps =
     .vfo_ops = TS480_VFO_OPS,
     .level_gran =
     {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
 #include "level_gran_kenwood.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -1443,12 +1743,12 @@ const struct rig_caps ts480_caps =
  * QRPLabs TS-480 emulation rig capabilities
  * Notice that some rigs share the same functions.
  */
-const struct rig_caps qrplabs_caps =
+struct rig_caps qrplabs_caps =
 {
     RIG_MODEL(RIG_MODEL_QRPLABS),
     .model_name = "QCX/QDX",
     .mfg_name = "QRPLabs",
-    .version = BACKEND_VER ".1",
+    .version = BACKEND_VER ".4",
     .copyright = "LGPL",
     .status = RIG_STATUS_STABLE,
     .rig_type = RIG_TYPE_TRANSCEIVER,
@@ -1576,8 +1876,19 @@ const struct rig_caps qrplabs_caps =
     .vfo_ops = TS480_VFO_OPS,
     .level_gran =
     {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
 #include "level_gran_kenwood.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -1594,7 +1905,7 @@ const struct rig_caps qrplabs_caps =
 
     .priv = (void *)& ts480_priv_caps,
     .rig_init = ts480_init,
-    .rig_open = kenwood_open,
+    .rig_open = qrplabs_open,
     .rig_cleanup = kenwood_cleanup,
     .set_freq = kenwood_set_freq,
     .get_freq = kenwood_get_freq,
@@ -1628,19 +1939,84 @@ const struct rig_caps qrplabs_caps =
     .send_morse = kenwood_send_morse,
     .wait_morse =  rig_wait_morse,
     .vfo_op = kenwood_vfo_op,
+    .get_clock = qrplabs_get_clock,
+    .set_clock = qrplabs_set_clock,
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+struct rig_caps qrplabs_qmx_caps =
+{
+    RIG_MODEL(RIG_MODEL_QRPLABS_QMX),
+    .model_name = "QMX",
+    .mfg_name = "QRPLabs",
+    .version = BACKEND_VER ".2",
+    .copyright = "LGPL",
+    .status = RIG_STATUS_BETA,
+    .rig_type = RIG_TYPE_TRANSCEIVER,
+    .ptt_type = RIG_PTT_RIG,
+    .dcd_type = RIG_DCD_RIG,
+    .port_type = RIG_PORT_SERIAL,
+    .serial_rate_min = 9600,
+    .serial_rate_max = 230400,
+    .serial_data_bits = 8,
+    .serial_stop_bits = 1,
+    .serial_parity = RIG_PARITY_NONE,
+    .serial_handshake = RIG_HANDSHAKE_NONE,
+    .write_delay = 0,
+    .post_write_delay = 0,
+    .timeout = 500,
+    .retry = 3,
+    .preamp = {12, RIG_DBLST_END,},
+    .attenuator = {12, RIG_DBLST_END,},
+    .targetable_vfo = RIG_TARGETABLE_FREQ,
+    .transceive = RIG_TRN_RIG,
+
+    .rx_range_list1 = {
+        {MHz(4), MHz(14), QMX_ALL_MODES, -1, -1, TS480_VFO},
+        RIG_FRNG_END,
+    }, /*!< Receive frequency range list for ITU region 1 */
+    .tx_range_list1 = {
+        {MHz(4), MHz(14),  QMX_ALL_MODES, 5000, 100000, TS480_VFO},
+        RIG_FRNG_END,
+    },  /*!< Transmit frequency range list for ITU region 1 */
+    /* mode/filter list, remember: order matters! */
+    .filters =  {
+        {RIG_MODE_SSB | RIG_MODE_PKTUSB | RIG_MODE_PKTLSB, kHz(3.2)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(300)},
+        RIG_FLT_END,
+    },
+
+    .priv = (void *)& ts480_priv_caps,
+
+    .rig_init = ts480_init,
+    .rig_open = qrplabs_open,
+    .rig_cleanup = kenwood_cleanup,
+    .set_freq = kenwood_set_freq,
+    .get_freq = kenwood_get_freq,
+    .set_mode = kenwood_set_mode,
+    .get_mode = kenwood_get_mode,
+    .set_vfo = kenwood_set_vfo,
+    .get_vfo = kenwood_get_vfo_if,
+    .set_split_vfo = kenwood_set_split_vfo,
+    .get_split_vfo = kenwood_get_split_vfo_if,
+    .get_ptt = kenwood_get_ptt,
+    .set_ptt = kenwood_set_ptt,
+    .get_info = kenwood_ts480_get_info,
+    .get_clock = qrplabs_get_clock,
+    .set_clock = qrplabs_set_clock,
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };
 
 /*
- * Hilberling PS8000A TS480 emulation
+ * Hilberling PT8000A TS480 emulation
  * Notice that some rigs share the same functions.
  */
-const struct rig_caps pt8000a_caps =
+struct rig_caps pt8000a_caps =
 {
     RIG_MODEL(RIG_MODEL_PT8000A),
     .model_name = "PT-8000A",
     .mfg_name = "Hilberling",
-    .version = BACKEND_VER ".1",
+    .version = BACKEND_VER ".2",
     .copyright = "LGPL",
     .status = RIG_STATUS_STABLE,
     .rig_type = RIG_TYPE_TRANSCEIVER,
@@ -1693,6 +2069,7 @@ const struct rig_caps pt8000a_caps =
     },
     /* mode/filter list, remember: order matters! */
     .filters =  {
+        {RIG_MODE_SSB, kHz(6.0)},
         {RIG_MODE_SSB, kHz(1.0)},
         {RIG_MODE_SSB, kHz(1.2)},
         {RIG_MODE_SSB, kHz(1.4)},
@@ -1716,7 +2093,6 @@ const struct rig_caps pt8000a_caps =
         {RIG_MODE_SSB, kHz(3.4)},
         {RIG_MODE_SSB, kHz(3.5)},
         {RIG_MODE_SSB, kHz(4.6)},
-        {RIG_MODE_SSB, kHz(6.0)},
         {RIG_MODE_CW, Hz(50)},
         {RIG_MODE_CW, Hz(100)},
         {RIG_MODE_CW, Hz(200)},
@@ -1756,8 +2132,19 @@ const struct rig_caps pt8000a_caps =
     },
     .level_gran =
     {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
 #include "level_gran_kenwood.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -1782,17 +2169,17 @@ const struct rig_caps pt8000a_caps =
     .set_split_vfo = kenwood_set_split_vfo,
     .get_split_vfo = kenwood_get_split_vfo_if,
     .get_ptt = kenwood_get_ptt,
-    .set_ptt = qdx_set_ptt,
+    .set_ptt = kenwood_set_ptt,
     .get_dcd = kenwood_get_dcd,
-    .set_powerstat = kenwood_set_powerstat,
-    .get_powerstat = kenwood_get_powerstat,
+//    .set_powerstat = kenwood_set_powerstat,
+//    .get_powerstat = kenwood_get_powerstat,
     .get_info = kenwood_ts480_get_info,
     .reset = kenwood_reset,
     .set_ant = kenwood_set_ant,
     .get_ant = kenwood_get_ant,
     .scan = kenwood_scan,     /* not working, invalid arguments using rigctl; kenwood_scan does only support on/off and not tone and CTCSS scan */
-    .has_set_level = TS480_LEVEL_SET,
-    .has_get_level = TS480_LEVEL_GET,
+    .has_set_level = PT8000A_LEVEL_SET,
+    .has_get_level = PT8000A_LEVEL_GET,
     .set_level = kenwood_ts480_set_level,
     .get_level = kenwood_ts480_get_level,
     .has_get_func = TS480_FUNC_ALL,
@@ -1806,17 +2193,16 @@ const struct rig_caps pt8000a_caps =
  * SDRPlay SDRUno rig capabilities
  * Notice that some rigs share the same functions.
  */
-const struct rig_caps sdruno_caps =
+struct rig_caps sdruno_caps =
 {
     RIG_MODEL(RIG_MODEL_SDRUNO),
     .model_name = "SDRUno",
     .mfg_name = "SDRPlay",
-    .version = BACKEND_VER ".2",
+    .version = BACKEND_VER ".3",
     .copyright = "LGPL",
     .status = RIG_STATUS_STABLE,
-    .rig_type = RIG_TYPE_TRANSCEIVER,
-    .ptt_type = RIG_PTT_RIG_MICDATA,
-    .dcd_type = RIG_DCD_RIG,
+    .rig_type = RIG_TYPE_RECEIVER,
+    .ptt_type = RIG_PTT_NONE,
     .port_type = RIG_PORT_SERIAL,
     .serial_rate_min = 4800,
     .serial_rate_max = 115200,
@@ -1841,26 +2227,6 @@ const struct rig_caps sdruno_caps =
         RIG_FRNG_END,
     }, /*!< Receive frequency range list for ITU region 1 */
     .tx_range_list1 = {
-        {kHz(1810),  kHz(1850),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},   /* 100W class */
-        {kHz(1810),  kHz(1850),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},       /* 25W class */
-        {kHz(3500),  kHz(3800),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(3500),  kHz(3800),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(7),     kHz(7200),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(7),     kHz(7200),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(10100), kHz(10150), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(10100), kHz(10150), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(14),    kHz(14350), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(14),    kHz(14350), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(18068), kHz(18168), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(18068), kHz(18168), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(21),    kHz(21450), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(21),    kHz(21450), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(24890), kHz(24990), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(24890), kHz(24990), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(28),    kHz(29700), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(28),    kHz(29700), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(50),    kHz(52000), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(50),    kHz(52000), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
         RIG_FRNG_END,
     },  /*!< Transmit frequency range list for ITU region 1 */
     .rx_range_list2 = {
@@ -1868,28 +2234,6 @@ const struct rig_caps sdruno_caps =
         RIG_FRNG_END,
     },  /*!< Receive frequency range list for ITU region 2 */
     .tx_range_list2 = {
-        {kHz(1800),  MHz(2) - 1, TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},  /* 100W class */
-        {kHz(1800),  MHz(2) - 1, TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},      /* 25W class */
-        {kHz(3500),  MHz(4) - 1, TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(3500),  MHz(4) - 1, TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(5250),  kHz(5450),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(5250),  kHz(5450),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(7),     kHz(7300),  TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(7),     kHz(7300),  TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(10100), kHz(10150), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(10100), kHz(10150), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(14),    kHz(14350), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(14),    kHz(14350), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(18068), kHz(18168), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(18068), kHz(18168), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(21),    kHz(21450), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(21),    kHz(21450), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {kHz(24890), kHz(24990), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {kHz(24890), kHz(24990), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(28),    kHz(29700), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(28),    kHz(29700), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
-        {MHz(50),    kHz(52000), TS480_OTHER_TX_MODES, 5000, 100000, TS480_VFO},
-        {MHz(50),    kHz(52000), TS480_AM_TX_MODES, 5000, 25000, TS480_VFO},
         RIG_FRNG_END,
     }, /*!< Transmit frequency range list for ITU region 2 */
     .tuning_steps =  {
@@ -1937,8 +2281,19 @@ const struct rig_caps sdruno_caps =
     },
     .vfo_ops = TS480_VFO_OPS,
     .level_gran = {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
 #include "level_gran_kenwood.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -2007,7 +2362,7 @@ const struct confparams malachite_cfg_parms[] =
     { RIG_CONF_END, NULL, }
 };
 
-int malachite_init(RIG *rig)
+static int malachite_init(RIG *rig)
 {
     struct kenwood_priv_data *priv;
     int retval;
@@ -2016,70 +2371,70 @@ int malachite_init(RIG *rig)
 
     retval = kenwood_init(rig);
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
-    priv->no_id = 1;  // the Malchite doesn't like the ID; verify cmd
+    priv->no_id = 1;  // the Malachite doesn't like the ID; verify cmd
 
     if (retval != RIG_OK) { RETURNFUNC(retval); }
 
     RETURNFUNC(RIG_OK);
 }
 
-int malachite_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
+static int malachite_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    int post_write_delay_save = rig->state.post_write_delay;
-    rig->state.post_write_delay = 0;
+    int post_write_delay_save = STATE(rig)->post_write_delay;
+    STATE(rig)->post_write_delay = 0;
     int retval = kenwood_get_mode(rig, vfo, mode, width);
-    rig->state.post_write_delay = post_write_delay_save;
+    STATE(rig)->post_write_delay = post_write_delay_save;
     return retval;
 }
 
-int malachite_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
+static int malachite_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    int post_write_delay_save = rig->state.post_write_delay;
+    int post_write_delay_save = STATE(rig)->post_write_delay;
     ENTERFUNC;
-    rig->state.post_write_delay = 0;
+    STATE(rig)->post_write_delay = 0;
     int retval = kenwood_get_freq(rig, vfo, freq);
-    rig->state.post_write_delay = post_write_delay_save;
+    STATE(rig)->post_write_delay = post_write_delay_save;
     RETURNFUNC(retval);
 }
 
-int malachite_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
+static int malachite_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     int retval;
+    struct rig_cache *cachep = CACHE(rig);
 
     ENTERFUNC;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: freqMainA=%g, freq=%g\n", __func__,
-              rig->state.cache.freqMainA, freq);
+              cachep->freqMainA, freq);
 
-    if ((rig->state.cache.freqMainA < 400000000 && freq >= 400000000)
-            || (rig->state.cache.freqMainA >= 400000000 && freq < 400000000)
-            || rig->state.cache.freqMainA == 0)
+    if ((cachep->freqMainA < 400000000 && freq >= 400000000)
+            || (cachep->freqMainA >= 400000000 && freq < 400000000)
+            || cachep->freqMainA == 0)
     {
         // Malachite has a bug where it takes two freq set to make it work
         // under band changes -- so we just do this all the time
         retval = kenwood_set_freq(rig, vfo, freq + 1);
-        rig->state.post_write_delay = 250; // need a bit more time on band  change
+        STATE(rig)->post_write_delay = 250; // need a bit more time on band  change
 
         if (retval != RIG_OK) { RETURNFUNC(retval); }
     }
     else
     {
-        rig->state.post_write_delay = 125;
+        STATE(rig)->post_write_delay = 125;
     }
 
     retval = kenwood_set_freq(rig, vfo, freq);
 
-    RETURNFUNC2(retval);
+    RETURNFUNC(retval);
 }
 
 /*
  * Malachite SDR rig capabilities.
  * Notice that some rigs share the same functions.
- * Also this struct is READONLY!
  */
-const struct rig_caps malachite_caps =
+struct rig_caps malachite_caps =
 {
     RIG_MODEL(RIG_MODEL_MALACHITE),
     .model_name = "DSP",
@@ -2097,7 +2452,7 @@ const struct rig_caps malachite_caps =
     .serial_parity = RIG_PARITY_NONE,
     .serial_handshake = RIG_HANDSHAKE_NONE,
     .write_delay = 0,
-    // Malchite needs 125ms unless going from low to high band -- see malachite_set_freq
+    // Malachite needs 125ms unless going from low to high band -- see malachite_set_freq
     // Do not change this without checking the 300ms delay in malachite_set_freq
     .post_write_delay = 250,
     .timeout = 3000,

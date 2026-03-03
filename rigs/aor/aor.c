@@ -24,7 +24,7 @@
 #include <string.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 #include "idx_builtin.h"
@@ -58,7 +58,7 @@
 
 /*
  * aor_transaction
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, STATE(rig)!= NULL, data!=NULL, data_len!=NULL
  * Otherwise, you'll get a nice seg fault. You've been warned!
  * return value: RIG_OK if everything's fine, negative value otherwise
  * TODO: error case handling
@@ -67,15 +67,13 @@ static int aor_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
                            int *data_len)
 {
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     char ackbuf[BUFSZ];
     int ack_len;
 
-    rs = &rig->state;
+    rig_flush(rp);
 
-    rig_flush(&rs->rigport);
-
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -95,7 +93,7 @@ static int aor_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
     /*
      * Do wait for a reply
      */
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ, EOM,
+    retval = read_string(rp, (unsigned char *) data, BUFSZ, EOM,
                          strlen(EOM), 0, 1);
 
     if (retval < 0)
@@ -124,7 +122,7 @@ static int aor_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
     if (retval >= 1 && data[0] == '?')
     {
         /* command failed? resync with radio */
-        write_block(&rs->rigport, (unsigned char *) EOM, 1);
+        write_block(rp, (unsigned char *) EOM, 1);
 
         return -RIG_EPROTO;
     }
@@ -144,7 +142,7 @@ int aor_close(RIG *rig)
      * since no reply is to be expected.
      */
 
-    return write_block(&rig->state.rigport, (unsigned char *) "EX" EOM, 3);
+    return write_block(RIGPORT(rig), (unsigned char *) "EX" EOM, 3);
 }
 
 static int format_freq(char *buf, int buf_len, freq_t freq)
@@ -154,7 +152,7 @@ static int format_freq(char *buf, int buf_len, freq_t freq)
 
     /*
      * actually, frequency must be like nnnnnnnnm0,
-     * where m must be 0 or 5 (for 50Hz).
+     * where m must be 0 or 5 (for 50 Hz).
      */
     lowhz = f % 100;
     f /= 100;
@@ -463,7 +461,7 @@ int aor_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         if (retval != RIG_OK) { return retval; }
 
         strncpy(mdbuf2, mdbuf + 4, 3); /* Extract first 'BW' part */
-        mdbuf2[3] = '\0'; // in case strnpy produces and un-terminated string
+        mdbuf2[3] = '\0'; // in case strncpy produces and un-terminated string
         mdbuf2_len = strlen(mdbuf2);
 
         retval = aor_transaction(rig, mdbuf2, mdbuf2_len, NULL, NULL);
@@ -597,7 +595,7 @@ int aor_set_ts(RIG *rig, vfo_t vfo, shortfreq_t ts)
 
     /*
      * actually, tuning step must be like nnnnm0,
-     * where m must be 0 or 5 (for 50Hz).
+     * where m must be 0 or 5 (for 50 Hz).
      */
     SNPRINTF(tsbuf, sizeof(tsbuf), "ST%06ld" EOM, ts);
 
@@ -607,7 +605,7 @@ int aor_set_ts(RIG *rig, vfo_t vfo, shortfreq_t ts)
 
 /*
  * aor_set_level
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int aor_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
@@ -615,7 +613,7 @@ int aor_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     char lvlbuf[BUFSZ];
     int agc;
 
-    rs = &rig->state;
+    rs = STATE(rig);
 
 
     switch (level)
@@ -672,15 +670,13 @@ int aor_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
 /*
  * aor_get_level
- * Assumes rig!=NULL, rig->state.priv!=NULL, val!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, val!=NULL
  */
 int aor_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
-    struct rig_state *rs;
+    struct rig_state *rs = STATE(rig);
     char lvlbuf[BUFSZ], ackbuf[BUFSZ];
     int ack_len, retval;
-
-    rs = &rig->state;
 
     switch (level)
     {
@@ -822,7 +818,7 @@ int aor_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 /*
  * aor_get_dcd
- * Assumes rig!=NULL, rig->state.priv!=NULL, val!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, val!=NULL
  */
 int aor_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 {
@@ -849,7 +845,7 @@ int aor_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 
 /*
  * aor_set_powerstat
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int aor_set_powerstat(RIG *rig, powerstat_t status)
 {
@@ -893,7 +889,7 @@ int aor_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 
 /*
  * aor_scan, scan operation
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int aor_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
 {
@@ -1346,7 +1342,7 @@ int aor_get_chan_all_cb(RIG *rig, vfo_t vfo, chan_cb_t chan_cb, rig_ptr_t arg)
 {
     const struct aor_priv_caps *priv = (struct aor_priv_caps *)rig->caps->priv;
     int i, j, retval;
-    chan_t *chan_list = rig->state.chan_list;
+    chan_t *chan_list = STATE(rig)->chan_list;
     channel_t *chan;
     int chan_count;
     char aorcmd[BUFSZ];
@@ -1423,7 +1419,7 @@ int aor_get_chan_all_cb(RIG *rig, vfo_t vfo, chan_cb_t chan_cb, rig_ptr_t arg)
             /*
              * get next line
              */
-            retval = read_string(&rig->state.rigport, (unsigned char *) chanbuf, BUFSZ,
+            retval = read_string(RIGPORT(rig), (unsigned char *) chanbuf, BUFSZ,
                                  EOM, strlen(EOM), 0, 1);
 
             if (retval < 0)
@@ -1447,7 +1443,7 @@ const char *aor_get_info(RIG *rig)
     static char infobuf[BUFSZ];
     int id_len, frm_len, retval;
     char idbuf[BUFSZ];
-    char frmbuf[32]; // only expect 6 chars...please check
+    char frmbuf[BUFSZ];
 
     retval = aor_transaction(rig, "\001" EOM, 2, idbuf, &id_len);
 

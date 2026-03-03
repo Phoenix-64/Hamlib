@@ -114,7 +114,7 @@ int ft710_ext_tokens[] =
     TOK_BACKEND_NONE
 };
 
-const struct rig_caps ft710_caps =
+struct rig_caps ft710_caps =
 {
     RIG_MODEL(RIG_MODEL_FT710),
     .model_name =         "FT-710",
@@ -144,15 +144,23 @@ const struct rig_caps ft710_caps =
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran =
     {
+#define NO_LVL_MICGAIN
+#define NO_LVL_SQL
+#define NO_LVL_MONITOR_GAIN
+#define NO_LVL_RFPOWER
 #include "level_gran_yaesu.h"
-        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_SQL] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
+#undef NO_LVL_MICGAIN
+#undef NO_LVL_SQL
+#undef NO_LVL_MONITOR_GAIN
+#undef NO_LVL_RFPOWER
+        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_SQL] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BAND60M,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BAND4M"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -177,6 +185,8 @@ const struct rig_caps ft710_caps =
     .comp_meter_cal =     FT710_COMP_CAL,
     .chan_list =          {
         {   1,  99, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP },
+        {   1,      5, RIG_MTYPE_VOICE },
+        {   1,  5,  RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 
@@ -305,6 +315,7 @@ const struct rig_caps ft710_caps =
     .set_clock =          newcat_set_clock,
     .get_clock =          newcat_get_clock,
     .scan =               newcat_scan,
+    .send_voice_mem =     newcat_send_voice_mem,
     .morse_qsize =        50,
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };

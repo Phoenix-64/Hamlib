@@ -22,8 +22,9 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -63,23 +64,22 @@
 #  include <netdb.h>
 #endif
 
-#ifdef HAVE_PTHREAD
-#  include <pthread.h>
-#endif
+#include <pthread.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "misc.h"
 #include "network.h"
 
 #include "rigctl_parse.h"
 #include "riglist.h"
+#include "token.h"
 
 /*
  * Reminder: when adding long options,
  *      keep up to date SHORT_OPTIONS, usage()'s output and man page. thanks.
  * TODO: add an option to read from a file
  */
-#define SHORT_OPTIONS "m:r:p:d:P:D:s:S:c:T:t:C:W:w:x:z:lLuovhVZMRA:n:"
+#define SHORT_OPTIONS "m:r:p:d:P:D:s:S:c:T:t:C:W:w:x:lLuovhVZRA:b"
 static struct option long_options[] =
 {
     {"model",           1, 0, 'm'},
@@ -123,17 +123,18 @@ struct handle_data
 };
 
 
+/*
+ * Prototypes
+ */
 void *handle_socket(void *arg);
-void usage(void);
+static void usage(FILE *fout);
+static void short_usage(FILE *fout);
 
-
-#ifdef HAVE_PTHREAD
 static unsigned client_count;
-#endif
 
 static RIG *my_rig;             /* handle to rig (instance) */
 static volatile int rig_opened = 0;
-static int verbose;
+static int verbose = RIG_DEBUG_NONE;
 
 #ifdef HAVE_SIG_ATOMIC_T
 static sig_atomic_t volatile ctrl_c = 0;
@@ -157,7 +158,6 @@ static int bind_all = 0;
 
 void mutex_rigctld(int lock)
 {
-#ifdef HAVE_PTHREAD
     static pthread_mutex_t client_lock = PTHREAD_MUTEX_INITIALIZER;
 
     if (lock)
@@ -171,7 +171,6 @@ void mutex_rigctld(int lock)
         pthread_mutex_unlock(&client_lock);
     }
 
-#endif
 }
 
 #ifdef WIN32
@@ -254,7 +253,7 @@ int main(int argc, char *argv[])
     ptt_type_t ptt_type = RIG_PTT_NONE;
     dcd_type_t dcd_type = RIG_DCD_NONE;
     int serial_rate = 0;
-    char *civaddr = NULL;   /* NULL means no need to set conf */
+    const char *civaddr = NULL;   /* NULL means no need to set conf */
     char conf_parms[MAXCONFLEN] = "";
 
     struct addrinfo hints, *result, *saved_result;
@@ -271,11 +270,8 @@ int main(int argc, char *argv[])
     struct sigaction act;
 #endif
 
-#ifdef HAVE_PTHREAD
     pthread_t thread;
     pthread_attr_t attr;
-#endif
-    struct handle_data *arg;
     int vfo_mode = 0; /* vfo_mode=0 means target VFO is current VFO */
     int i;
     extern int is_rigctld;
@@ -286,7 +282,7 @@ int main(int argc, char *argv[])
 
     if (err) { rig_debug(RIG_DEBUG_ERR, "%s: setvbuf err=%s\n", __func__, strerror(err)); }
 
-
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -307,7 +303,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -332,52 +328,22 @@ int main(int argc, char *argv[])
             break;
 
         case 'm':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             my_model = atoi(optarg);
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rig_file = optarg;
             break;
 
         case 'p':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             ptt_file = optarg;
             break;
 
         case 'd':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             dcd_file = optarg;
             break;
 
         case 'P':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (!strcmp(optarg, "RIG"))
             {
                 ptt_type = RIG_PTT_RIG;
@@ -419,12 +385,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'D':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (!strcmp(optarg, "RIG"))
             {
                 dcd_type = RIG_DCD_RIG;
@@ -470,33 +430,15 @@ int main(int argc, char *argv[])
             break;
 
         case 'c':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             civaddr = optarg;
             break;
 
         case 'S':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             resp_sep = *optarg;
             rig_debug(RIG_DEBUG_VERBOSE, "%s: resp_sep=%c\n", __func__, resp_sep);
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -506,12 +448,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'C':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (strcmp(optarg, "auto_power_on=0") == 0)
             {
                 rig_debug(RIG_DEBUG_ERR, "%s: skipping rig_open\n", __func__);
@@ -532,28 +468,16 @@ int main(int argc, char *argv[])
                     return 1;
                 }
 
-                strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms));
+                strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms) - 1);
             }
 
             break;
 
         case 't':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             portno = optarg;
             break;
 
         case 'T':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             src_addr = optarg;
             break;
 
@@ -564,6 +488,7 @@ int main(int argc, char *argv[])
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         case 'L':
@@ -579,24 +504,12 @@ int main(int argc, char *argv[])
             break;
 
         case 'W':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             twiddle_timeout = atoi(optarg);
             fprintf(stderr,
                     "twiddle_timeout is deprecated...use e.g. --set-conf=twiddle_timeout=5\n");
             break;
 
         case 'w':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             twiddle_rit = atoi(optarg);
             fprintf(stderr,
                     "twiddle_rit is deprecated...use e.g. --set-conf=twiddle_rit=1\n");
@@ -604,12 +517,6 @@ int main(int argc, char *argv[])
 
 
         case 'x':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             uplink = atoi(optarg);
             break;
 
@@ -619,7 +526,8 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            usage();    /* unknown option? */
+            /* unknown getopt option */
+            short_usage(stderr);
             exit(1);
         }
     }
@@ -633,8 +541,6 @@ int main(int argc, char *argv[])
     }
 
 #endif
-
-    rig_set_debug(verbose);
 
     SNPRINTF(rigstartup, sizeof(rigstartup), "%s(%d) Startup:", __FILE__, __LINE__);
 
@@ -659,79 +565,94 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Please check with --list option.\n");
         exit(2);
     }
-    
-    char *token=strtok(conf_parms,",");
-    while(token)
+
+    my_rig->caps->ptt_type = ptt_type;
+    const char *token = strtok(conf_parms, ",");
+    struct rig_state *rs = STATE(my_rig);
+
+    while (token)
     {
         char mytoken[100], myvalue[100];
-        token_t lookup;
-        sscanf(token,"%99[^=]=%99s", mytoken, myvalue);
+        hamlib_token_t lookup;
+        sscanf(token, "%99[^=]=%99s", mytoken, myvalue);
         //printf("mytoken=%s,myvalue=%s\n",mytoken, myvalue);
-        lookup = rig_token_lookup(my_rig,mytoken);
+        lookup = rig_token_lookup(my_rig, mytoken);
+
         if (lookup == 0)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s'\n", __func__, mytoken);
             token = strtok(NULL, ",");
             continue;
         }
-        retcode = rig_set_conf(my_rig, rig_token_lookup(my_rig,mytoken), myvalue);
+
+        retcode = rig_set_conf(my_rig, lookup, myvalue);
+
         if (retcode != RIG_OK)
         {
             fprintf(stderr, "Config parameter error: %s\n", rigerror(retcode));
             exit(2);
         }
+
         token = strtok(NULL, ",");
+        ptt_type = my_rig->caps->ptt_type; // in case we set the ptt_type with set_conf
     }
 
     if (rig_file)
     {
-        strncpy(my_rig->state.rigport.pathname, rig_file, HAMLIB_FILPATHLEN - 1);
+        rig_set_conf(my_rig, TOK_PATHNAME, rig_file);
     }
 
-    my_rig->state.twiddle_timeout = twiddle_timeout;
-    my_rig->state.twiddle_rit = twiddle_rit;
-    my_rig->state.uplink = uplink;
+    rs->twiddle_timeout = twiddle_timeout;
+    rs->twiddle_rit = twiddle_rit;
+    rs->uplink = uplink;
     rig_debug(RIG_DEBUG_TRACE, "%s: twiddle=%d, uplink=%d, twiddle_rit=%d\n",
               __func__,
-              my_rig->state.twiddle_timeout, my_rig->state.uplink, my_rig->state.twiddle_rit);
+              rs->twiddle_timeout, rs->uplink, rs->twiddle_rit);
 
     /*
      * ex: RIG_PTT_PARALLEL and /dev/parport0
      */
     if (ptt_type != RIG_PTT_NONE)
     {
-        my_rig->state.pttport.type.ptt = ptt_type;
-        my_rig->state.pttport_deprecated.type.ptt = ptt_type;
+        PTTPORT(my_rig)->type.ptt = ptt_type;
+        rs->pttport_deprecated.type.ptt = ptt_type;
         // This causes segfault since backend rig_caps are const
-        // rigctld will use the rig->state version of this for clients
+        // rigctld will use the STATE(rig) version of this for clients
         //my_rig->caps->ptt_type = ptt_type;
     }
 
     if (dcd_type != RIG_DCD_NONE)
     {
-        my_rig->state.dcdport.type.dcd = dcd_type;
-        my_rig->state.dcdport_deprecated.type.dcd = dcd_type;
+        DCDPORT(my_rig)->type.dcd = dcd_type;
+        rs->dcdport_deprecated.type.dcd = dcd_type;
     }
 
     if (ptt_file)
     {
-        strncpy(my_rig->state.pttport.pathname, ptt_file, HAMLIB_FILPATHLEN - 1);
-        strncpy(my_rig->state.pttport_deprecated.pathname, ptt_file,
+        strncpy(PTTPORT(my_rig)->pathname, ptt_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(rs->pttport_deprecated.pathname, ptt_file,
                 HAMLIB_FILPATHLEN - 1);
+
+        // default to RTS when ptt_type is not specified
+        if (ptt_type == RIG_PTT_NONE)
+        {
+            rig_debug(RIG_DEBUG_VERBOSE, "%s: defaulting to RTS PTT\n", __func__);
+            my_rig->caps->ptt_type = RIG_PTT_SERIAL_RTS;
+        }
     }
 
     if (dcd_file)
     {
-        strncpy(my_rig->state.dcdport.pathname, dcd_file, HAMLIB_FILPATHLEN - 1);
-        strncpy(my_rig->state.dcdport_deprecated.pathname, dcd_file,
+        strncpy(DCDPORT(my_rig)->pathname, dcd_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(rs->dcdport_deprecated.pathname, dcd_file,
                 HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
     if (serial_rate != 0)
     {
-        my_rig->state.rigport.parm.serial.rate = serial_rate;
-        my_rig->state.rigport_deprecated.parm.serial.rate = serial_rate;
+        RIGPORT(my_rig)->parm.serial.rate = serial_rate;
+        rs->rigport_deprecated.parm.serial.rate = serial_rate;
     }
 
     if (civaddr)
@@ -745,6 +666,12 @@ int main(int argc, char *argv[])
     if (show_conf)
     {
         rig_token_foreach(my_rig, print_conf_list, (rig_ptr_t)my_rig);
+
+        if (rig_file == NULL)
+        {
+            fflush(stdout);
+            exit(0);
+        }
     }
 
     /*
@@ -850,7 +777,7 @@ int main(int argc, char *argv[])
     else
     {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(retcode));
-        exit(2);
+        exit(1);
     }
 
     saved_result = result;
@@ -865,30 +792,38 @@ int main(int argc, char *argv[])
         {
             handle_error(RIG_DEBUG_ERR, "socket");
             freeaddrinfo(saved_result);     /* No longer needed */
-            exit(2);
+            exit(1);
         }
-    int optval = 1;
-#ifdef __MINGW32__
-    if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEADDR, (PCHAR)&optval, sizeof(optval)) < 0)
-#else
-    if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
-#endif
-    {
-        rig_debug(RIG_DEBUG_ERR, "%s: error enabling UDP address reuse: %s\n", __func__,
-                strerror(errno));
-    }
 
-    // Windows does not have SO_REUSEPORT. However, SO_REUSEADDR works in a similar way.
+        const int optval = 1;
+#ifdef __MINGW32__
+
+        if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEADDR, (PCHAR)&optval,
+                       sizeof(optval)) < 0)
+#else
+        if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEADDR, &optval,
+                       sizeof(optval)) < 0)
+#endif
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: error enabling UDP address reuse: %s\n", __func__,
+                      strerror(errno));
+        }
+
+        // Windows does not have SO_REUSEPORT. However, SO_REUSEADDR works in a similar way.
 #if defined(SO_REUSEPORT)
-    if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) < 0)
-    {
-        rig_debug(RIG_DEBUG_ERR, "%s: error enabling UDP port reuse: %s\n", __func__,
-                strerror(errno));
-    }
+
+        if (setsockopt(sock_listen, SOL_SOCKET, SO_REUSEPORT, &optval,
+                       sizeof(optval)) < 0)
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: error enabling UDP port reuse: %s\n", __func__,
+                      strerror(errno));
+        }
+
 #endif
 
 
 #if 0
+
         if (setsockopt(sock_listen,
                        SOL_SOCKET,
                        SO_REUSEADDR,
@@ -901,6 +836,7 @@ int main(int argc, char *argv[])
             freeaddrinfo(saved_result);     /* No longer needed */
             exit(1);
         }
+
 #endif
 
 #ifdef IPV6_V6ONLY
@@ -928,18 +864,25 @@ int main(int argc, char *argv[])
 #endif
 
         int retval = bind(sock_listen, result->ai_addr, result->ai_addrlen);
+
         if (retval == 0)
         {
             break;
         }
+
         {
-            rig_debug(RIG_DEBUG_ERR,"%s: bind: %s\n", __func__, strerror(errno));
+            rig_debug(RIG_DEBUG_ERR, "%s: bind: %s\n", __func__, strerror(errno));
         }
 
         if (bind_all)
+        {
             handle_error(RIG_DEBUG_WARN, "binding failed (trying next interface)");
+        }
         else
+        {
             handle_error(RIG_DEBUG_WARN, "binding failed");
+        }
+
 #ifdef __MINGW32__
         closesocket(sock_listen);
 #else
@@ -1044,16 +987,6 @@ int main(int argc, char *argv[])
         fd_set set;
         struct timeval timeout;
 
-        arg = calloc(1, sizeof(struct handle_data));
-
-        if (!arg)
-        {
-            rig_debug(RIG_DEBUG_ERR, "calloc: %s\n", strerror(errno));
-            exit(1);
-        }
-
-        if (rigctld_password[0] != 0) { arg->use_password = 1; }
-
         /* use select to allow for periodic checks for CTRL+C */
         FD_ZERO(&set);
         FD_SET(sock_listen, &set);
@@ -1090,6 +1023,18 @@ int main(int argc, char *argv[])
         }
         else
         {
+            struct handle_data *arg;
+
+            arg = calloc(1, sizeof(struct handle_data));
+
+            if (!arg)
+            {
+                rig_debug(RIG_DEBUG_ERR, "calloc: %s\n", strerror(errno));
+                exit(1);
+            }
+
+            if (rigctld_password[0] != 0) { arg->use_password = 1; }
+
             arg->rig = my_rig;
             arg->clilen = sizeof(arg->cli_addr);
             arg->vfo_mode = vfo_mode;
@@ -1100,6 +1045,7 @@ int main(int argc, char *argv[])
             if (arg->sock < 0)
             {
                 handle_error(RIG_DEBUG_ERR, "accept");
+                free(arg);
                 break;
             }
 
@@ -1122,7 +1068,6 @@ int main(int argc, char *argv[])
                       host,
                       serv);
 
-#ifdef HAVE_PTHREAD
             pthread_attr_init(&attr);
             pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
@@ -1134,16 +1079,12 @@ int main(int argc, char *argv[])
                 break;
             }
 
-#else
-            handle_socket(arg);
-#endif
         }
     }
-    while(!ctrl_c);
+    while (!ctrl_c);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: while loop done\n", __func__);
 
-#ifdef HAVE_PTHREAD
     /* allow threads to finish current action */
     mutex_rigctld(1);
 
@@ -1151,6 +1092,7 @@ int main(int argc, char *argv[])
     {
         rig_debug(RIG_DEBUG_WARN, "%u outstanding client(s)\n", client_count);
     }
+
 #ifdef __MINGW__
     closesocket(sock_listen);
 #else
@@ -1158,9 +1100,6 @@ int main(int argc, char *argv[])
 #endif
     rig_close(my_rig);
     mutex_rigctld(0);
-#else
-    rig_close(my_rig); /* close port */
-#endif
 
     rig_cleanup(my_rig); /* if you care about memory */
 
@@ -1211,7 +1150,9 @@ void *handle_socket(void *arg)
     char serv[NI_MAXSERV];
     char send_cmd_term = '\r';  /* send_cmd termination char */
     int ext_resp = 0;
+    char my_resp_sep = resp_sep;  // Separator for this connection, initial default
     rig_powerstat = RIG_POWER_ON; // defaults to power on
+    struct timespec powerstat_check_time;
 
     fsockin = get_fsockin(handle_data_arg);
 
@@ -1234,7 +1175,6 @@ void *handle_socket(void *arg)
         goto handle_exit;
     }
 
-#ifdef HAVE_PTHREAD
     mutex_rigctld(1);
 
     ++client_count;
@@ -1255,27 +1195,16 @@ void *handle_socket(void *arg)
 #endif
 
     mutex_rigctld(0);
-#else
-    mutex_rigctld(1);
-    retcode = rig_open(my_rig);
-    mutex_rigctld(1);
-
-    if (RIG_OK == retcode && verbose > RIG_DEBUG_ERR)
-    {
-        printf("Opened rig model %d, '%s'\n",
-               my_rig->caps->rig_model,
-               my_rig->caps->model_name);
-    }
-
-#endif
 
     if (my_rig->caps->get_powerstat)
     {
         mutex_rigctld(1);
         rig_get_powerstat(my_rig, &rig_powerstat);
         mutex_rigctld(0);
-        my_rig->state.powerstat = rig_powerstat;
+        STATE(my_rig)->powerstat = rig_powerstat;
     }
+
+    elapsed_ms(&powerstat_check_time, HAMLIB_ELAPSED_SET);
 
     do
     {
@@ -1293,21 +1222,24 @@ void *handle_socket(void *arg)
 
         if (rig_opened) // only do this if rig is open
         {
-            powerstat_t powerstat;
             rig_debug(RIG_DEBUG_TRACE, "%s: doing rigctl_parse vfo_mode=%d, secure=%d\n",
                       __func__,
                       handle_data_arg->vfo_mode, handle_data_arg->use_password);
             retcode = rigctl_parse(handle_data_arg->rig, fsockin, fsockout, NULL, 0,
-                                   mutex_rigctld,
-                                   1, 0, &handle_data_arg->vfo_mode, send_cmd_term, &ext_resp, &resp_sep,
+                                   mutex_rigctld, 1, 0, &handle_data_arg->vfo_mode,
+                                   send_cmd_term, &ext_resp, &my_resp_sep,
                                    handle_data_arg->use_password);
 
             if (retcode != 0) { rig_debug(RIG_DEBUG_VERBOSE, "%s: rigctl_parse retcode=%d\n", __func__, retcode); }
 
             // If we get a timeout, the rig might be powered off
             // Update our power status in case power gets turned off
-            if (retcode == -RIG_ETIMEOUT && my_rig->caps->get_powerstat)
+            // Check power status if rig is powered off, but not more often than once per second
+            if (my_rig->caps->get_powerstat && (retcode == -RIG_ETIMEOUT ||
+                                                (retcode == -RIG_EPOWER
+                                                 && elapsed_ms(&powerstat_check_time, HAMLIB_ELAPSED_GET) >= 1000)))
             {
+                powerstat_t powerstat;
                 rig_get_powerstat(my_rig, &powerstat);
                 rig_powerstat = powerstat;
 
@@ -1315,6 +1247,8 @@ void *handle_socket(void *arg)
                 {
                     retcode = -RIG_EPOWER;
                 }
+
+                elapsed_ms(&powerstat_check_time, HAMLIB_ELAPSED_SET);
             }
         }
         else
@@ -1324,7 +1258,7 @@ void *handle_socket(void *arg)
 
         // if we get a hard error we try to reopen the rig again
         // this should cover short dropouts that can occur
-        if (retcode < 0 && !RIG_IS_SOFT_ERRCODE(-retcode))
+        if (retcode < 0 && !RIG_IS_SOFT_ERRCODE(retcode))
         {
             int retry = 3;
             rig_debug(RIG_DEBUG_ERR, "%s: i/o error\n", __func__);
@@ -1354,8 +1288,9 @@ void *handle_socket(void *arg)
             while (!ctrl_c && !rig_opened && retry-- > 0 && retcode != RIG_OK);
         }
     }
-    while (!ctrl_c && (retcode == RIG_OK || RIG_IS_SOFT_ERRCODE(-retcode)));
+    while (!ctrl_c && (retcode == RIG_OK || RIG_IS_SOFT_ERRCODE(retcode)));
 
+    mutex_rigctld(1);
     if (rigctld_idle && client_count == 1)
     {
         rig_close(my_rig);
@@ -1363,9 +1298,8 @@ void *handle_socket(void *arg)
         if (verbose > RIG_DEBUG_ERR) { printf("Closed rig model %s.  Will reopen for new clients\n", my_rig->caps->model_name); }
     }
 
-
-#ifdef HAVE_PTHREAD
     --client_count;
+    mutex_rigctld(0);
 
     if (rigctld_idle && client_count > 0) { printf("%u client%s still connected so rig remains open\n", client_count, client_count > 1 ? "s" : ""); }
 
@@ -1386,17 +1320,6 @@ void *handle_socket(void *arg)
     }
 
     mutex_rigctld(0);
-#endif
-#else
-    rig_close(my_rig);
-
-    if (verbose > RIG_DEBUG_ERR)
-    {
-        printf("Closed rig model %d, '%s - will reopen for new clients'\n",
-               my_rig->caps->rig_model,
-               my_rig->caps->model_name);
-    }
-
 #endif
 
     if ((retcode = getnameinfo((struct sockaddr const *)&handle_data_arg->cli_addr,
@@ -1441,21 +1364,19 @@ handle_exit:
 
     free(arg);
 
-#ifdef HAVE_PTHREAD
     pthread_exit(NULL);
-#endif
     return NULL;
 }
 
 
-void usage(void)
+static void usage(FILE *fout)
 {
-    printf("Usage: rigctld [OPTION]...\n"
+    fprintf(fout, "Usage: rigctld [OPTION]...\n"
            "Daemon serving COMMANDs to a connected radio transceiver or receiver.\n\n");
 
 
-    printf(
-        "  -m, --model=ID                select radio model number. See model list\n"
+    fprintf(fout,
+        "  -m, --model=ID                select radio model number. See model list (-l)\n"
         "  -r, --rig-file=DEVICE         set device of the radio to operate on\n"
         "  -p, --ptt-file=DEVICE         set device of the PTT device to operate on\n"
         "  -d, --dcd-file=DEVICE         set device of the DCD device to operate on\n"
@@ -1466,32 +1387,30 @@ void usage(void)
         "  -t, --port=NUM                set TCP listening port, default %s\n"
         "  -S, --separator=CHAR          set char as rigctld response separator, default is \\n\n"
         "  -T, --listen-addr=IPADDR      set listening IP address, default ANY\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
         "  -L, --show-conf               list all config parameters\n"
         "  -l, --list                    list all model numbers and exit\n"
         "  -u, --dump-caps               dump capabilities and exit\n"
         "  -o, --vfo                     do not default to VFO_CURR, require extra vfo arg\n"
         "  -v, --verbose                 set verbose mode, cumulative (-v to -vvvvv)\n"
-        "  -W, --twiddle_timeout         timeout after detecting vfo manual change\n"
-        "  -w, --twiddle_rit             suppress VFOB getfreq so RIT can be twiddled\n"
-        "  -x, --uplink                  set uplink get_freq ignore, 1=Sub, 2=Main\n"
+        "  -W, --twiddle_timeout=SECONDS timeout after detecting vfo manual change\n"
+        "  -w, --twiddle_rit=SECONDS     suppress VFOB getfreq so RIT can be twiddled\n"
+        "  -x, --uplink=OPTION           set uplink get_freq ignore, option 1=Sub, 2=Main\n"
         "  -Z, --debug-time-stamps       enable time stamps for debug messages\n"
-        "  -A, --password                set password for rigctld access\n"
+        "  -A, --password=PASSWORD       set password for rigctld access (NOT IMPLEMENTED)\n"
         "  -R, --rigctld-idle            make rigctld close the rig when no clients are connected\n"
+        "  -b, --bind-all                make rigctld bind to first network device available\n"
         "  -h, --help                    display this help and exit\n"
         "  -V, --version                 output version information and exit\n\n",
         portno);
 
-    usage_rig(stdout);
-
-    printf("\nError codes and messages\n");
-
-    for (enum rig_errcode_e e = 0; e < RIG_EEND; ++e)
-    {
-        printf("-%d - %s", e, rigerror2(e));
-    }
+    usage_rig(fout);
+}
 
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
-
+static void short_usage(FILE *fout)
+{
+    fprintf(fout, "Usage: rigctld [OPTION]... [-m ID] [-r DEVICE] [-s BAUD]\n");
+    fprintf(fout, "Daemon serving COMMANDs to a connected radio transceiver or receiver.\n\n");
+    fprintf(fout, "Type: rigctld --help for extended usage.\n");
 }

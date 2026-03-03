@@ -48,14 +48,14 @@
  *
  * TODO: check this with manual or web site.
  */
-const struct rig_caps bcd396t_caps =
+struct rig_caps bcd396t_caps =
 {
     RIG_MODEL(RIG_MODEL_BCD396T),
     .model_name = "BCD-396T",
     .mfg_name =  "Uniden",
     .version =  BACKEND_DIGITAL_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRUNKSCANNER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

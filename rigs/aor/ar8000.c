@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "aor.h"
 
 
@@ -60,7 +60,7 @@ static const struct aor_priv_caps ar8000_priv_caps =
  *
  * part of info from http://www.aoruk.com/8000.htm
  */
-const struct rig_caps ar8000_caps =
+struct rig_caps ar8000_caps =
 {
     RIG_MODEL(RIG_MODEL_AR8000),
     .model_name = "AR8000",
@@ -145,7 +145,7 @@ const struct rig_caps ar8000_caps =
         /* mode/filter list, .remember =  order matters! */
         {RIG_MODE_SSB | RIG_MODE_CW, kHz(2)},
         {RIG_MODE_FM | RIG_MODE_AM, kHz(12)},
-        {RIG_MODE_WFM, kHz(180)}, /* 50kHz at -3dB, 380kHz at -20dB */
+        {RIG_MODE_WFM, kHz(180)}, /* 50 kHz at -3dB, 380 kHz at -20dB */
         RIG_FLT_END,
     },
 

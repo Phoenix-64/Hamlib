@@ -23,8 +23,8 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <hamlib/rig.h>
-#include "serial.h"
+#include "hamlib/rig.h"
+#include "iofunc.h"
 #include "aor.h"
 
 #define SR2200_MODES (RIG_MODE_AM|RIG_MODE_FM|RIG_MODE_WFM)
@@ -119,7 +119,7 @@ static const struct aor_priv_caps sr2200_priv_caps =
  *
  * TODO: retrieve BW info, and rest of commands
  */
-const struct rig_caps sr2200_caps =
+struct rig_caps sr2200_caps =
 {
     RIG_MODEL(RIG_MODEL_SR2200),
     .model_name = "SR2200",
@@ -265,7 +265,7 @@ const struct rig_caps sr2200_caps =
 
 /*
  * sr2200_transaction
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, RIGPORT(rig)!= NULL, data!=NULL, data_len!=NULL
  * Otherwise, you'll get a nice seg fault. You've been warned!
  * return value: RIG_OK if everything's fine, negative value otherwise
  * TODO: error case handling
@@ -274,15 +274,13 @@ static int sr2200_transaction(RIG *rig, const char *cmd, int cmd_len,
                               char *data, int *data_len)
 {
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     char ackbuf[BUFSZ];
     int ack_len;
 
-    rs = &rig->state;
+    rig_flush(rp);
 
-    rig_flush(&rs->rigport);
-
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -302,7 +300,7 @@ static int sr2200_transaction(RIG *rig, const char *cmd, int cmd_len,
     /*
      * Do wait for a reply
      */
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ, EOM,
+    retval = read_string(rp, (unsigned char *) data, BUFSZ, EOM,
                          strlen(EOM), 0, 1);
 
     if (retval < 0)
@@ -324,7 +322,7 @@ static int sr2200_transaction(RIG *rig, const char *cmd, int cmd_len,
     if (data[0] == '?')
     {
         /* command failed? resync with radio */
-        write_block(&rs->rigport, (unsigned char *) EOM, 1);
+        write_block(rp, (unsigned char *) EOM, 1);
 
         return -RIG_EPROTO;
     }
@@ -595,7 +593,7 @@ int sr2200_get_vfo(RIG *rig, vfo_t *vfo)
 
 /*
  * sr2200_set_level
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int sr2200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
@@ -605,7 +603,7 @@ int sr2200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     int agc;
     unsigned att = 0;
 
-    rs = &rig->state;
+    rs = STATE(rig);
 
     switch (level)
     {
@@ -679,7 +677,7 @@ int sr2200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
 /*
  * sr2200_get_level
- * Assumes rig!=NULL, rig->state.priv!=NULL, val!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, val!=NULL
  */
 int sr2200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
@@ -687,7 +685,7 @@ int sr2200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     char lvlbuf[BUFSZ], ackbuf[BUFSZ];
     int ack_len, retval;
 
-    rs = &rig->state;
+    rs = STATE(rig);
 
     switch (level)
     {

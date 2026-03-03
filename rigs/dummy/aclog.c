@@ -19,13 +19,14 @@
 *
 */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
-#include <serial.h>
-#include <misc.h>
+#include "hamlib/rig.h"
+#include "iofunc.h"
+#include "misc.h"
 
 #define DEBUG 1
 #define DEBUG_TRACE DEBUG_VERBOSE
@@ -73,7 +74,7 @@ struct aclog_priv_data
     struct ext_list *ext_parms;
 };
 
-//Structure for mapping aclog dynmamic modes to hamlib modes
+//Structure for mapping aclog dynamic modes to hamlib modes
 //aclog displays modes as the rig displays them
 struct s_modeMap
 {
@@ -137,7 +138,6 @@ static int read_transaction(RIG *rig, char *xml, int xml_len)
     int retry;
     char *delims;
     char *terminator = "</CMD>\r\n";
-    struct rig_state *rs = &rig->state;
 
     ENTERFUNC;
 
@@ -154,7 +154,7 @@ static int read_transaction(RIG *rig, char *xml, int xml_len)
             rig_debug(RIG_DEBUG_WARN, "%s: retry needed? retry=%d\n", __func__, retry);
         }
 
-        int len = read_string(&rs->rigport, (unsigned char *) tmp_buf, sizeof(tmp_buf),
+        int len = read_string(RIGPORT(rig), (unsigned char *) tmp_buf, sizeof(tmp_buf),
                               delims,
                               strlen(delims), 0, 1);
         rig_debug(RIG_DEBUG_TRACE, "%s: string='%s'\n", __func__, tmp_buf);
@@ -219,8 +219,7 @@ static int write_transaction(RIG *rig, char *xml, int xml_len)
     int try = rig->caps->retry;
 
     int retval = -RIG_EPROTO;
-
-    struct rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     ENTERFUNC;
 
@@ -234,11 +233,11 @@ static int write_transaction(RIG *rig, char *xml, int xml_len)
 
     // appears we can lose sync if we don't clear things out
     // shouldn't be anything for us now anyways
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
     while (try-- >= 0 && retval != RIG_OK)
         {
-            retval = write_block(&rs->rigport, (unsigned char *) xml, strlen(xml));
+            retval = write_block(rp, (unsigned char *) xml, strlen(xml));
 
             if (retval  < 0)
             {
@@ -257,7 +256,7 @@ static int aclog_transaction(RIG *rig, char *cmd, char *value,
 
     ENTERFUNC;
     ELAPSED1;
-    strcpy(xml,"UNKNOWN");
+    strcpy(xml, "UNKNOWN");
 
     set_transaction_active(rig);
 
@@ -294,7 +293,7 @@ static int aclog_transaction(RIG *rig, char *cmd, char *value,
         }
 
         // we get an unknown response if function does not exist
-        if (strstr(xml, "UNKNOWN")) { set_transaction_inactive(rig); RETURNFUNC(RIG_ENAVAIL); }
+        if (strstr(xml, "UNKNOWN")) { set_transaction_inactive(rig); RETURNFUNC(-RIG_ENAVAIL); }
 
         if (value) { strncpy(value, xml, value_len); }
 
@@ -305,7 +304,7 @@ static int aclog_transaction(RIG *rig, char *cmd, char *value,
     if (value && strlen(value) == 0)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: no value returned\n", __func__);
-        set_transaction_inactive(rig); RETURNFUNC(RIG_EPROTO);
+        set_transaction_inactive(rig); RETURNFUNC(-RIG_EPROTO);
     }
 
     ELAPSED2;
@@ -320,19 +319,20 @@ static int aclog_transaction(RIG *rig, char *cmd, char *value,
 static int aclog_init(RIG *rig)
 {
     struct aclog_priv_data *priv;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s version %s\n", __func__, rig->caps->version);
 
-    rig->state.priv  = (struct aclog_priv_data *)calloc(1, sizeof(
-                           struct aclog_priv_data));
+    STATE(rig)->priv  = (struct aclog_priv_data *)calloc(1, sizeof(
+                            struct aclog_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         RETURNFUNC(-RIG_ENOMEM);
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     memset(priv, 0, sizeof(struct aclog_priv_data));
     memset(priv->parms, 0, RIG_SETTING_MAX * sizeof(value_t));
@@ -340,7 +340,7 @@ static int aclog_init(RIG *rig)
     /*
      * set arbitrary initial status
      */
-    rig->state.current_vfo = RIG_VFO_A;
+    STATE(rig)->current_vfo = RIG_VFO_A;
     priv->split = 0;
     priv->ptt = 0;
     priv->curr_modeA = -1;
@@ -353,8 +353,7 @@ static int aclog_init(RIG *rig)
         RETURNFUNC(-RIG_EINVAL);
     }
 
-    strncpy(rig->state.rigport.pathname, DEFAULTPATH,
-            sizeof(rig->state.rigport.pathname));
+    strncpy(rp->pathname, DEFAULTPATH, sizeof(rp->pathname));
 
     RETURNFUNC(RIG_OK);
 }
@@ -422,12 +421,15 @@ static rmode_t modeMapGetHamlib(const char *modeACLog)
 
 /*
 * aclog_get_freq
-* Assumes rig!=NULL, rig->state.priv!=NULL, freq!=NULL
+* Assumes rig!=NULL, STATE(rig)->priv!=NULL, freq!=NULL
+*
+* string='<CMD><READBMFRESPONSE><BAND>23</BAND><MODE>SSB</MODE><MODETEST>PH</MODETEST><FREQ>1,296.171100</FREQ></CMD> '
 */
 static int aclog_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
+
     char value[MAXARGLEN];
-    struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s: vfo=%s\n", __func__,
@@ -443,7 +445,7 @@ static int aclog_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
     if (vfo == RIG_VFO_CURR)
     {
-        vfo = rig->state.current_vfo;
+        vfo = STATE(rig)->current_vfo;
         rig_debug(RIG_DEBUG_TRACE, "%s: get_freq2 vfo=%s\n",
                   __func__, rig_strvfo(vfo));
     }
@@ -463,7 +465,33 @@ static int aclog_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
     char *p = strstr(value, "<FREQ>");
     *freq = 0;
 
-    if (p) { sscanf(p, "<FREQ>%lf", freq); }
+    if (p)
+    {
+        int j = 0;
+        char f_string[32];
+
+        // Move the pointer to the first digit.
+        p += strlen("<FREQ>");
+
+        // Parse "1,296.171100" ignoring the comma.
+        for (int i = 0; p[i] != '<'; i++)
+        {
+            if (isdigit(p[i]))
+            {
+                f_string[j++] = p[i];
+            }
+            else if (ispunct(p[i]) && p[i] == '.')
+            {
+                f_string[j++] = p[i];
+            }
+        }
+
+        f_string[j] = '\0';
+        rig_debug(RIG_DEBUG_TRACE, "%s: f_string=%s\n", __func__, f_string);
+
+        *freq = strtold(f_string, NULL);
+        rig_debug(RIG_DEBUG_TRACE, "%s: freq=%.0f\n", __func__, *freq);
+    }
 
     *freq *= 1e6; // convert from MHz to Hz
 
@@ -492,14 +520,14 @@ static int aclog_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 /*
 * aclog_get_mode
-* Assumes rig!=NULL, rig->state.priv!=NULL, mode!=NULL
+* Assumes rig!=NULL, STATE(rig)->priv!=NULL, mode!=NULL
 */
 static int aclog_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
     int retval;
     char value[MAXCMDLEN];
     char *cmdp;
-    struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s: vfo=%s\n", __func__,
@@ -532,7 +560,7 @@ static int aclog_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
         *mode = RIG_MODE_NONE;
         int n = sscanf(p, "<MODE>%31[^<]", modetmp);
 
-        if (n) { *mode = modeMapGetHamlib(modetmp); }
+        if (n == 1) { *mode = modeMapGetHamlib(modetmp); }
         else
         {
             rig_debug(RIG_DEBUG_ERR, "%s: Unable to parse <MODE> from '%s'\n", __func__,
@@ -559,7 +587,7 @@ static int aclog_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 }
 /*
 * aclog_open
-* Assumes rig!=NULL, rig->state.priv!=NULL
+* Assumes rig!=NULL, STATE(rig)->priv!=NULL
 */
 static int aclog_open(RIG *rig)
 {
@@ -567,7 +595,7 @@ static int aclog_open(RIG *rig)
     char value[MAXARGLEN];
     char *p;
 
-    //;struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    //;struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_VERBOSE, "%s version %s\n", __func__, rig->caps->version);
@@ -619,12 +647,12 @@ static int aclog_open(RIG *rig)
     if (retval != RIG_OK)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: aclog_get_freq not working!!\n", __func__);
-        RETURNFUNC(RIG_EPROTO);
+        RETURNFUNC(-RIG_EPROTO);
     }
 
-    rig->state.current_vfo = RIG_VFO_A;
+    STATE(rig)->current_vfo = RIG_VFO_A;
     rig_debug(RIG_DEBUG_TRACE, "%s: currvfo=%s value=%s\n", __func__,
-              rig_strvfo(rig->state.current_vfo), value);
+              rig_strvfo(STATE(rig)->current_vfo), value);
 
     RETURNFUNC(retval);
 }
@@ -642,7 +670,7 @@ static int aclog_close(RIG *rig)
 
 /*
 * aclog_cleanup
-* Assumes rig!=NULL, rig->state.priv!=NULL
+* Assumes rig!=NULL, STATE(rig)->priv!=NULL
 */
 static int aclog_cleanup(RIG *rig)
 {
@@ -655,12 +683,12 @@ static int aclog_cleanup(RIG *rig)
         RETURNFUNC2(-RIG_EINVAL);
     }
 
-    priv = (struct aclog_priv_data *)rig->state.priv;
+    priv = (struct aclog_priv_data *)STATE(rig)->priv;
 
     free(priv->ext_parms);
-    free(rig->state.priv);
+    free(STATE(rig)->priv);
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     // we really don't need to free this up as it's only done once
     // was causing problem when cleanup was followed by rig_open
@@ -688,7 +716,7 @@ static int aclog_cleanup(RIG *rig)
 
 /*
 * aclog_set_freq
-* assumes rig!=NULL, rig->state.priv!=NULL
+* assumes rig!=NULL, STATE(rig)->priv!=NULL
 */
 static int aclog_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
@@ -696,7 +724,7 @@ static int aclog_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     char cmd[MAXARGLEN];
     char value[1024];
 
-    //struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    //struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s\n", __func__);
     rig_debug(RIG_DEBUG_TRACE, "%s: vfo=%s freq=%.0f\n", __func__,
@@ -710,10 +738,12 @@ static int aclog_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     }
 
 #if 0
+
     if (vfo == RIG_VFO_CURR)
     {
-        vfo = rig->state.current_vfo;
+        vfo = STATE(rig)->current_vfo;
     }
+
 #endif
 
     SNPRINTF(cmd, sizeof(cmd),
@@ -742,7 +772,7 @@ static int aclog_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     char *p;
     char *pttmode;
     char *ttmode = NULL;
-    struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s: vfo=%s mode=%s width=%d\n",
@@ -759,7 +789,7 @@ static int aclog_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 
     if (vfo == RIG_VFO_CURR)
     {
-        vfo = rig->state.current_vfo;
+        vfo = STATE(rig)->current_vfo;
     }
 
     if (check_vfo(vfo) == FALSE)
@@ -778,7 +808,7 @@ static int aclog_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     // Switch to VFOB if appropriate since we can't set mode directly
     // MDB
     rig_debug(RIG_DEBUG_TRACE, "%s: curr_vfo = %s\n", __func__,
-              rig_strvfo(rig->state.current_vfo));
+              rig_strvfo(STATE(rig)->current_vfo));
 
     // Set the mode
     if (strstr(modeMapGet(mode), "ERROR") == NULL)
@@ -834,7 +864,7 @@ static int aclog_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     }
 
     rig_debug(RIG_DEBUG_TRACE,
-              "%s: return modeA=%s, widthA=%d\n,modeB=%s, widthB=%d\n", __func__,
+              "%s: Return modeA=%s, widthA=%d\n,modeB=%s, widthB=%d\n", __func__,
               rig_strrmode(priv->curr_modeA), (int)priv->curr_widthA,
               rig_strrmode(priv->curr_modeB), (int)priv->curr_widthB);
     RETURNFUNC(RIG_OK);
@@ -860,7 +890,8 @@ static int aclog_get_vfo(RIG *rig, vfo_t *vfo)
 */
 static const char *aclog_get_info(RIG *rig)
 {
-    const struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    const struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(
+            rig)->priv;
 
     return (priv->info);
 }
@@ -868,7 +899,8 @@ static const char *aclog_get_info(RIG *rig)
 static int aclog_power2mW(RIG *rig, unsigned int *mwpower, float power,
                           freq_t freq, rmode_t mode)
 {
-    const struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    const struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(
+            rig)->priv;
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s: passed power = %f\n", __func__, power);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed freq = %"PRIfreq" Hz\n", __func__, freq);
@@ -904,7 +936,7 @@ static int aclog_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {
     int retval;
     char cmd[MAXCMDLEN];
-    struct aclog_priv_data *priv = (struct aclog_priv_data *) rig->state.priv;
+    struct aclog_priv_data *priv = (struct aclog_priv_data *) STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_TRACE, "%s: ptt=%d\n", __func__, ptt);
@@ -933,7 +965,7 @@ static int aclog_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 }
 
 
-const struct rig_caps aclog_caps =
+struct rig_caps aclog_caps =
 {
     RIG_MODEL(RIG_MODEL_ACLOG),
     .model_name = "ACLog",

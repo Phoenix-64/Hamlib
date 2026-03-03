@@ -60,7 +60,7 @@ commands with the requested values, one per line, when successful, otherwise,
 it responds with one line \(lqRPRT x\(rq, where \(oqx\(cq is a negative number
 indicating the error code.  Commands that do not return values respond with
 the line \(lqRPRT x\(rq, where \(oqx\(cq is \(oq0\(cq when successful,
-otherwise is a regative number indicating the error code.  Each line is
+otherwise is a negative number indicating the error code.  Each line is
 terminated with a newline \(oq\\n\(cq character.  This protocol is primarily
 for use by the
 .B NET ampctl
@@ -489,12 +489,6 @@ the command.
 prepended by a string immediately followed by a colon then a space and then
 the value terminated by the response separator. e.g. \(lqFrequency:
 14250000\\n\(rq when the command was prepended by \(oq+\(cq.
-.
-.PP
-4. All commands received will be acknowledged by
-.B ampctld
- with records from rules 1 and 2.  Records from rule 3 are only returned when
-data values must be returned to the client.
 .
 .PP
 4. All commands received will be acknowledged by

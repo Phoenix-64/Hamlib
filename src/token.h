@@ -34,7 +34,7 @@
 
 #define _TOKEN_H 1
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 /** \brief Create a backend token, \a t */
 #define TOKEN_BACKEND(t) (t)
@@ -141,6 +141,10 @@
 #define TOK_MULTICAST_CMD_ADDR  TOKEN_FRONTEND(134)
 /** \brief rig: Multicast command server UDP port, default 4532 */
 #define TOK_MULTICAST_CMD_PORT  TOKEN_FRONTEND(135)
+/** \brief rig: Skip setting freq on opposite VFO when in split mode */
+#define TOK_FREQ_SKIP  TOKEN_FRONTEND(136)
+/** \brief rig: Client ID of WSJTX or GPREDICT */
+#define TOK_CLIENT  TOKEN_FRONTEND(137)
 
 /*
  * rotator specific tokens

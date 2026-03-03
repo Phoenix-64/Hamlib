@@ -25,11 +25,20 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "config.h"
-#if defined(HAVE_LIBUSB_H)
+#include <hamlib/config.h>
+
+#ifdef HAVE_LIBUSB
+// LIBUSB_CFLAGS set by pkg-config should set the include path appropriately.
 #include <libusb.h>
-#elif defined(HAVE_LIBUSB_1_0_LIBUSB_H)
-#include <libusb-1.0/libusb.h>
+#endif
+
+#ifdef __FreeBSD__
+#  ifndef bU2DevExitLat
+#  define bU2DevExitLat wU2DevExitLat
+#  endif
+#  ifndef bNumDeviceCaps
+#  define bNumDeviceCaps bNumDeviceCapabilities
+#  endif
 #endif
 
 #if HAVE_LIBUSB
@@ -107,7 +116,8 @@ static void print_2_0_ext_cap(const struct libusb_usb_2_0_extension_descriptor
     printf("      bmAttributes:          %08xh\n", usb_2_0_ext_cap->bmAttributes);
 }
 
-static void print_ss_usb_cap(const struct libusb_ss_usb_device_capability_descriptor
+static void print_ss_usb_cap(const struct
+                             libusb_ss_usb_device_capability_descriptor
                              *ss_usb_cap)
 {
     printf("    USB 3.0 Capabilities:\n");

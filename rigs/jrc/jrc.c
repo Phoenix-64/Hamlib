@@ -26,7 +26,7 @@
 #include <math.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "cal.h"
 #include "register.h"
@@ -59,7 +59,7 @@
 
 /*
  * jrc_transaction
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, RIGPORT(rig)!= NULL, data!=NULL, data_len!=NULL
  * Otherwise, you'll get a nice seg fault. You've been warned!
  * TODO: error case handling
  */
@@ -67,15 +67,13 @@ int jrc_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
                     int *data_len)
 {
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
 
-    rs = &rig->state;
-
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
     set_transaction_active(rig);
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -89,7 +87,7 @@ int jrc_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
         return 0;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ, EOM,
+    retval = read_string(rp, (unsigned char *) data, BUFSZ, EOM,
                          strlen(EOM), 0, 1);
 
     set_transaction_inactive(rig);
@@ -468,6 +466,7 @@ int jrc_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 int jrc_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
     char cmdbuf[BUFSZ];
+    int  blanker = 0;
 
     /* Optimize:
      *   sort the switch cases with the most frequent first
@@ -481,11 +480,18 @@ int jrc_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
         return jrc_transaction(rig, cmdbuf, strlen(cmdbuf), NULL, NULL);
 
     case RIG_FUNC_NB:
-        /* FIXME: NB1 and NB2 */
-        SNPRINTF(cmdbuf, sizeof(cmdbuf), "N%d" EOM, status ? 1 : 0);
-
+    case RIG_FUNC_NB2:
+        if (!status)
+            blanker = 0;
+        else if (func == RIG_FUNC_NB)
+            blanker = 1;
+        else //if (func == RIG_FUNC_NB2)
+            blanker = 2;
+        
+        SNPRINTF(cmdbuf, sizeof(cmdbuf), "N%d" EOM, blanker);
+        
         return jrc_transaction(rig, cmdbuf, strlen(cmdbuf), NULL, NULL);
-
+        
     /*
      * FIXME: which BB mode for NR and BC at same time ?
      */
@@ -557,7 +563,7 @@ int jrc_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
         return RIG_OK;
 
     case RIG_FUNC_NB:
-        /* FIXME: NB1 and NB2 */
+    case RIG_FUNC_NB2:
         retval = jrc_transaction(rig, "N" EOM, 2, funcbuf, &func_len);
 
         if (retval != RIG_OK)
@@ -572,7 +578,7 @@ int jrc_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
             return -RIG_ERJCTED;
         }
 
-        *status = funcbuf[1] != '0';
+        *status = (((func == RIG_FUNC_NB) && (funcbuf[1] == '1')) || ((func == RIG_FUNC_NB2) && (funcbuf[1] == '2')));
 
         return RIG_OK;
 
@@ -1178,7 +1184,7 @@ int jrc_get_parm(RIG *rig, setting_t parm, value_t *val)
 
         val->i = ((10 * lvlbuf[1] + lvlbuf[2]) * 60 + /* hours */
                   10 * lvlbuf[3] + lvlbuf[4]) * 60 + /* minutes */
-                 10 * lvlbuf[5] + lvlbuf[6]; /* secondes */
+                 10 * lvlbuf[5] + lvlbuf[6]; /* seconds */
         break;
 
     case RIG_PARM_BEEP:
@@ -1453,6 +1459,8 @@ int jrc_set_chan(RIG *rig, vfo_t vfo, const channel_t *chan)
                  chan->levels[rig_setting2idx(RIG_LEVEL_AGC)].i);
     }
 
+    cmdbuf[priv->mem_len - 1] = 0x0d;
+ 
     return jrc_transaction(rig, cmdbuf, strlen(cmdbuf), NULL, NULL);
 }
 
@@ -1612,7 +1620,6 @@ int jrc_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
 int jrc_decode_event(RIG *rig)
 {
     const struct jrc_priv_caps *priv = (struct jrc_priv_caps *)rig->caps->priv;
-    struct rig_state *rs;
     freq_t freq;
     rmode_t mode;
     pbwidth_t width;
@@ -1621,13 +1628,11 @@ int jrc_decode_event(RIG *rig)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: jrc_decode called\n", __func__);
 
-    rs = &rig->state;
-
     /* "Iabdfg"CR */
     //#define SETUP_STATUS_LEN 17
 
-    //count = read_string(&rs->rigport, buf, SETUP_STATUS_LEN, "", 0);
-    count = read_string(&rs->rigport, (unsigned char *) buf, priv->info_len, "", 0,
+    //count = read_string(RIGPORT(rig), buf, SETUP_STATUS_LEN, "", 0);
+    count = read_string(RIGPORT(rig), (unsigned char *) buf, priv->info_len, "", 0,
                         0, 1);
 
     if (count < 0)
@@ -1684,4 +1689,3 @@ DECLARE_INITRIG_BACKEND(jrc)
 
     return RIG_OK;
 }
-

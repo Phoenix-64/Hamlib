@@ -28,6 +28,7 @@
  * BUT NOT LIMITED TO, LOSS OF DATA OR DATA BEING RENDERED INACCURATE.
  */
 
+#include "hamlib/config.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -221,6 +222,7 @@ unsigned long long AESStringCrypt(unsigned char *password,
     {
         if (fread(buffer, 1, 32, randfp) != 32)
         {
+            fclose(randfp);
             return AESSTRINGCRYPT_ERROR;
         }
 

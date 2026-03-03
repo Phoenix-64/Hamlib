@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "misc.h"
 
 
@@ -343,7 +343,7 @@ int csv_parm_save(RIG *rig, const char *outfilename)
 {
     int i, ret;
     FILE *f;
-    setting_t get_parm = all ? 0x7fffffff : rig->state.has_get_parm;
+    setting_t get_parm = all ? 0x7fffffff : STATE(rig)->has_get_parm;
 
     f = fopen(outfilename, "w");
 
@@ -699,11 +699,16 @@ int dump_csv_chan(RIG *rig,
 
     if (mem_caps->flags)
     {
-        if (chan.tag[0] != 0)  // then we need the seperator
+        if (chan.tag[0] != 0)  // then we need the separator
+        {
             fprintf(f, "%x%c", chan.flags, csv_sep);
+        }
         else
+        {
             fprintf(f, "%x", chan.flags);
+        }
     }
+
     if (chan.tag[0] != 0)
     {
         fprintf(f, "%s", chan.tag);
@@ -737,6 +742,7 @@ int set_channel_data(RIG *rig,
 
     int i, j, n;
     const channel_cap_t *mem_caps;
+    struct rig_state *rs = STATE(rig);
 
     memset(chan, 0, sizeof(channel_t));
     chan->vfo = RIG_VFO_CURR;
@@ -754,7 +760,7 @@ int set_channel_data(RIG *rig,
     /* find channel caps of appropriate memory group? */
     for (j = 0; j < HAMLIB_CHANLSTSIZ; j++)
     {
-        if (rig->state.chan_list[j].startc <= n && rig->state.chan_list[j].endc >= n)
+        if (rs->chan_list[j].startc <= n && rs->chan_list[j].endc >= n)
         {
             break;
         }
@@ -767,7 +773,7 @@ int set_channel_data(RIG *rig,
 
     printf("Requested channel number %d, list number %d\n", n, j);
 
-    mem_caps = &rig->state.chan_list[j].mem_caps;
+    mem_caps = &rs->chan_list[j].mem_caps;
 
     if (mem_caps->bank_num)
     {

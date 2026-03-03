@@ -22,7 +22,7 @@
 
 #include <string.h>  /* String function definitions */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 
 #include "icom.h"
@@ -156,10 +156,10 @@ static int ic7000_r2i_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width,
         return err;
     }
 
-    // CAT section of manual says: nn = 0 -40 > bw = 50Hz > 3600Hz
+    // CAT section of manual says: nn = 0 -40 > bw = 50 Hz > 3600 Hz
     // Tested by Ian G3VPX 20201029
-    // 0 - 9 > bw 50Hz to 500Hz in 50Hz steps
-    // 10 - 40 > bw 600Hz to 3600Hz in 100Hz steps
+    // 0 - 9 > bw 50 Hz to 500 Hz in 50 Hz steps
+    // 10 - 40 > bw 600 Hz to 3600 Hz in 100 Hz steps
     if (width != RIG_PASSBAND_NOCHANGE)
     {
         if (width <= 500) { *pd = width / 50 - 1; }
@@ -190,7 +190,7 @@ static const struct icom_priv_caps IC7000_priv_caps =
     .r2i_mode = ic7000_r2i_mode
 };
 
-const struct rig_caps ic7000_caps =
+struct rig_caps ic7000_caps =
 {
     RIG_MODEL(RIG_MODEL_IC7000),
     .model_name = "IC-7000",
@@ -220,9 +220,11 @@ const struct rig_caps ic7000_caps =
     .has_set_parm =  RIG_PARM_SET(IC7000_PARMS),
     .level_gran =
     {
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 20 }, .step = { .i = 1 } },
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
         [LVL_KEYSPD] = { .min = { .i = 6 }, .max = { .i = 48 }, .step = { .i = 1 } },
         [LVL_CWPITCH] = { .min = { .i = 300 }, .max = { .i = 900 }, .step = { .i = 1 } },
     },
@@ -275,7 +277,7 @@ const struct rig_caps ic7000_caps =
     .rx_range_list2 =   { {kHz(30), MHz(199.999999), IC7000_ALL_RX_MODES, -1, -1, IC7000_VFOS},
         {MHz(400), MHz(470), IC7000_ALL_RX_MODES, -1, -1, IC7000_VFOS}, RIG_FRNG_END,
     },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
         FRQ_RNG_HF(2, IC7000_OTHER_TX_MODES, W(2), W(100), IC7000_VFOS, RIG_ANT_1),
         FRQ_RNG_6m(2, IC7000_OTHER_TX_MODES, W(2), W(100), IC7000_VFOS, RIG_ANT_1),
         FRQ_RNG_2m(2, IC7000_OTHER_TX_MODES, W(2), W(50), IC7000_VFOS, RIG_ANT_2),

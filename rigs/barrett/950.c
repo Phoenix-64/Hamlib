@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #include "barrett.h"
 
@@ -66,7 +66,7 @@ static struct chan_map_s chan_map[] =
     { 28.0, 30.0, 9}
 };
 
-const struct rig_caps barrett950_caps =
+struct rig_caps barrett950_caps =
 {
     RIG_MODEL(RIG_MODEL_BARRETT_950),
     .model_name =       "950",
@@ -137,7 +137,7 @@ const struct rig_caps barrett950_caps =
 
 /*
  * barrett950_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int barrett950_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
@@ -148,8 +148,8 @@ int barrett950_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     freq_t freq_rx, freq_tx;
     freq_t freq_MHz;
     char *response = NULL;
-    const struct barrett_priv_data *priv = rig->state.priv;
-    //struct barrett_priv_data *priv = rig->state.priv;
+    const struct barrett_priv_data *priv = STATE(rig)->priv;
+    //struct barrett_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s freq=%.0f\n", __func__,
               rig_strvfo(vfo), freq);
@@ -164,7 +164,9 @@ int barrett950_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
     for (i = 0; i < 10; ++i)
     {
-        rig_debug(RIG_DEBUG_VERBOSE, "%s: Mhz=%lg, lo=%lg, hi=%lg\n", __func__, freq_MHz, chan_map[i].lo, chan_map[i].hi);
+        rig_debug(RIG_DEBUG_VERBOSE, "%s: MHz=%lg, lo=%lg, hi=%lg\n", __func__,
+                  freq_MHz, chan_map[i].lo, chan_map[i].hi);
+
         if (freq_MHz >= chan_map[i].lo && freq_MHz <= chan_map[i].hi)
         {
             int channel_base = priv->channel_base;

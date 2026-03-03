@@ -27,8 +27,8 @@
 
 #include <getopt.h>
 
-#include <hamlib/rig.h>
-#include <hamlib/rotator.h>
+#include "hamlib/rig.h"
+#include "hamlib/rotator.h"
 #include "misc.h"
 #include "riglist.h"
 #include "rotlist.h"
@@ -36,7 +36,7 @@
 /*
  * Prototypes
  */
-static void usage();
+static void usage(FILE *fout);
 static void version();
 static int set_conf_rig(RIG *rig, char *conf_parms);
 static int set_conf_rot(ROT *rot, char *conf_parms);
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
 
     int retcode;        /* generic return code from functions */
 
-    int verbose = 0;
+    int verbose = RIG_DEBUG_NONE;
     const char *rig_file = NULL, *rot_file = NULL;
     int serial_rate = 0;
     int rot_serial_rate = 0;
@@ -89,6 +89,7 @@ int main(int argc, char *argv[])
     elevation_t elevation;
     unsigned step = 1000000;    /* 1e6 us */
 
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -105,7 +106,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -113,42 +114,18 @@ int main(int argc, char *argv[])
             exit(0);
 
         case 'm':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rig_model = atoi(optarg);
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rig_file = optarg;
             break;
 
         case 'c':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             civaddr = optarg;
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -158,12 +135,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'C':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (*rig_conf_parms != '\0')
             {
                 strcat(rig_conf_parms, ",");
@@ -176,60 +147,37 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            strncat(rig_conf_parms, optarg, MAXCONFLEN - strlen(rig_conf_parms));
+            strncat(rig_conf_parms, optarg, MAXCONFLEN - strlen(rig_conf_parms) - 1);
             break;
 
         case 'M':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_model = atoi(optarg);
             break;
 
         case 'R':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_file = optarg;
             break;
 
         case 'S':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_serial_rate = atoi(optarg);
             break;
 
         case 'N':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (*rot_conf_parms != '\0')
             {
                 strcat(rot_conf_parms, ",");
             }
 
-            strncat(rot_conf_parms, optarg, MAXCONFLEN - strlen(rot_conf_parms));
+            strncat(rot_conf_parms, optarg, MAXCONFLEN - strlen(rot_conf_parms) - 1);
             break;
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         default:
-            usage();    /* unknown option? */
+            usage(stderr);
             exit(1);
         }
     }
@@ -265,13 +213,13 @@ int main(int argc, char *argv[])
 
     if (rig_file)
     {
-        strncpy(rig->state.rigport.pathname, rig_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(RIGPORT(rig)->pathname, rig_file, HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
     if (serial_rate != 0)
     {
-        rig->state.rigport.parm.serial.rate = serial_rate;
+        RIGPORT(rig)->parm.serial.rate = serial_rate;
     }
 
     if (civaddr)
@@ -283,7 +231,7 @@ int main(int argc, char *argv[])
     if (!rig_has_get_level(rig, RIG_LEVEL_STRENGTH))
     {
         fprintf(stderr,
-                "rig backend for %s could not get S-Meter"
+                "rig backend for %s could not get S-Meter\n"
                 "or has insufficient capability\nSorry\n",
                 rig->caps->model_name);
         exit(3);
@@ -329,13 +277,13 @@ int main(int argc, char *argv[])
 
     if (rot_file)
     {
-        strncpy(rot->state.rotport.pathname, rot_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(ROTPORT(rot)->pathname, rot_file, HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
     if (rot_serial_rate != 0)
     {
-        rot->state.rotport.parm.serial.rate = rot_serial_rate;
+        ROTPORT(rot)->parm.serial.rate = rot_serial_rate;
     }
 
     retcode = rot_open(rot);
@@ -365,24 +313,24 @@ int main(int argc, char *argv[])
         step = atof(argv[optind]) * 1e6;
     }
 
-    fprintf(stderr, "Setting rotator to azimuth %.1f°\n", rot->state.min_az);
-    rot_set_position(rot, rot->state.min_az, 0);
+    fprintf(stderr, "Setting rotator to azimuth %.1f°\n", ROTSTATE(rot)->min_az);
+    rot_set_position(rot, ROTSTATE(rot)->min_az, 0);
     fprintf(stderr, "Wait for rotator to move...\n");
     rot_get_position(rot, &azimuth, &elevation);
 
-    while (fabs(azimuth - rot->state.min_az) > 1.)
+    while (fabs(azimuth - ROTSTATE(rot)->min_az) > 1.)
     {
         rot_get_position(rot, &azimuth, &elevation);
         hl_usleep(step);
     }
 
     fprintf(stderr, "Now initiating full 360° rotation...\n");
-    rot_set_position(rot, rot->state.max_az, 0);
+    rot_set_position(rot, ROTSTATE(rot)->max_az, 0);
 
     /* TODO: check CW or CCW */
     /* disable AGC? */
 
-    while (fabs(rot->state.max_az - azimuth) > 1.)
+    while (fabs(ROTSTATE(rot)->max_az - azimuth) > 1.)
     {
         value_t strength;
 
@@ -408,28 +356,27 @@ void version()
 }
 
 
-void usage()
+static void usage(FILE *fout)
 {
-    printf("Usage: rigsmtr [OPTION]... [time]\n"
+    fprintf(fout, "Usage: rigsmtr [OPTION]... [time]\n"
            "Input S-Meter vs Azimuth.\n\n");
 
-    printf(
-        "  -m, --model=ID                select radio model number. See model list\n"
+    fprintf(fout,
+        "  -m, --model=ID                select radio model number. See model list (rigctl -l)\n"
         "  -r, --rig-file=DEVICE         set device of the radio to operate on\n"
         "  -s, --serial-speed=BAUD       set serial speed of the serial port\n"
         "  -c, --civaddr=ID              set CI-V address, decimal (for Icom rigs only)\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
-        "  -M, --rot-model=ID            select rotator model number. See model list\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
+        "  -M, --rot-model=ID            select rotator model number. See model list (rotctl -l)\n"
         "  -R, --rot-file=DEVICE         set device of the rotator to operate on\n"
         "  -S, --rot-serial-speed=BAUD   set serial speed of the serial port\n"
         "  -N, --rot-set-conf=PARM=VAL   set rotator config parameters\n"
-        "  -v, --verbose                 set verbose mode, cumulative\n"
+        "  -v, --verbose                 set verbose mode, cumulative (-v to -vvvvv)\n"
         "  -h, --help                    display this help and exit\n"
         "  -V, --version                 output version information and exit\n\n"
     );
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
-
+    fprintf(fout, "\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
 }
 
 
@@ -448,7 +395,7 @@ int set_conf_rig(RIG *rig, char *conf_parms)
 
         if (!q)
         {
-            return RIG_EINVAL;
+            return -RIG_EINVAL;
 
             *q++ = '\0';
             n = strchr(q, ',');

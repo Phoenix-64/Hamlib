@@ -1,4 +1,4 @@
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 #include <pthread.h>
 #include "iofunc.h"
 #include "register.h"
@@ -19,12 +19,11 @@ static pthread_t apex_read_thread;
 static int apex_get_string(ROT *rot, char *s, int maxlen)
 {
     int retval = 0;
-    struct rot_state *rs = &rot->state;
     char buf[64];
 
     memset(s, 0, maxlen);
 
-    retval = read_string(&rs->rotport, (unsigned char *)buf,
+    retval = read_string(ROTPORT(rot), (unsigned char *)buf,
                          sizeof(buf),
                          "\n", strlen("\n"), sizeof(buf), 1);
     strncpy(s, buf, 64);
@@ -44,12 +43,12 @@ static int apex_get_string(ROT *rot, char *s, int maxlen)
 static void *apex_read(void *arg)
 {
     ROT *rot = arg;
-    int retval = 0;
     char data[64];
     int expected_return_length = 63;
 
     while (1)
     {
+        int retval;
         retval = apex_get_string(rot, data, expected_return_length);
 
         if (strstr(data, "<VER>"))
@@ -98,13 +97,13 @@ int apex_open(ROT *rot)
 {
     int retval;
     char *cmdstr = "[GETVER]\r"; // does this work on all Apex controllers?
-    struct rot_state *rs = &rot->state;
+    hamlib_port_t *rotp = ROTPORT(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: entered\n", __func__);
 
     apex_azimuth = -1;  // we check to see if we've seen azimuth at least one time
-    rig_flush(&rs->rotport);
-    retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+    rig_flush(rotp);
+    retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
     if (retval != RIG_OK)
     {

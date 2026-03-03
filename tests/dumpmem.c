@@ -1,6 +1,6 @@
 /*
  * dumpmem.c - Copyright (C) 2001 Stephane Fillod
- * This programs dumps the mmeory contents of a rig.
+ * This programs dumps the memory contents of a rig.
  *
  *
  *   This program is free software; you can redistribute it and/or modify
@@ -24,9 +24,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include "misc.h"
 
@@ -57,7 +57,7 @@ int main(int argc, const char *argv[])
         exit(1); /* whoops! something went wrong (mem alloc?) */
     }
 
-    strncpy(my_rig->state.rigport.pathname, SERIAL_PORT, HAMLIB_FILPATHLEN - 1);
+    strncpy(RIGPORT(my_rig)->pathname, SERIAL_PORT, HAMLIB_FILPATHLEN - 1);
 
     if (rig_open(my_rig))
     {
@@ -83,11 +83,12 @@ int main(int argc, const char *argv[])
      *      RIG_CHAN_END
      *  }
      */
+    struct rig_state *rs = STATE(my_rig);
 
-    for (i = 0; my_rig->state.chan_list[i].type; i++)
+    for (i = 0; rs->chan_list[i].type; i++)
     {
-        for (j = my_rig->state.chan_list[i].startc;
-                j <= my_rig->state.chan_list[i].endc; j++)
+        for (j = rs->chan_list[i].startc;
+                j <= rs->chan_list[i].endc; j++)
         {
             dump_chan(my_rig, j);
         }

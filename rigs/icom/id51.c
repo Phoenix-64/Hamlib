@@ -82,14 +82,14 @@ static struct icom_priv_caps id51_priv_caps =
     1,      /* no XCHG */
 };
 
-const struct rig_caps id51_caps =
+struct rig_caps id51_caps =
 {
     RIG_MODEL(RIG_MODEL_ID51),
     .model_name = "ID-51",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".1",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_HANDHELD,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_RIG,

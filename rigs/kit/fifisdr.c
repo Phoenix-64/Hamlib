@@ -22,7 +22,7 @@
  *
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
@@ -37,15 +37,11 @@
 /*
  * Compile this model only if libusb is available
  */
-#if defined(HAVE_LIBUSB) && (defined(HAVE_LIBUSB_H) || defined(HAVE_LIBUSB_1_0_LIBUSB_H))
+#if defined(HAVE_LIBUSB)
 
-#include <errno.h>
 
-#ifdef HAVE_LIBUSB_H
+// LIBUSB_CFLAGS set by pkg-config should set the include path appropriately.
 # include <libusb.h>
-#elif defined HAVE_LIBUSB_1_0_LIBUSB_H
-# include <libusb-1.0/libusb.h>
-#endif
 
 
 /* Selected request codes of the original AVR USB Si570 firmware */
@@ -92,7 +88,7 @@ static int fifisdr_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode,
 static int fifisdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
 static int fifisdr_get_level(RIG *rig, vfo_t vfo, setting_t level,
                              value_t *val);
-static int fifisdr_get_ext_level(RIG *rig, vfo_t vfo, token_t token,
+static int fifisdr_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
                                  value_t *val);
 
 
@@ -122,7 +118,7 @@ struct fifisdr_priv_instance_data
 
 
 /** FiFi-SDR receiver description. */
-const struct rig_caps fifisdr_caps =
+struct rig_caps fifisdr_caps =
 {
     RIG_MODEL(RIG_MODEL_FIFISDR),
     .model_name = "FiFi-SDR",
@@ -276,12 +272,12 @@ static int fifisdr_usb_write(RIG *rig,
                              unsigned char *bytes, int size)
 {
     int ret;
-    libusb_device_handle *udh = rig->state.rigport.handle;
+    libusb_device_handle *udh = RIGPORT(rig)->handle;
 
     ret = libusb_control_transfer(udh,
                                   LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,
                                   request, value, index,
-                                  bytes, size, rig->state.rigport.timeout);
+                                  bytes, size, RIGPORT(rig)->timeout);
 
     if (ret != size)
     {
@@ -303,12 +299,12 @@ static int fifisdr_usb_read(RIG *rig,
                             unsigned char *bytes, int size)
 {
     int ret;
-    libusb_device_handle *udh = rig->state.rigport.handle;
+    libusb_device_handle *udh = RIGPORT(rig)->handle;
 
     ret = libusb_control_transfer(udh,
                                   LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_IN,
                                   request, value, index,
-                                  bytes, size, rig->state.rigport.timeout);
+                                  bytes, size, RIGPORT(rig)->timeout);
 
     if (ret != size)
     {
@@ -326,19 +322,19 @@ static int fifisdr_usb_read(RIG *rig,
 
 int fifisdr_init(RIG *rig)
 {
-    hamlib_port_t *rp = &rig->state.rigport;
+    hamlib_port_t *rp = RIGPORT(rig);
     struct fifisdr_priv_instance_data *priv;
 
-    rig->state.priv = (struct fifisdr_priv_instance_data *)calloc(sizeof(
-                          struct fifisdr_priv_instance_data), 1);
+    STATE(rig)->priv = (struct fifisdr_priv_instance_data *)calloc(sizeof(
+                           struct fifisdr_priv_instance_data), 1);
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     priv->multiplier = 4;
 
@@ -365,12 +361,12 @@ int fifisdr_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -384,7 +380,7 @@ int fifisdr_open(RIG *rig)
     struct fifisdr_priv_instance_data *priv;
 
 
-    priv = (struct fifisdr_priv_instance_data *)rig->state.priv;
+    priv = (struct fifisdr_priv_instance_data *)STATE(rig)->priv;
 
     /* The VCO is a multiple of the RX frequency. Typically 4 */
     ret = fifisdr_usb_read(rig, REQUEST_FIFISDR_READ, 0,
@@ -424,8 +420,9 @@ const char *fifisdr_get_info(RIG *rig)
 
 int fifisdr_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    const struct fifisdr_priv_instance_data *priv = (struct fifisdr_priv_instance_data *)
-            rig->state.priv;
+    const struct fifisdr_priv_instance_data *priv = (struct
+            fifisdr_priv_instance_data *)
+            STATE(rig)->priv;
     int ret;
     double mhz;
     uint32_t freq1121;
@@ -450,8 +447,9 @@ int fifisdr_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 int fifisdr_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    const struct fifisdr_priv_instance_data *priv = (struct fifisdr_priv_instance_data *)
-            rig->state.priv;
+    const struct fifisdr_priv_instance_data *priv = (struct
+            fifisdr_priv_instance_data *)
+            STATE(rig)->priv;
     int ret;
     uint32_t freq1121;
 
@@ -805,7 +803,7 @@ static int fifisdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 
 
-static int fifisdr_get_ext_level(RIG *rig, vfo_t vfo, token_t token,
+static int fifisdr_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
                                  value_t *val)
 {
     int ret = RIG_OK;
@@ -835,4 +833,4 @@ static int fifisdr_get_ext_level(RIG *rig, vfo_t vfo, token_t token,
     return ret;
 }
 
-#endif  /* defined(HAVE_LIBUSB) && defined(HAVE_LIBUSB_H) */
+#endif  /* defined(HAVE_LIBUSB) */

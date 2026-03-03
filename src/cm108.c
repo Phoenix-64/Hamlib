@@ -32,8 +32,8 @@
  * CM108 Audio chips found on many USB audio interfaces have controllable
  * General Purpose Input/Output pins.
  */
-#include <hamlib/rig.h>
-#include <hamlib/config.h>
+#include "hamlib/rig.h"
+#include "hamlib/config.h"
 
 #include <string.h>  /* String function definitions */
 #include <unistd.h>  /* UNIX standard function definitions */
@@ -43,10 +43,6 @@
 
 #ifdef HAVE_SYS_IOCTL_H
 #  include <sys/ioctl.h>
-#endif
-
-#ifdef HAVE_SYS_PARAM_H
-#  include <sys/param.h>
 #endif
 
 #ifdef HAVE_WINDOWS_H
@@ -68,6 +64,92 @@
 
 #include "cm108.h"
 
+const char *get_usb_device_class_string(int device_class)
+{
+    switch (device_class)
+    {
+    case 0x00:
+        return "Device Unspecified (Defined at Interface level)";
+
+    case 0x01:
+        return "Audio";
+
+    case 0x02:
+        return "Communications and CDC Control";
+
+    case 0x03:
+        return "Human Interface Device (HID)";
+
+    case 0x05:
+        return "Physical Interface Device";
+
+    case 0x06:
+        return "Image (Scanner, Camera)";
+
+    case 0x07:
+        return "Printer";
+
+    case 0x08:
+        return "Mass Storage";
+
+    case 0x09:
+        return "Hub";
+
+    case 0x0A:
+        return "CDC Data";
+
+    case 0x0B:
+        return "Smart Card";
+
+    case 0x0D:
+        return "Content Security";
+
+    case 0x0E:
+        return "Video";
+
+    case 0x0F:
+        return "Personal Healthcare";
+
+    case 0x10:
+        return "Audio/Video Devices";
+
+    case 0x11:
+        return "Billboard Device Class";
+
+    case 0x12:
+        return "USB Type-C Bridge Class";
+
+    case 0x13:
+        return "Bulk Display";
+
+    case 0x14:
+        return "MCTCP over USB";
+
+    case 0x3C:
+        return "I3C";
+
+    case 0x58:
+        return "Xbox";
+
+    case 0xDC:
+        return "Diagnostic Device";
+
+    case 0xE0:
+        return "Wireless Controller";
+
+    case 0xEF:
+        return "Miscellaneous";
+
+    case 0xFE:
+        return "Application Specific";
+
+    case 0xFF:
+        return "Vendor Specific";
+
+    default:
+        return "Unknown Device Class";
+    }
+}
 
 /**
  * \brief Open CM108 HID port (/dev/hidraw<i>X</i>).
@@ -77,8 +159,8 @@
  * \return File descriptor, otherwise a **negative value** if an error
  * occurred (in which case, cause is set appropriately).
  *
- * \retval RIG_EINVAL The port pathname is empty or no CM108 device detected.
- * \retval RIG_EIO The `open`(2) system call returned a **negative value**.
+ * \retval -RIG_EINVAL The port pathname is empty or no CM108 device detected.
+ * \retval -RIG_EIO The `open`(2) system call returned a **negative value**.
  */
 int cm108_open(hamlib_port_t *port)
 {
@@ -175,9 +257,9 @@ int cm108_close(hamlib_port_t *port)
  * occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK Setting or unsetting the PTT was successful.
- * \retval RIG_EINVAL The file descriptor is invalid or the PTT type is
+ * \retval -RIG_EINVAL The file descriptor is invalid or the PTT type is
  * unsupported.
- * \retval RIG_EIO The `write`(2) system call returned a **negative value**.
+ * \retval -RIG_EIO The `write`(2) system call returned a **negative value**.
  */
 int cm108_ptt_set(hamlib_port_t *p, ptt_t pttx)
 {
@@ -259,8 +341,8 @@ int cm108_ptt_set(hamlib_port_t *p, ptt_t pttx)
  * occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK Getting the PTT state was successful.
- * \retval RIG_ENIMPL Getting the state is not yet implemented.
- * \retval RIG_ENAVAIL Getting the state is not available for this PTT type.
+ * \retval -RIG_ENIMPL Getting the state is not yet implemented.
+ * \retval -RIG_ENAVAIL Getting the state is not available for this PTT type.
  */
 int cm108_ptt_get(hamlib_port_t *p, ptt_t *pttx)
 {
@@ -285,7 +367,7 @@ int cm108_ptt_get(hamlib_port_t *p, ptt_t *pttx)
 }
 
 
-#ifdef XXREMOVEXX
+#ifdef XXREMOVEDXX
 // Not referenced anywhere
 /**
  * \brief get Data Carrier Detect (squelch) from CM108 GPIO

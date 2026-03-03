@@ -26,9 +26,11 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rotator.h"
-#include "serial.h"
+#include "hamlib/rot_state.h"
+#include "iofunc.h"
 #include "register.h"
 #include "idx_builtin.h"
+#include "misc.h"
 
 #include "easycomm.h"
 
@@ -48,8 +50,9 @@
 static int
 easycomm_transaction(ROT *rot, const char *cmdstr, char *data, size_t data_len)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp;
     int retval;
+    int retry;
 
     rig_debug(RIG_DEBUG_TRACE, "%s called: %s\n", __func__, cmdstr);
 
@@ -58,34 +61,41 @@ easycomm_transaction(ROT *rot, const char *cmdstr, char *data, size_t data_len)
         return -RIG_EINVAL;
     }
 
-    rs = &rot->state;
-    rig_flush(&rs->rotport);
-    retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+    rotp = ROTPORT(rot);
+    retry = rot->caps->retry;
 
-    if (retval != RIG_OK)
+    do
     {
-        goto transaction_quit;
-    }
+        rig_flush(rotp);
+        retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
-    if (data == NULL)
-    {
-        return RIG_OK;    /* don't want a reply */
-    }
+        if (retval != RIG_OK)
+        {
+            goto transaction_quit;
+        }
 
-    retval = read_string(&rs->rotport, (unsigned char *) data, data_len,
-                         "\n", 1, 0, 1);
+        if (data == NULL)
+        {
+            return RIG_OK;    /* don't want a reply */
+        }
 
-    if (retval < 0)
-    {
-        rig_debug(RIG_DEBUG_TRACE, "%s read_string failed with status %d\n", __func__,
-                  retval);
-        goto transaction_quit;
+        retval = read_string(rotp, (unsigned char *) data, data_len,
+                             "\n", 1, 0, 1);
+
+        if (retval < 0)
+        {
+            rig_debug(RIG_DEBUG_TRACE, "%s read_string failed with status %d:%s\n",
+                      __func__,
+                      retval, strerror(retval));
+            goto transaction_quit;
+        }
+        else
+        {
+            rig_debug(RIG_DEBUG_TRACE, "%s read_string: %s\n", __func__, data);
+            retval = RIG_OK;
+        }
     }
-    else
-    {
-        rig_debug(RIG_DEBUG_TRACE, "%s read_string: %s\n", __func__, data);
-        retval = RIG_OK;
-    }
+    while (--retry && retval != RIG_OK);
 
 transaction_quit:
     return retval;
@@ -128,7 +138,7 @@ easycomm_rot_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
 
     rig_debug(RIG_DEBUG_TRACE, "%s called\n", __func__);
 
-    SNPRINTF(cmdstr, sizeof(cmdstr), "AZ EL \n");
+    SNPRINTF(cmdstr, sizeof(cmdstr), "AZ\n");
 
     retval = easycomm_transaction(rot, cmdstr, ackbuf, sizeof(ackbuf));
 
@@ -138,15 +148,36 @@ easycomm_rot_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
         return retval;
     }
 
-    /* Parse parse string to extract AZ,EL values */
+    /* Parse parse string to extract AZ values */
     rig_debug(RIG_DEBUG_TRACE, "%s got response: %s\n", __func__, ackbuf);
-    retval = sscanf(ackbuf, "AZ%f EL%f", az, el);
+    retval = sscanf(ackbuf, "AZ%f", az);
 
-    if (retval != 2)
+    if (retval != 1)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: unknown response (%s)\n", __func__, ackbuf);
         return -RIG_ERJCTED;
     }
+
+    SNPRINTF(cmdstr, sizeof(cmdstr), "EL\n");
+
+    retval = easycomm_transaction(rot, cmdstr, ackbuf, sizeof(ackbuf));
+
+    if (retval != RIG_OK)
+    {
+        rig_debug(RIG_DEBUG_TRACE, "%s got error: %d\n", __func__, retval);
+        return retval;
+    }
+
+    /* Parse parse string to extract EL values */
+    rig_debug(RIG_DEBUG_TRACE, "%s got response: %s\n", __func__, ackbuf);
+    retval = sscanf(ackbuf, "EL%f", el);
+
+    if (retval != 1)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s: unknown response (%s)\n", __func__, ackbuf);
+        return -RIG_ERJCTED;
+    }
+
 
     return RIG_OK;
 }
@@ -246,7 +277,7 @@ easycomm_rot_move(ROT *rot, int direction, int speed)
 
 static int easycomm_rot_move_velocity(ROT *rot, int direction, int speed)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
     char cmdstr[24];
     int retval;
     int easycomm_speed;
@@ -307,7 +338,7 @@ static int easycomm_rot_move_velocity(ROT *rot, int direction, int speed)
 
 static int easycomm_rot_get_level(ROT *rot, setting_t level, value_t *val)
 {
-    const struct rot_state *rs = &rot->state;
+    const struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
@@ -327,7 +358,7 @@ static int easycomm_rot_get_level(ROT *rot, setting_t level, value_t *val)
 
 static int easycomm_rot_set_level(ROT *rot, setting_t level, value_t val)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
@@ -384,7 +415,7 @@ static const char *easycomm_rot_get_info(ROT *rot)
  * For configuration registers, *val must contain string of register e.g. '0'-'f'
  */
 
-static int easycomm_rot_get_conf(ROT *rot, token_t token, char *val)
+static int easycomm_rot_get_conf(ROT *rot, hamlib_token_t token, char *val)
 {
     char cmdstr[16], ackbuf[32];
     int retval;
@@ -456,7 +487,8 @@ static int easycomm_rot_get_conf(ROT *rot, token_t token, char *val)
  * e.g. x,yyyyy
  */
 
-static int easycomm_rot_set_conf(ROT *rot, token_t token, const char *val)
+static int easycomm_rot_set_conf(ROT *rot, hamlib_token_t token,
+                                 const char *val)
 {
     char cmdstr[16];
     int retval;
@@ -482,6 +514,11 @@ static int easycomm_rot_set_conf(ROT *rot, token_t token, const char *val)
     rig_debug(RIG_DEBUG_TRACE, "%s: cmdstr = %s, *val = %c\n", __func__, cmdstr,
               *val);
 
+    if (!ROTSTATE(rot)->comm_state)
+    {
+        return queue_deferred_config(&ROTSTATE(rot)->config_queue, token, val);
+    }
+
     retval = easycomm_transaction(rot, cmdstr, NULL, 0);
 
     if (retval != RIG_OK)
@@ -496,7 +533,7 @@ static int easycomm_rot_set_conf(ROT *rot, token_t token, const char *val)
 
 static int easycomm_rot_init(ROT *rot)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -520,7 +557,7 @@ const struct rot_caps easycomm1_rot_caps =
     ROT_MODEL(ROT_MODEL_EASYCOMM1),
     .model_name =     "EasycommI",
     .mfg_name =       "Hamlib",
-    .version =        "20220109.0",
+    .version =        "20231219.0",
     .copyright =   "LGPL",
     .status =         RIG_STATUS_STABLE,
     .rot_type =       ROT_TYPE_OTHER,
@@ -556,7 +593,7 @@ const struct rot_caps easycomm2_rot_caps =
     ROT_MODEL(ROT_MODEL_EASYCOMM2),
     .model_name =     "EasycommII",
     .mfg_name =       "Hamlib",
-    .version =        "20191206.0",
+    .version =        "20231218.0",
     .copyright =   "LGPL",
     .status =         RIG_STATUS_STABLE,
     .rot_type =       ROT_TYPE_OTHER,
@@ -602,7 +639,7 @@ const struct rot_caps easycomm3_rot_caps =
     ROT_MODEL(ROT_MODEL_EASYCOMM3),
     .model_name =     "EasycommIII",
     .mfg_name =       "Hamlib",
-    .version =        "20201203.0",
+    .version =        "2022312180",
     .copyright =   "LGPL",
     .status =         RIG_STATUS_STABLE,
     .rot_type =       ROT_TYPE_OTHER,

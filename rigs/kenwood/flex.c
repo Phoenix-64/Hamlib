@@ -23,6 +23,7 @@
  *  the complete text of the GNU Lesser Public License version 2.1.
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <string.h>
 
@@ -31,10 +32,10 @@
 
 /* Private helper functions */
 
-int verify_flexradio_id(RIG *rig, char *id)
+static int verify_flexradio_id(RIG *rig, char *id)
 {
     int err;
-    char *idptr;
+    const char *idptr;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -113,13 +114,13 @@ int verify_flexradio_id(RIG *rig, char *id)
 
 int flexradio_open(RIG *rig)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     int err;
     char id[FLEXRADIO_MAX_BUF_LEN];
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    //struct flexradio_priv_data *priv = rig->state.priv;
+    //struct flexradio_priv_data *priv = STATE(rig)->priv;
 
     /* Use check for "ID017;" to verify rig is reachable */
     err = verify_flexradio_id(rig, id);
@@ -135,6 +136,7 @@ int flexradio_open(RIG *rig)
         break;
 
     case RIG_MODEL_POWERSDR:
+    case RIG_MODEL_THETIS:
         break;
 
     default:

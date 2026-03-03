@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "rs.h"
 
 
@@ -64,14 +64,14 @@
  *  - set_ant
  */
 
-const struct rig_caps eb200_caps =
+struct rig_caps eb200_caps =
 {
     RIG_MODEL(RIG_MODEL_EB200),
     .model_name = "EB200",
     .mfg_name =  "Rohde&Schwarz",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

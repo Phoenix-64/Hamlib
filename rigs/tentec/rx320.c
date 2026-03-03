@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "tentec.h"
 
@@ -66,7 +66,7 @@
  *
  * TODO:
  */
-const struct rig_caps rx320_caps =
+struct rig_caps rx320_caps =
 {
     RIG_MODEL(RIG_MODEL_RX320),
     .model_name = "RX-320",

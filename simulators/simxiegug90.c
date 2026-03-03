@@ -1,28 +1,17 @@
 // simicom will show the pts port to use for rigctl on Unix
 // using virtual serial ports on Windows is to be developed yet
 // Needs a lot of improvement to work on all Icoms
-// gcc -g -Wall -o simicom simicom.c -lhamlib
-// On mingw in the hamlib src directory
-// gcc -static -I../include -g -Wall -o simicom simicom.c -L../../build/src/.libs -lhamlib -lwsock32 -lws2_32
 #define _XOPEN_SOURCE 700
 // since we are POSIX here we need this
-#if  0
-struct ip_mreq
-{
-    int dummy;
-};
-#endif
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
-#include <sys/time.h>
-#include <hamlib/rig.h>
-#include "../src/misc.h"
+#include <sys/types.h>
 
-#define BUFSIZE 256
+#include "hamlib/rig.h"
+#include "misc.h"
+#include "sim.h"
+
 #define X25
 
 int civ_731_mode = 0;
@@ -43,13 +32,6 @@ int ant_option = 0;
 int ptt = 0;
 int keyspd = 20;
 
-void dumphex(const unsigned char *buf, int n)
-{
-    for (int i = 0; i < n; ++i) { printf("%02x ", buf[i]); }
-
-    printf("\n");
-}
-
 int
 frameGet(int fd, unsigned char *buf)
 {
@@ -69,7 +51,7 @@ frameGet(int fd, unsigned char *buf)
         }
     }
 
-    printf("Error???\n");
+    //printf("Error %s\n", strerror(errno));
 
     return 0;
 }
@@ -278,6 +260,14 @@ void frameParse(int fd, unsigned char *frame, int len)
         break;
 #endif
 
+    case 0x19:
+        frame[6] = 0x00;
+        frame[7] = 0x80;
+        frame[8] = 0xfd;
+        write(fd, frame, 9);
+        break;
+
+
     case 0x1a: // miscellaneous things
         switch (frame[5])
         {
@@ -406,43 +396,6 @@ void frameParse(int fd, unsigned char *frame, int len)
 
 }
 
-#if defined(WIN32) || defined(_WIN32)
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd;
-    fd = open(comport, O_RDWR);
-
-    if (fd < 0)
-    {
-        perror(comport);
-    }
-
-    return fd;
-}
-
-#else
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd = posix_openpt(O_RDWR);
-    char *name = ptsname(fd);
-
-    if (name == NULL)
-    {
-        perror("pstname");
-        return -1;
-    }
-
-    printf("name=%s\n", name);
-
-    if (fd == -1 || grantpt(fd) == -1 || unlockpt(fd) == -1)
-    {
-        perror("posix_openpt");
-        return -1;
-    }
-
-    return fd;
-}
-#endif
 
 void rigStatus()
 {
@@ -460,7 +413,7 @@ void rigStatus()
 
 int main(int argc, char **argv)
 {
-    unsigned char buf[256];
+    unsigned char buf[BUFSIZE];
     int fd = openPort(argv[1]);
 
     printf("%s: %s\n", argv[0], rig_version());

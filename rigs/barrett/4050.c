@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "misc.h"
 
 #include "barrett.h"
@@ -66,7 +66,7 @@ static int barrett4050_open(RIG *rig)
 {
     int retval;
     char *response;
-    struct barrett_priv_data *priv = rig->state.priv;
+    struct barrett_priv_data *priv = STATE(rig)->priv;
     ENTERFUNC;
     barrett4050_get_info(rig);
     retval = barrett_transaction(rig, "IDC9999", 0, &response);
@@ -94,7 +94,7 @@ static int barrett4050_open(RIG *rig)
     RETURNFUNC(RIG_OK);
 }
 
-const struct rig_caps barrett4050_caps =
+struct rig_caps barrett4050_caps =
 {
     RIG_MODEL(RIG_MODEL_BARRETT_4050),
     .model_name =       "4050",

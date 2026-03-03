@@ -21,11 +21,12 @@
  *  the complete text of the GNU Lesser Public License version 2.1.
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 #include "elecraft.h"
 
@@ -38,7 +39,7 @@
     RIG_LEVEL_STRENGTH|RIG_LEVEL_RFPOWER|RIG_LEVEL_KEYSPD)
 
 #define K2_VFO (RIG_VFO_A|RIG_VFO_B)
-#define K2_VFO_OP (RIG_OP_UP|RIG_OP_DOWN)
+#define K2_VFO_OP (RIG_OP_UP|RIG_OP_DOWN|RIG_OP_TUNE)
 
 #define K2_ANTS (RIG_ANT_1|RIG_ANT_2)
 
@@ -95,15 +96,16 @@ struct k2_filt_lst_s k2_fwmd_cw;
 struct k2_filt_lst_s k2_fwmd_rtty;
 
 /* K2 specific rig_caps API function declarations */
-int k2_open(RIG *rig);
-int k2_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width);
-int k2_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width);
-int k2_get_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t *val);
+static int k2_open(RIG *rig);
+static int k2_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width);
+static int k2_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width);
+static int k2_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token, value_t *val);
+static int k2_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op);
 
 /* Private function declarations */
-int k2_probe_mdfw(RIG *rig, struct kenwood_priv_data *priv);
-int k2_mdfw_rest(RIG *rig, const char *mode, const char *fw);
-int k2_pop_fw_lst(RIG *rig, const char *cmd);
+static int k2_probe_mdfw(RIG *rig, struct kenwood_priv_data *priv);
+static int k2_mdfw_rest(RIG *rig, const char *mode, const char *fw);
+static int k2_pop_fw_lst(RIG *rig, const char *cmd);
 
 
 /*
@@ -113,12 +115,12 @@ int k2_pop_fw_lst(RIG *rig, const char *cmd);
  * Part of info comes from http://www.elecraft.com/K2_Manual_Download_Page.htm#K2
  * look for KIO2 Programmer's Reference PDF
  */
-const struct rig_caps k2_caps =
+struct rig_caps k2_caps =
 {
     RIG_MODEL(RIG_MODEL_K2),
     .model_name =       "K2",
     .mfg_name =     "Elecraft",
-    .version =      BACKEND_VER ".0",
+    .version =      BACKEND_VER ".2",
     .copyright =        "LGPL",
     .status =       RIG_STATUS_STABLE,
     .rig_type =     RIG_TYPE_TRANSCEIVER,
@@ -160,7 +162,10 @@ const struct rig_caps k2_caps =
     .bank_qty =     0,
     .chan_desc_sz =     0,
 
-    .chan_list =        { RIG_CHAN_END },
+    .chan_list =        {
+        {   1, 8, RIG_MTYPE_MORSE },
+        RIG_CHAN_END
+    },
 
     .rx_range_list1 =  {
         {kHz(500), MHz(30), K2_MODES, -1, -1, K2_VFO, K2_ANTS},
@@ -235,7 +240,7 @@ const struct rig_caps k2_caps =
     .set_level =        kenwood_set_level,
     .get_level =        kenwood_get_level,
     .get_ext_level =    k2_get_ext_level,
-    .vfo_op =       kenwood_vfo_op,
+    .vfo_op =       k2_vfo_op,
     .set_trn =      kenwood_set_trn,
     .get_powerstat =    kenwood_get_powerstat,
     .get_trn =      kenwood_get_trn,
@@ -254,10 +259,10 @@ const struct rig_caps k2_caps =
 /* k2_open()
  *
  */
-int k2_open(RIG *rig)
+static int k2_open(RIG *rig)
 {
     int err;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -285,13 +290,13 @@ int k2_open(RIG *rig)
  * wider than the passed value and sets the radio accordingly.
  */
 
-int k2_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
+static int k2_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
 
     int err;
     char f = '*';
     struct k2_filt_lst_s *flt;
-    const struct kenwood_priv_data *priv = rig->state.priv;
+    const struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -421,12 +426,12 @@ int k2_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
  * by the radio and returns it to the caller.
  */
 
-int k2_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
+static int k2_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
     int err;
     char buf[KENWOOD_MAX_BUF_LEN];
     char tmp[16];
-    char *bufptr;
+    const char *bufptr;
     pbwidth_t temp_w;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
@@ -487,7 +492,7 @@ int k2_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  *      STRING: val.cs for set, val.s for get
  *      CHECKBUTTON: val.i 0/1
  */
-int k2_get_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t *val)
+static int k2_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token, value_t *val)
 {
     char buf[KENWOOD_MAX_BUF_LEN];
     int err;
@@ -540,7 +545,7 @@ int k2_get_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t *val)
 /* Probes for mode and filter settings, based on information
  * by Chris Bryant, G3WIE.
  */
-int k2_probe_mdfw(RIG *rig, struct kenwood_priv_data *priv)
+static int k2_probe_mdfw(RIG *rig, struct kenwood_priv_data *priv)
 {
     int err, i, c;
     char buf[KENWOOD_MAX_BUF_LEN];
@@ -674,7 +679,7 @@ int k2_probe_mdfw(RIG *rig, struct kenwood_priv_data *priv)
 
 
 /* Restore mode, filter, and ext_lvl to original values */
-int k2_mdfw_rest(RIG *rig, const char *mode, const char *fw)
+static int k2_mdfw_rest(RIG *rig, const char *mode, const char *fw)
 {
     int err;
 
@@ -716,7 +721,7 @@ int k2_mdfw_rest(RIG *rig, const char *mode, const char *fw)
 
 
 /* Populate k2_filt_lst_s structure for each mode */
-int k2_pop_fw_lst(RIG *rig, const char *cmd)
+static int k2_pop_fw_lst(RIG *rig, const char *cmd)
 {
     int err, f;
     char fcmd[16];
@@ -801,4 +806,21 @@ int k2_pop_fw_lst(RIG *rig, const char *cmd)
 
     return RIG_OK;
 }
+
+static int k2_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
+{
+    char buf[32];
+
+    switch (op)
+    {
+    case RIG_OP_TUNE: // K2
+        SNPRINTF(buf, sizeof(buf), "SWH20");
+        break;
+
+    default: return kenwood_vfo_op(rig, vfo, op);
+    }
+
+    return kenwood_transaction(rig, buf, NULL, 0);
+}
+
 

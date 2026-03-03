@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #include "gnuradio.h"
 
@@ -49,7 +49,7 @@ static const struct gnuradio_priv_caps gr_priv_caps =
     .IF_center_freq = MHz(5.75),
 };
 
-const struct rig_caps gr_caps =
+struct rig_caps gr_caps =
 {
     .rig_model =      RIG_MODEL_GNURADIO,
     .model_name =     "GNU Radio dev",

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "winradio.h"
 
 
@@ -37,14 +37,14 @@
 #define WR3700_MODES (RIG_MODE_AM | RIG_MODE_CW | \
                      RIG_MODE_USB | RIG_MODE_LSB | RIG_MODE_FM)
 
-const struct rig_caps wr3700_caps =
+struct rig_caps wr3700_caps =
 {
     RIG_MODEL(RIG_MODEL_WR3700),
     .model_name =     "WR-3700",
     .mfg_name =       "Winradio",
     .version =        BACKEND_VER ".0",
     .copyright =   "LGPL",
-    .status =         RIG_STATUS_ALPHA,
+    .status =         RIG_STATUS_BETA,
     .rig_type =       RIG_TYPE_PCRECEIVER,
     .port_type =      RIG_PORT_DEVICE,
     .targetable_vfo =      0,

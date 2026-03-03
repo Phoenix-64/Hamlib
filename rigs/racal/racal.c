@@ -24,7 +24,7 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "register.h"
 #include "token.h"
 
@@ -61,23 +61,23 @@ const struct confparams racal_cfg_params[] =
 
 /*
  * racal_transaction
- * We assume that rig!=NULL, rig->state!= NULL
+ * We assume that rig!=NULL, RIGPORT(rig)!= NULL
  *
  * TODO: Status Response handling with G/T commands
  */
 static int racal_transaction(RIG *rig, const char *cmd, char *data,
                              int *data_len)
 {
-    const struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
-    struct rig_state *rs = &rig->state;
+    const struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
+    hamlib_port_t *rp = RIGPORT(rig);
     char cmdbuf[BUFSZ + 1];
     int retval;
 
     SNPRINTF(cmdbuf, sizeof(cmdbuf), SOM "%u%s" EOM, priv->receiver_id, cmd);
 
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmdbuf, strlen(cmdbuf));
+    retval = write_block(rp, (unsigned char *) cmdbuf, strlen(cmdbuf));
 
     if (retval != RIG_OK)
     {
@@ -91,7 +91,7 @@ static int racal_transaction(RIG *rig, const char *cmd, char *data,
         return retval;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ, EOM,
+    retval = read_string(rp, (unsigned char *) data, BUFSZ, EOM,
                          strlen(EOM), 0, 1);
 
     if (retval <= 0)
@@ -120,16 +120,16 @@ int racal_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct racal_priv_data *)calloc(1, sizeof(
-                          struct racal_priv_data));
+    STATE(rig)->priv = (struct racal_priv_data *)calloc(1, sizeof(
+                           struct racal_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     priv->receiver_id = 0;
     priv->bfo = 0;
@@ -147,12 +147,12 @@ int racal_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -160,11 +160,11 @@ int racal_cleanup(RIG *rig)
 
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
-int racal_set_conf(RIG *rig, token_t token, const char *val)
+int racal_set_conf(RIG *rig, hamlib_token_t token, const char *val)
 {
-    struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
+    struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -181,12 +181,12 @@ int racal_set_conf(RIG *rig, token_t token, const char *val)
 
 /*
  * assumes rig!=NULL,
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *  and val points to a buffer big enough to hold the conf value.
  */
-int racal_get_conf2(RIG *rig, token_t token, char *val, int val_len)
+int racal_get_conf2(RIG *rig, hamlib_token_t token, char *val, int val_len)
 {
-    const struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
+    const struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -201,7 +201,7 @@ int racal_get_conf2(RIG *rig, token_t token, char *val, int val_len)
     return RIG_OK;
 }
 
-int racal_get_conf(RIG *rig, token_t token, char *val)
+int racal_get_conf(RIG *rig, hamlib_token_t token, char *val)
 {
     return racal_get_conf2(rig, token, val, 128);
 }
@@ -275,7 +275,7 @@ int racal_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
  */
 int racal_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    const struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
+    const struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
     int ra_mode;
     char buf[BUFSZ];
 
@@ -371,7 +371,7 @@ int racal_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  */
 int racal_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
-    struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
+    struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
     char cmdbuf[BUFSZ];
     int agc;
 
@@ -427,7 +427,7 @@ int racal_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
  */
 int racal_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
-    struct racal_priv_data *priv = (struct racal_priv_data *)rig->state.priv;
+    struct racal_priv_data *priv = (struct racal_priv_data *)STATE(rig)->priv;
     char resbuf[BUFSZ];
     int retval, len, att;
     double f;
@@ -510,7 +510,7 @@ int racal_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 }
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int racal_reset(RIG *rig, reset_t reset)
 {

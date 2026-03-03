@@ -1,7 +1,7 @@
 /*
  * rotctl_parse.c - (C) Stephane Fillod 2000-2010
  *                  (C) Nate Bargmann 2003,2007,2010,2011,2012,2013
- *                  (C) The Hamlib Group 2002,2006,2011
+ *                  (C) The Hamlib Group 2002,2006,2011,2026
  *
  * This program test/control a rotator using Hamlib.
  * It takes commands in interactive mode as well as
@@ -23,8 +23,9 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +34,6 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
-#include <getopt.h>
 
 #ifdef HAVE_LIBREADLINE
 #  if defined(HAVE_READLINE_READLINE_H)
@@ -60,7 +60,7 @@ extern int read_history();
 /* no history */
 #endif                              /* HAVE_READLINE_HISTORY */
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 #include "iofunc.h"
 #include "misc.h"
 #include "dumpcaps_rot.h"
@@ -89,11 +89,9 @@ extern int read_history();
 /* Hash table implementation See:  http://uthash.sourceforge.net/ */
 #include "uthash.h"
 
-#ifdef HAVE_PTHREAD
-#  include <pthread.h>
+#include <pthread.h>
 
 static pthread_mutex_t rot_mutex = PTHREAD_MUTEX_INITIALIZER;
-#endif
 
 #define STR1(S) #S
 #define STR(S) STR1(S)
@@ -187,8 +185,8 @@ declare_proto_rot(set_parm);
 declare_proto_rot(get_parm);
 declare_proto_rot(get_info);
 declare_proto_rot(get_status);
-declare_proto_rot(set_conf);  
-declare_proto_rot(get_conf);  
+declare_proto_rot(set_conf);
+declare_proto_rot(get_conf);
 declare_proto_rot(send_cmd);
 declare_proto_rot(dump_state);
 declare_proto_rot(dump_caps);
@@ -225,6 +223,7 @@ struct test_table test_list[] =
     { 'X',  "set_parm",     ACTION(set_parm),           ARG_IN, "Parm", "Parm Value" },
     { 'x',  "get_parm",     ACTION(get_parm),           ARG_IN1 | ARG_OUT2, "Parm", "Parm Value" },
     { 'C', "set_conf",      ACTION(set_conf),           ARG_IN, "Token", "Value" },
+    { 0xad, "get_conf",     ACTION(get_conf), ARG_IN1 | ARG_OUT2, "Token", "Value"},
     { '_', "get_info",      ACTION(get_info),           ARG_OUT, "Info" },
     { 's', "get_status",    ACTION(get_status),         ARG_OUT, "Status flags" },
     { 'w', "send_cmd",      ACTION(send_cmd),           ARG_IN1 | ARG_IN_LINE | ARG_OUT2, "Cmd", "Reply" },
@@ -241,13 +240,12 @@ struct test_table test_list[] =
     { 'A', "a_sp2a_lp",     ACTION(az_sp2az_lp),        ARG_IN1 | ARG_OUT1, "Short Path Deg", "Long Path Deg" },
     { 'a', "d_sp2d_lp",     ACTION(dist_sp2dist_lp),    ARG_IN1 | ARG_OUT1, "Short Path km", "Long Path km" },
     { 0x8c, "pause",        ACTION(pause),              ARG_IN, "Seconds" },
-    { 0xad, "get_conf",     ACTION(get_conf), ARG_IN1 | ARG_OUT2, "Token", "Value"},
     { 0x00, "", NULL },
 
 };
 
 
-struct test_table *find_cmd_entry(int cmd)
+static struct test_table *find_cmd_entry(int cmd)
 {
     int i;
 
@@ -287,7 +285,7 @@ struct mod_lst
 struct mod_lst *models = NULL;
 
 /* Add model information to the hash */
-void hash_add_model(int id,
+static void hash_add_model(int id,
                     const char *mfg_name,
                     const char *model_name,
                     const char *version,
@@ -310,20 +308,20 @@ void hash_add_model(int id,
 
 
 /* Hash sorting functions */
-int hash_model_id_sort(const struct mod_lst *a, const struct mod_lst *b)
+static int hash_model_id_sort(const struct mod_lst *a, const struct mod_lst *b)
 {
     return (a->id > b->id);
 }
 
 
-void hash_sort_by_model_id()
+static void hash_sort_by_model_id()
 {
     HASH_SORT(models, hash_model_id_sort);
 }
 
 
 /* Delete hash */
-void hash_delete_all()
+static void hash_delete_all()
 {
     struct mod_lst *current_model, *tmp = NULL;
 
@@ -373,7 +371,7 @@ static void rp_getline(const char *s)
 /*
  * TODO: use Lex?
  */
-char parse_arg(const char *arg)
+static char parse_arg(const char *arg)
 {
     int i;
 
@@ -409,14 +407,19 @@ static int scanfc(FILE *fin, const char *format, void *p)
 
             if (!feof(fin))
             {
-                rig_debug(RIG_DEBUG_TRACE,"%s fscanf of:", __func__);
+                rig_debug(RIG_DEBUG_TRACE, "%s fscanf of:", __func__);
                 dump_hex((unsigned char *)p, strlen(p));
-                rig_debug(RIG_DEBUG_TRACE," failed with format '%s'\n", format);
+                rig_debug(RIG_DEBUG_TRACE, " failed with format '%s'\n", format);
             }
 
         }
 
         if (ferror(fin)) { rig_debug(RIG_DEBUG_ERR, "%s: errno=%d, %s\n", __func__, errno, strerror(errno)); clearerr(fin); }
+
+        if (errno == EINVAL) // invalid arg we will continue
+        {
+            continue;
+        }
 
         return ret;
     }
@@ -528,7 +531,8 @@ static int next_word(char *buffer, int argc, const char **argv, int newline)
     })
 
 
-int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int argc,
+int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[],
+                 int argc,
                  int interactive, int prompt, char send_cmd_term)
 {
     int retcode;            /* generic return code from functions */
@@ -546,6 +550,9 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
     char *p5 = NULL;
     char *p6 = NULL;
 #endif
+    char arg_format[8];
+
+    SNPRINTF(arg_format, sizeof(arg_format), "%%%ds", MAXARGSZ);
 
     /* cmd, internal, rotctld */
 #ifdef HAVE_LIBREADLINE
@@ -614,7 +621,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                 /* command by name */
                 if (cmd == '\\')
                 {
-                    unsigned char cmd_name[MAXNAMSIZ], *pcmd = cmd_name;
+                    unsigned char cmd_name[MAXNAMSIZ + 1], *pcmd = cmd_name;
                     int c_len = MAXNAMSIZ;
 
                     if (scanfc(fin, "%c", pcmd) < 1)
@@ -775,7 +782,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                     fprintf_flush(fout, "%s: ", cmd_entry->arg1);
                 }
 
-                if (scanfc(fin, "%s", arg1) < 1)
+                if (scanfc(fin, arg_format, arg1) < 1)
                 {
                     return -1;
                 }
@@ -815,7 +822,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                     fprintf_flush(fout, "%s: ", cmd_entry->arg2);
                 }
 
-                if (scanfc(fin, "%s", arg2) < 1)
+                if (scanfc(fin, arg_format, arg2) < 1)
                 {
                     return -1;
                 }
@@ -855,7 +862,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                     fprintf_flush(fout, "%s: ", cmd_entry->arg3);
                 }
 
-                if (scanfc(fin, "%s", arg3) < 1)
+                if (scanfc(fin, arg_format, arg3) < 1)
                 {
                     return -1;
                 }
@@ -895,7 +902,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                     fprintf_flush(fout, "%s: ", cmd_entry->arg4);
                 }
 
-                if (scanfc(fin, "%s", arg4) < 1)
+                if (scanfc(fin, arg_format, arg4) < 1)
                 {
                     return -1;
                 }
@@ -1019,10 +1026,10 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
         /* Test the command token, parsed_input[0] */
         else if ((*parsed_input[0] == '\\') && (strlen(parsed_input[0]) > 1))
         {
-            char cmd_name[MAXNAMSIZ];
+            char cmd_name[MAXNAMSIZ + 1];
 
             /* if there is no terminating '\0' character in the source string,
-             * srncpy() doesn't add one even if the supplied length is less
+             * strncpy() doesn't add one even if the supplied length is less
              * than the destination array.  Truncate the source string here.
              */
             if (strlen(parsed_input[0] + 1) >= MAXNAMSIZ)
@@ -1041,7 +1048,8 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
             /* The starting position of the source string is the first
              * character past the initial '\'.
              */
-            SNPRINTF(cmd_name, sizeof(cmd_name), "%s", parsed_input[0] + 1);
+	    strncpy(cmd_name, parsed_input[0] + 1, MAXNAMSIZ);
+	    cmd_name[MAXNAMSIZ] = '\0';  // Make sure it's terminated
 
             /* Sanity check as valid multiple character commands consist of
              * alphanumeric characters and the underscore ('_') character.
@@ -1408,9 +1416,7 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
      * mutex locking needed because rotctld is multithreaded
      * and hamlib is not MT-safe
      */
-#ifdef HAVE_PTHREAD
     pthread_mutex_lock(&rot_mutex);
-#endif
 
     if (!prompt)
     {
@@ -1462,11 +1468,9 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
                                         "");
 #endif
 
-#ifdef HAVE_PTHREAD
     pthread_mutex_unlock(&rot_mutex);
-#endif
 
-    if (retcode == RIG_EIO) { return retcode; }
+    if (retcode == -RIG_EIO) { return retcode; }
 
     if (retcode != RIG_OK)
     {
@@ -1483,7 +1487,8 @@ int rotctl_parse(ROT *my_rot, FILE *fin, FILE *fout, const char *argv[], int arg
         {
             if (cmd_entry->name != NULL)
             {
-                fprintf(fout, "%s: error = %s\n", cmd_entry->name, rigerror(retcode));
+                //fprintf(fout, "%s: error = %s\n", cmd_entry->name, rigerror(retcode));
+                fprintf(fout, "error = %s\n", rigerror(retcode));
             }
         }
     }
@@ -1566,6 +1571,8 @@ void usage_rot(FILE *fout)
             "Commands and arguments read from standard input must be white space separated,\n"
             "comments are allowed, comments start with the # character and continue to the\n"
             "end of the line.\n");
+
+    fprintf(fout, "\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
 }
 
 
@@ -1576,23 +1583,23 @@ int print_conf_list(const struct confparams *cfp, rig_ptr_t data)
     char buf[128] = "";
 
     rot_get_conf2(rot, cfp->token, buf, sizeof(buf));
-    fprintf(stdout,"%s: \"%s\"\n" "\tDefault: %s, Value: %s\n",
-           cfp->name,
-           cfp->tooltip,
-           cfp->dflt,
-           buf);
+    fprintf(stdout, "%s: \"%s\"\n" "\tDefault: %s, Value: %s\n",
+            cfp->name,
+            cfp->tooltip,
+            cfp->dflt,
+            buf);
 
     switch (cfp->type)
     {
     case RIG_CONF_NUMERIC:
-        fprintf(stdout,"\tRange: %.1f..%.1f, step %.1f\n",
-               cfp->u.n.min,
-               cfp->u.n.max,
-               cfp->u.n.step);
+        fprintf(stdout, "\tRange: %.1f..%.1f, step %.1f\n",
+                cfp->u.n.min,
+                cfp->u.n.max,
+                cfp->u.n.step);
         break;
 
     case RIG_CONF_CHECKBUTTON:
-        fprintf(stdout,"\tCheckbox: 0,1\n");
+        fprintf(stdout, "\tCheckbox: 0,1\n");
         break;
 
     case RIG_CONF_COMBO:
@@ -1601,14 +1608,14 @@ int print_conf_list(const struct confparams *cfp, rig_ptr_t data)
             break;
         }
 
-        fprintf(stdout,"\tCombo: %s", cfp->u.c.combostr[0]);
+        fprintf(stdout, "\tCombo: %s", cfp->u.c.combostr[0]);
 
         for (i = 1 ; i < RIG_COMBO_MAX && cfp->u.c.combostr[i]; i++)
         {
-            fprintf(stdout,", %s", cfp->u.c.combostr[i]);
+            fprintf(stdout, ", %s", cfp->u.c.combostr[i]);
         }
 
-        fprintf(stdout,"\n");
+        fprintf(stdout, "\n");
         break;
 
     default:
@@ -1631,7 +1638,7 @@ static int hash_model_list(const struct rot_caps *caps, void *data)
     return 1;  /* !=0, we want them all ! */
 }
 
-void print_model_list()
+static void print_model_list()
 {
     struct mod_lst *s;
 
@@ -1659,7 +1666,7 @@ void list_models()
 
     if (status != RIG_OK)
     {
-        printf("rot_list_foreach: error = %s \n", rigerror(status));
+        fprintf(stderr, "rot_list_foreach: error = %s \n", rigerror2(status));
         exit(2);
     }
 
@@ -1672,6 +1679,7 @@ declare_proto_rot(get_conf)
 {
     int ret;
     rig_debug(RIG_DEBUG_ERR, "%s: \n", __func__);
+
     if (arg1 == NULL || arg1[0] == '?')
     {
         dumpconf_list(rot, fout);
@@ -1679,20 +1687,25 @@ declare_proto_rot(get_conf)
         debugmsgsave2[0] = 0;
         return RIG_OK;
     }
-    token_t mytoken = rot_token_lookup(rot, arg1);
+
+    hamlib_token_t mytoken = rot_token_lookup(rot, arg1);
+
     if (mytoken == 0)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: unknown token '%s' for this rot\n", __func__, arg1);
+        rig_debug(RIG_DEBUG_ERR, "%s: unknown token '%s' for this rot\n", __func__,
+                  arg1);
         ret = -RIG_EINVAL;
     }
     else
     {
         char value[4096];
-        ret = rot_get_conf(rot, rot_token_lookup(rot, arg1), value);
+        ret = rot_get_conf2(rot, rot_token_lookup(rot, arg1), value, sizeof(value));
+
         if (ret != RIG_OK)
         {
             return ret;
         }
+
         fprintf(fout, "%s=%s\n", arg1, value);
     }
 
@@ -1714,15 +1727,17 @@ declare_proto_rot(set_conf)
         return RIG_OK;
     }
 
-    token_t mytoken = rot_token_lookup(rot, arg1);
+    hamlib_token_t mytoken = rot_token_lookup(rot, arg1);
+
     if (mytoken == 0)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: unknown token '%s' for this rot\n", __func__, arg1);
+        rig_debug(RIG_DEBUG_ERR, "%s: unknown token '%s' for this rot\n", __func__,
+                  arg1);
         ret = -RIG_EINVAL;
     }
     else
     {
-        ret = rot_set_conf(rot, rot_token_lookup(rot, arg1), arg2);
+        ret = rot_set_conf(rot, mytoken, arg2);
     }
 
     return (ret);
@@ -1884,6 +1899,22 @@ declare_proto_rot(move)
     {
         direction = ROT_MOVE_DOWN;
     }
+    else if (!strcmp(arg1, "DOWN_RIGHT") || !strcmp(arg1, "DOWN_CW"))
+    {
+        direction = ROT_MOVE_DOWN_CW;
+    }
+    else if (!strcmp(arg1, "DOWN_LEFT") || !strcmp(arg1, "DOWN_CCW"))
+    {
+        direction = ROT_MOVE_DOWN_CCW;
+    }
+    else if (!strcmp(arg1, "UP_RIGHT") || !strcmp(arg1, "UP_CW"))
+    {
+        direction = ROT_MOVE_UP_CW;
+    }
+    else if (!strcmp(arg1, "UP_LEFT") || !strcmp(arg1, "UP_CCW"))
+    {
+        direction = ROT_MOVE_UP_CCW;
+    }
     else
     {
         CHKSCN1ARG(sscanf(arg1, "%d", &direction));
@@ -1905,7 +1936,7 @@ declare_proto_rot(set_level)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_level(s, sizeof(s), rot->state.has_set_level);
+        rot_sprintf_level(s, sizeof(s), ROTSTATE(rot)->has_set_level);
         fputs(s, fout);
 
         if (rot->caps->set_ext_level)
@@ -1919,6 +1950,25 @@ declare_proto_rot(set_level)
     }
 
     level = rot_parse_level(arg1);
+
+    if (!strcmp(arg2, "?"))
+    {
+        const gran_t *gran = STATE(rot)->level_gran;
+        int idx = rig_setting2idx(level);
+
+        if (ROT_LEVEL_IS_FLOAT(level))
+        {
+            fprintf(fout, "(%f..%f/%f)%c", gran[idx].min.f,
+                    gran[idx].max.f, gran[idx].step.f, resp_sep);
+        }
+        else
+        {
+            fprintf(fout, "(%d..%d/%d)%c", gran[idx].min.i,
+                    gran[idx].max.i, gran[idx].step.i, resp_sep);
+        }
+
+        return RIG_OK;
+    }
 
     if (!rot_has_set_level(rot, level))
     {
@@ -1981,7 +2031,7 @@ declare_proto_rot(get_level)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_level(s, sizeof(s), rot->state.has_get_level);
+        rot_sprintf_level(s, sizeof(s), ROTSTATE(rot)->has_get_level);
         fputs(s, fout);
 
         if (rot->caps->get_ext_level)
@@ -2079,7 +2129,7 @@ declare_proto_rot(set_func)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_func(s, sizeof(s), rot->state.has_set_func);
+        rot_sprintf_func(s, sizeof(s), ROTSTATE(rot)->has_set_func);
         fprintf(fout, "%s\n", s);
         return RIG_OK;
     }
@@ -2117,7 +2167,7 @@ declare_proto_rot(get_func)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_func(s, sizeof(s), rot->state.has_get_func);
+        rot_sprintf_func(s, sizeof(s), ROTSTATE(rot)->has_get_func);
         fprintf(fout, "%s\n", s);
         return RIG_OK;
     }
@@ -2179,7 +2229,7 @@ declare_proto_rot(set_parm)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_parm(s, sizeof(s), rot->state.has_set_parm);
+        rot_sprintf_parm(s, sizeof(s), ROTSTATE(rot)->has_set_parm);
         fprintf(fout, "%s\n", s);
         return RIG_OK;
     }
@@ -2252,7 +2302,7 @@ declare_proto_rot(get_parm)
     if (!strcmp(arg1, "?"))
     {
         char s[SPRINTF_MAX_SIZE];
-        rot_sprintf_parm(s, sizeof(s), rot->state.has_get_parm);
+        rot_sprintf_parm(s, sizeof(s), ROTSTATE(rot)->has_get_parm);
         fprintf(fout, "%s\n", s);
         return RIG_OK;
     }
@@ -2397,7 +2447,7 @@ declare_proto_rot(dump_conf)
  */
 declare_proto_rot(dump_state)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
     char *tag;
 
     /*
@@ -2426,7 +2476,7 @@ declare_proto_rot(dump_state)
         tag = "Minimum Azimuth: ";
     }
 
-    fprintf(fout, "%s%lf%c", tag, rs->min_az + rot->state.az_offset, resp_sep);
+    fprintf(fout, "%s%lf%c", tag, rs->min_az + rs->az_offset, resp_sep);
 
     tag = "max_az=";
 
@@ -2435,7 +2485,7 @@ declare_proto_rot(dump_state)
         tag = "Maximum Azimuth: ";
     }
 
-    fprintf(fout, "%s%lf%c", tag, rs->max_az + rot->state.az_offset, resp_sep);
+    fprintf(fout, "%s%lf%c", tag, rs->max_az + rs->az_offset, resp_sep);
 
     tag = "min_el=";
 
@@ -2444,7 +2494,7 @@ declare_proto_rot(dump_state)
         tag = "Minimum Elevation: ";
     }
 
-    fprintf(fout, "%s%lf%c", tag, rs->min_el + rot->state.el_offset, resp_sep);
+    fprintf(fout, "%s%lf%c", tag, rs->min_el + rs->el_offset, resp_sep);
 
     tag = "max_el=";
 
@@ -2453,7 +2503,7 @@ declare_proto_rot(dump_state)
         tag = "Maximum Elevation: ";
     }
 
-    fprintf(fout, "%s%lf%c", tag, rs->max_el + rot->state.el_offset, resp_sep);
+    fprintf(fout, "%s%lf%c", tag, rs->max_el + rs->el_offset, resp_sep);
 
     tag = "south_zero=";
 
@@ -2494,7 +2544,7 @@ declare_proto_rot(dump_state)
 declare_proto_rot(send_cmd)
 {
     int retval;
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int backend_num, cmd_len;
 #define BUFSZ 128
     unsigned char bufcmd[BUFSZ];
@@ -2542,11 +2592,9 @@ declare_proto_rot(send_cmd)
         eom_buf[2] = send_cmd_term;
     }
 
-    rs = &rot->state;
+    rig_flush(rotp);
 
-    rig_flush(&rs->rotport);
-
-    retval = write_block(&rs->rotport, bufcmd, cmd_len);
+    retval = write_block(rotp, bufcmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -2564,7 +2612,7 @@ declare_proto_rot(send_cmd)
          * assumes CR or LF is end of line char
          * for all ascii protocols
          */
-        retval = read_string(&rs->rotport, buf, BUFSZ, eom_buf, strlen(eom_buf), 0, 1);
+        retval = read_string(rotp, buf, BUFSZ, eom_buf, strlen(eom_buf), 0, 1);
 
         if (retval < 0)
         {
@@ -2740,8 +2788,7 @@ declare_proto_rot(d_mm2dec)
     CHKSCN1ARG(sscanf(arg2, "%lf", &min));
     CHKSCN1ARG(sscanf(arg3, "%d", &sw));
 
-    dec_deg = dmmm2dec(deg, min, sw,
-                       0.0); // we'll add real seconds when somebody asks for it
+    dec_deg = dmmm2dec(deg, min, sw);
 
     if ((interactive && prompt) || (interactive && !prompt && ext_resp))
     {
@@ -2884,18 +2931,18 @@ declare_proto_rot(pause)
     return RIG_OK;
 }
 
-// short list for rigctl/rigctld display
+// short list for rotctl/rotctld display
 int print_conf_list2(const struct confparams *cfp, rig_ptr_t data, FILE *fout)
 {
     ROT *rot = (ROT *) data;
     char buf[128] = "";
 
-    rot_get_conf(rot, cfp->token, buf);
-    fprintf(fout,"%s: \"%s\"\n" "\t" "Default: %s, Value: %s\n",
-           cfp->name,
-           cfp->tooltip,
-           cfp->dflt,
-           buf);
+    rot_get_conf2(rot, cfp->token, buf, sizeof(buf));
+    fprintf(fout, "%s: \"%s\"\n" "\t" "Default: %s, Value: %s\n",
+            cfp->name,
+            cfp->tooltip,
+            cfp->dflt,
+            buf);
 
     return 1;  /* !=0, we want them all ! */
 }

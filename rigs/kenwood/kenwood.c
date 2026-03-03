@@ -30,6 +30,8 @@
 #include <ctype.h>
 
 #include "hamlib/rig.h"
+#include "hamlib/port.h"
+#include "hamlib/rig_state.h"
 #include "serial.h"
 #include "register.h"
 #include "cal.h"
@@ -152,8 +154,16 @@ rmode_t kenwood_mode_table[KENWOOD_MODE_TABLE_MAX] =
     [11] = RIG_MODE_PSKR,
     [12] = RIG_MODE_PKTLSB,
     [13] = RIG_MODE_PKTUSB,
-    [14] = RIG_MODE_PKTFM,
-    [15] = RIG_MODE_PKTAM
+    [14] = RIG_MODE_PKTFM, // FM-D1 not supported yet
+    [15] = RIG_MODE_PKTAM, // AM-D1 not supported yet
+    [16] = RIG_MODE_LSBD2,
+    [17] = RIG_MODE_USBD2,
+    [18] = RIG_MODE_NONE, // FM-D2 not supported yet
+    [19] = RIG_MODE_NONE, // AM-D2 not supported yet
+    [20] = RIG_MODE_LSBD3,
+    [21] = RIG_MODE_USBD3,
+    [22] = RIG_MODE_NONE, // FM-D3 not supported yet
+    [23] = RIG_MODE_NONE, // AM-D3 not supported yet
 };
 
 /*
@@ -181,6 +191,18 @@ tone_t kenwood42_ctcss_list[] =
     0,
 };
 
+/*
+ * 51 CTCSS sub-audible tones
+ */
+tone_t kenwood51_ctcss_list[] =
+{
+    670,  693,  719,  744,  770,  797,  825,  854,  885,  915,  /*  0- 9 */
+    948,  974, 1000, 1035, 1072, 1109, 1148, 1188, 1230, 1273,  /* 10-19 */
+    1318, 1365, 1413, 1462, 1514, 1567, 1598, 1622, 1655, 1679, /* 20-29 */
+    1713, 1738, 1773, 1799, 1835, 1862, 1899, 1928, 1966, 1995, /* 30-39 */
+    2035, 2065, 2107, 2181, 2257, 2291, 2336, 2418, 2503, 2541, /* 40-49 */
+    17500, 0 /* 50-99 */
+};
 
 /* Token definitions for .cfgparams in rig_caps
  *
@@ -211,17 +233,40 @@ struct confparams kenwood_cfg_params[] =
     { RIG_CONF_END, NULL, }
 };
 
+// This function removes non-printable characters from a buffer. This was
+// implemented to work around a problem reported with the uSDX transceiver
+// [1], which emulates the Kenwood TS-480 but apparently generates garbage
+// on the serial port in some situations.
+//
+// [1]: https://github.com/Hamlib/Hamlib/issues/1652
+static int remove_nonprint(char *s)
+{
+    int i, j = 0;
+    if (s == NULL) return 0;
+
+    for (i = 0; s[i] != '\0'; ++i)
+    {
+        if (isprint((unsigned char)s[i]))
+        {
+            s[j++] = s[i]; // Copy printable character
+        }
+    }
+    s[j] = '\0'; // Null-terminate the string
+
+    return j; // Return the new length of the string
+}
+
 
 /**
  * kenwood_transaction
- * Assumes rig!=NULL rig->state!=NULL rig->caps!=NULL
+ * Assumes rig!=NULL STATE(rig)!=NULL rig->caps!=NULL
  *
  * Parameters:
  * cmdstr:    Command to be sent to the rig. cmdstr can also be NULL,
  *        indicating that only a reply is needed (nothing will be sent).
  * data:    Buffer for reply string.  Can be NULL, indicating that no reply
  *        is needed and will return with RIG_OK after command was sent.
- * datasize: Size of buffer. It is the caller's responsibily to provide
+ * datasize: Size of buffer. It is the caller's responsibility to provide
  *         a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -241,20 +286,24 @@ int kenwood_transaction(RIG *rig, const char *cmdstr, char *data,
     int retval = -RIG_EINTERNAL;
     char *cmd;
     int len;
+    int resp_len;  // Response length
     int retry_read = 0;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
     struct rig_state *rs;
+    struct hamlib_port *rp;   /* Pointer to rigport structure */
 
-    if (datasize > 0 && datasize < (cmdstr ? strlen(cmdstr) : 0)) {
-    rig_debug(RIG_DEBUG_WARN, "%s called cmd=%s datasize=%d, datasize < cmd length?\n", __func__,
-              cmdstr ? cmdstr : "(NULL)",
-              (int)datasize);
-    } 
+    if (datasize > 0 && datasize < (cmdstr ? strlen(cmdstr) : 0))
+    {
+        rig_debug(RIG_DEBUG_WARN,
+                  "%s called cmd=%.4095s datasize=%d, datasize < cmd length?\n", __func__,
+                  cmdstr ? cmdstr : "(NULL)",
+                  (int)datasize);
+    }
     else
     {
-    rig_debug(RIG_DEBUG_VERBOSE, "%s called cmd=%s\n", __func__,
-              cmdstr ? cmdstr : "(NULL)");
+        rig_debug(RIG_DEBUG_VERBOSE, "%s called cmd=%s\n", __func__,
+                  cmdstr ? cmdstr : "(NULL)");
     }
 
     if ((!cmdstr && !datasize) || (datasize && !data))
@@ -262,12 +311,13 @@ int kenwood_transaction(RIG *rig, const char *cmdstr, char *data,
         RETURNFUNC2(-RIG_EINVAL);
     }
 
-    rs = &rig->state;
+    rs = STATE(rig);
+    rp = RIGPORT(rig);
 
     rs->transaction_active = 1;
 
     /* Emulators don't need any post_write_delay */
-    if (priv->is_emulation) { rs->rigport.post_write_delay = 0; }
+    if (priv->is_emulation) { rp->post_write_delay = 0; }
 
     // if this is an IF cmdstr and not the first time through check cache
     if (cmdstr && strcmp(cmdstr, "IF") == 0 && priv->cache_start.tv_sec != 0)
@@ -326,9 +376,9 @@ transaction_write:
         }
 
         /* flush anything in the read buffer before command is sent */
-        rig_flush(&rs->rigport);
+        rig_flush(rp);
 
-        retval = write_block(&rs->rigport, (unsigned char *) cmd, len);
+        retval = write_block(rp, (unsigned char *) cmd, len);
 
         free(cmd);
 
@@ -351,6 +401,8 @@ transaction_write:
         skip |= strncmp(cmdstr, "RD", 2) == 0;
         skip |= strncmp(cmdstr, "KYW", 3) == 0;
         skip |= strncmp(cmdstr, "KY ", 3) == 0;
+        skip |= strncmp(cmdstr, "KY0", 3) == 0;
+        skip |= strncmp(cmdstr, "KY2", 3) == 0;
         skip |= strncmp(cmdstr, "PS1", 3) == 0;
         skip |= strncmp(cmdstr, "PS0", 3) == 0;
         skip |= strncmp(cmdstr, "K22", 3) == 0;
@@ -358,8 +410,12 @@ transaction_write:
         if (skip)
         {
             // most command we give them a little time -- but not KY
-            if (strncmp(cmdstr, "KY ", 3)!= 0)
-            hl_usleep(200 * 1000); // give little settle time for these commands
+            if (strncmp(cmdstr, "KY", 2) != 0 || (cmdstr[2] != ' ' && cmdstr[2] != '0'
+						&& cmdstr[2] != '2'))
+            {
+                hl_usleep(200 * 1000);    // give little settle time for these commands
+            }
+
             goto transaction_quit;
         }
     }
@@ -367,9 +423,9 @@ transaction_write:
     // Malachite SDR cannot send ID after FA
     if (!datasize && priv->no_id) { RETURNFUNC2(RIG_OK); }
 
-    if (!datasize && strncmp(cmdstr, "KY",2)!=0)
+    if (!datasize && strncmp(cmdstr, "KY", 2) != 0)
     {
-        rig->state.transaction_active = 0;
+        rs->transaction_active = 0;
 
         // there are some commands that have problems with immediate follow-up
         // so we'll just ignore them
@@ -377,8 +433,8 @@ transaction_write:
         /* no reply expected so we need to write a command that always
            gives a reply so we can read any error replies from the actual
            command being sent without blocking */
-        if (RIG_OK != (retval = write_block(&rs->rigport,
-                                            (unsigned char *) priv->verify_cmd, strlen(priv->verify_cmd))))
+        if (RIG_OK != (retval = write_block(rp, (unsigned char *)priv->verify_cmd,
+                                            priv->verify_cmd_len)))
         {
             goto transaction_quit;
         }
@@ -389,22 +445,24 @@ transaction_read:
     // this len/expected stuff is confusing -- logic in some places includes the semicolon
     // so we add 1 to our read_string length to cover these cases
     // eventually we should be able to get rid of this but requires testing all Kenwood rigs
-    len = min(datasize ? datasize + 1 : strlen(priv->verify_cmd) + 48,
+    len = min(datasize ? datasize + 1 : priv->verify_cmd_len + 48,
               KENWOOD_MAX_BUF_LEN);
-    retval = read_string(&rs->rigport, (unsigned char *) buffer, len,
+    retval = read_string(rp, (unsigned char *) buffer, len,
                          cmdtrm_str, strlen(cmdtrm_str), 0, 1);
     rig_debug(RIG_DEBUG_TRACE, "%s: read_string len=%d '%s'\n", __func__,
               (int)strlen(buffer), buffer);
 
+    resp_len = retval;
+
     if (retval < 0)
     {
         rig_debug(RIG_DEBUG_WARN,
-                  "%s: read_string retval < 0, retval = %d, retry_read=%d, rs->rigport.retry=%d\n",
+                  "%s: read_string retval < 0, retval = %d, retry_read=%d, rp->retry=%d\n",
                   __func__,
-                  retval, retry_read, rs->rigport.retry);
+                  retval, retry_read, rp->retry);
 
         // only retry if we expect a response from the command
-        if (retry_read++ < rs->rigport.retry)
+        if (retry_read++ < rp->retry)
         {
             goto transaction_write;
             // we use to not re-do the write
@@ -428,13 +486,22 @@ transaction_read:
         goto transaction_quit;
     }
 
-    /* Check that command termination is correct */
-    if (strchr(cmdtrm_str, buffer[strlen(buffer) - 1]) == NULL)
+    // This fixes the case when some corrupt data is returned; it lets us be a
+    // little more robust about funky serial data. If the terminator is
+    // printable(usually ';'), then there should be no nonprintables in the
+    // message; if it isn't (usually '\r') then don't touch the message.
+    if (isprint(caps->cmdtrm))
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: Command is not correctly terminated '%s'\n",
+        resp_len = remove_nonprint(buffer);
+    }
+
+    /* Check that command termination is correct */
+    if (resp_len < 1 || strchr(cmdtrm_str, buffer[resp_len - 1]) == NULL)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s: Response is not correctly terminated '%s'\n",
                   __func__, buffer);
 
-        if (retry_read++ < rs->rigport.retry)
+        if (retry_read++ < rp->retry)
         {
             goto transaction_write;
         }
@@ -443,7 +510,7 @@ transaction_read:
         goto transaction_quit;
     }
 
-    if (strlen(buffer) == 2)
+    if (resp_len == 2)
     {
         switch (buffer[0])
         {
@@ -466,7 +533,7 @@ transaction_read:
                 rig_debug(RIG_DEBUG_VERBOSE, "%s: Overflow for '%s'\n", __func__, cmdstr);
             }
 
-            if (retry_read++ < rs->rigport.retry)
+            if (retry_read++ < rp->retry)
             {
                 goto transaction_write;
             }
@@ -483,7 +550,7 @@ transaction_read:
                           cmdstr);
             }
 
-            if (retry_read++ < rs->rigport.retry)
+            if (retry_read++ < rp->retry)
             {
                 goto transaction_write;
             }
@@ -494,12 +561,13 @@ transaction_read:
         case '?':
 
             /* The ? response is an ambiguous response, but for get commands it seems to
-             * indicate that the rig rejected the command because the state of the rig is not valid for the command
-             * or that the command parameter is invalid. Retrying the command does not fix the issue,
-             * as the error is caused by the an invalid combination of rig state.
+             * indicate that the rig rejected the command because the state of the rig is
+             * not valid for the command or that the command parameter is invalid.
+             * Retrying the command does not fix the issue, as the error is caused by
+             * the invalid combination of command and rig state.
              *
              * For example, the following cases have been observed:
-             * - NL (NB level) and RL (NR level) commands fail if NB / NR are not enabled on TS-590SG
+             * - NL(NB level) and RL(NR level) commands fail if NB/NR are not enabled on TS-590SG
              * - SH and SL (filter width) fail in CW mode on TS-590SG
              * - GT (AGC) fails in FM mode on TS-590SG
              *
@@ -509,7 +577,7 @@ transaction_read:
             {
                 rig_debug(RIG_DEBUG_ERR, "%s: Command rejected by the rig (get): '%s'\n",
                           __func__, cmdstr);
-                RETURNFUNC(-RIG_ERJCTED);
+                RETURNFUNC2(-RIG_ERJCTED);
             }
 
             /* Command not understood by rig or rig busy */
@@ -526,10 +594,10 @@ transaction_read:
                 }
             }
 
-            if (retry_read++ < rs->rigport.retry)
+            if (retry_read++ < rp->retry)
             {
                 rig_debug(RIG_DEBUG_ERR, "%s: Retrying shortly %d of %d\n", __func__,
-                          retry_read, rs->rigport.retry);
+                          retry_read, rp->retry);
                 hl_usleep(rig->caps->timeout * 1000);
                 goto transaction_write;
             }
@@ -559,10 +627,10 @@ transaction_read:
             rig_debug(RIG_DEBUG_ERR, "%s: wrong reply %c%c for command %c%c\n",
                       __func__, buffer[0], buffer[1], cmdstr[0], cmdstr[1]);
 
-            rig_debug(RIG_DEBUG_ERR, "%s: retry_read=%d, rs->rigport.retry=%d\n", __func__,
-                      retry_read, rs->rigport.retry);
+            rig_debug(RIG_DEBUG_ERR, "%s: retry_read=%d, rp->retry=%d\n", __func__,
+                      retry_read, rp->retry);
 
-            if (retry_read++ < rs->rigport.retry)
+            if (retry_read++ < rp->retry)
             {
                 if (strlen(buffer) == 0)
                 {
@@ -583,7 +651,7 @@ transaction_read:
         {
             /* move the result excluding the command terminator into the
                caller buffer */
-            len = min(datasize, retval) - 1;
+            len = min(datasize, resp_len) - 1;
             strncpy(data, buffer, len);
             data[len] = '\0';
         }
@@ -615,19 +683,13 @@ transaction_read:
              * the decoder for callback. That way we don't ignore any
              * commands.
              */
-            // if we got FA or FB unexpectedly then perhaps RIG_TRN is enabled and we just need to handle it
-            if (strncmp(buffer, "FA", 2) == 0)
+            // If we got FA or FB unexpectedly then perhaps RIG_TRN is enabled
+            //    and we just need to handle it
+            if (buffer[0] == 'F' && (buffer[1] == 'A' || buffer[1] == 'B'))
             {
                 freq_t freq;
-                sscanf(buffer, "FA%lg", &freq);
-                rig_set_cache_freq(rig, RIG_VFO_A, freq);
-                goto transaction_read;
-            }
-            else if (strncmp(buffer, "FB", 2) == 0)
-            {
-                freq_t freq;
-                sscanf(buffer, "FB%lg", &freq);
-                rig_set_cache_freq(rig, RIG_VFO_B, freq);
+                sscanf(buffer + 2, "%lg", &freq);
+                rig_set_cache_freq(rig, buffer[1] == 'A' ? RIG_VFO_A : RIG_VFO_B, freq);
                 goto transaction_read;
             }
 
@@ -635,7 +697,7 @@ transaction_read:
                       __func__, buffer[0], buffer[1]
                       , priv->verify_cmd[0], priv->verify_cmd[1]);
 
-            if (retry_read++ < rs->rigport.retry)
+            if (retry_read++ < rp->retry)
             {
                 goto transaction_write;
             }
@@ -645,9 +707,9 @@ transaction_read:
         }
     }
 
-    retval = RIG_OK;
-    rig_debug(RIG_DEBUG_TRACE, "%s: returning RIG_OK, retval=%d\n", __func__,
+    rig_debug(RIG_DEBUG_TRACE, "%s: returning RIG_OK, retval was %d\n", __func__,
               retval);
+    retval = RIG_OK;
 
 transaction_quit:
 
@@ -670,7 +732,7 @@ transaction_quit:
  *
  * Parameters:
  *  cmd     Same as kenwood_transaction() cmdstr
- *  buf     Same as kenwwod_transaction() data
+ *  buf     Same as kenwood_transaction() data
  *  buf_size  Same as kenwood_transaction() datasize
  *  expected  Value of expected string length
  *
@@ -705,7 +767,7 @@ int kenwood_safe_transaction(RIG *rig, const char *cmd, char *buf,
     {
         size_t length;
         // some PowerSDR commands have variable len
-        int checklen =  !RIG_IS_POWERSDR;
+        int checklen =  !RIG_IS_POWERSDR && !RIG_IS_THETIS;
         err = kenwood_transaction(rig, cmd, buf, buf_size);
 
         if (err != RIG_OK)        /* return immediately on error as any
@@ -719,18 +781,23 @@ int kenwood_safe_transaction(RIG *rig, const char *cmd, char *buf,
         if (checklen && length != expected) /* worth retrying as some rigs
                                    occasionally send short results */
         {
-            // QRPLABS can't seem top decide if they give 37 or 38 bytes for IF command
-            if (strncmp(cmd,"IF",2)==0 && rig->caps->rig_model == RIG_MODEL_QRPLABS) break;
-            struct kenwood_priv_data *priv = rig->state.priv;
+            // QRPLABS can't seem to decide if they give 37 or 38 bytes for IF command
+            if (strncmp(cmd, "IF", 2) == 0 && rig->caps->rig_model == RIG_MODEL_QRPLABS) { break; }
+
+            struct kenwood_priv_data *priv = STATE(rig)->priv;
+
             rig_debug(RIG_DEBUG_ERR,
                       "%s: wrong answer; len for cmd %s: expected = %d, got %d\n",
                       __func__, cmd, (int)expected, (int)length);
+
             err =  -RIG_EPROTO;
+
             elapsed_ms(&priv->cache_start, HAMLIB_ELAPSED_INVALIDATE);
+
             hl_usleep(50 * 1000); // let's do a short wait
         }
     }
-    while (err != RIG_OK && ++retry < rig->state.rigport.retry);
+    while (err != RIG_OK && ++retry < RIGPORT(rig)->retry);
 
     RETURNFUNC2(err);
 }
@@ -773,25 +840,25 @@ int kenwood_init(RIG *rig)
 {
     struct kenwood_priv_data *priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
+    struct rig_state *rs = STATE(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called, version %s/%s\n", __func__,
               BACKEND_VER, rig->caps->version);
 
-    rig->state.priv = calloc(1, sizeof(struct kenwood_priv_data));
+    rs->priv = calloc(1, sizeof(struct kenwood_priv_data));
 
-    if (rig->state.priv == NULL)
+    if (rs->priv == NULL)
     {
         RETURNFUNC2(-RIG_ENOMEM);
     }
 
-    priv = rig->state.priv;
-
-    memset(priv, 0x00, sizeof(struct kenwood_priv_data));
+    priv = rs->priv;
 
     if (RIG_IS_XG3)
     {
         priv->verify_cmd[0] = caps->cmdtrm;
         priv->verify_cmd[1] = '\0';
+        priv->verify_cmd_len = 1;
     }
     else
     {
@@ -799,6 +866,7 @@ int kenwood_init(RIG *rig)
         priv->verify_cmd[1] = 'D';
         priv->verify_cmd[2] = caps->cmdtrm;
         priv->verify_cmd[3] = '\0';
+        priv->verify_cmd_len = 3;
     }
 
     priv->split = RIG_SPLIT_OFF;
@@ -812,7 +880,8 @@ int kenwood_init(RIG *rig)
             || rig->caps->rig_model == RIG_MODEL_TS50
             || rig->caps->rig_model == RIG_MODEL_TS140S
             || rig->caps->rig_model == RIG_MODEL_TS2000
-            || rig->caps->rig_model == RIG_MODEL_TS440)
+            || rig->caps->rig_model == RIG_MODEL_TS440
+            || rig->caps->rig_model == RIG_MODEL_QRPLABS)
     {
         priv->has_ps = 0;
     }
@@ -839,6 +908,47 @@ int kenwood_init(RIG *rig)
         kenwood_mode_table[8] = RIG_MODE_PKTUSB;
     }
 
+    /* Set up voice memory parameters */
+    priv->voice_mem_max = -1;
+    for (int i = 0; i < HAMLIB_CHANLSTSIZ && !RIG_IS_CHAN_END(rs->chan_list[i]); i++)
+    {
+        if (rs->chan_list[i].type == RIG_MTYPE_VOICE)
+        {
+            priv->voice_mem_min = rs->chan_list[i].startc;
+            priv->voice_mem_max = rs->chan_list[i].endc;
+        }
+        /* Do morse mem here */
+    }
+    if (priv->voice_mem_max > 0)
+    {
+        if (RIG_IS_TS890S || RIG_IS_TS990S)
+        {
+            /* The PB01 command displays the 'Voice Message List', and we don't turn it off;
+               turning it off also cancels the message(stupid firmware!), so it has to be on
+               for the duration.
+               Maybe someday there'll be a better way, but for now, if it bothers you just hit
+               the ESC button(bottom left)
+             */
+            priv->voice_mem_start = "PB01;PB1%d5";
+            priv->voice_mem_stop = "PB1%d0";
+        }
+        else if (RIG_IS_K3 || RIG_IS_K3S || RIG_IS_KX3)
+        {
+            //priv->voice_mem_start = NULL;
+            priv->voice_mem_stop = "SWT37";
+        }
+        else if (RIG_IS_K4)
+        {
+            priv->voice_mem_start = "DAMP%d00000";
+            priv->voice_mem_stop = "DA0";
+        }
+        else
+        {
+            priv->voice_mem_start = "PB%d";
+            priv->voice_mem_stop = "PB0";
+        }
+    }
+
     RETURNFUNC2(RIG_OK);
 }
 
@@ -846,29 +956,29 @@ int kenwood_cleanup(RIG *rig)
 {
     ENTERFUNC;
 
-    free(rig->state.priv);
-    rig->state.priv = NULL;
+    free(STATE(rig)->priv);
+    STATE(rig)->priv = NULL;
 
     RETURNFUNC(RIG_OK);
 }
 
 int kenwood_open(RIG *rig)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
     int err, i;
     char *idptr;
     char id[KENWOOD_MAX_BUF_LEN];
-    int retry_save = rig->state.rigport.retry;
+    int retry_save = RIGPORT(rig)->retry;
 
     ENTERFUNC;
 
     id[0] = 0;
-    rig->state.rigport.retry = 0;
+    RIGPORT(rig)->retry = 0;
 
     priv->question_mark_response_means_rejected = 0;
 
-    if (rig->state.auto_power_on)
+    if (STATE(rig)->auto_power_on)
     {
         // Ensure rig is on
         rig_set_powerstat(rig, 1);
@@ -891,7 +1001,7 @@ int kenwood_open(RIG *rig)
         err = rig_get_powerstat(rig, &powerstat);
 
         if (err == RIG_OK && powerstat == 0 && priv->poweron == 0
-                && rig->state.auto_power_on)
+                && STATE(rig)->auto_power_on)
         {
             priv->has_ps = 1;
             rig_debug(RIG_DEBUG_TRACE, "%s: got PS0 so powerup\n", __func__);
@@ -925,7 +1035,7 @@ int kenwood_open(RIG *rig)
         priv->has_rit2 = 1;
     }
 
-    if (RIG_IS_TS590S)
+    if (RIG_IS_TS590S || RIG_IS_TS990S)
     {
         /* we need the firmware version for these rigs to deal with f/w defects */
         static char fw_version[7];
@@ -936,7 +1046,7 @@ int kenwood_open(RIG *rig)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: cannot get f/w version, defaulting to 1.0\n",
                       __func__);
-            rig->state.rigport.retry = retry_save;
+            RIGPORT(rig)->retry = retry_save;
             priv->fw_rev_uint = 100;
         }
         else
@@ -954,12 +1064,12 @@ int kenwood_open(RIG *rig)
             else
             {
                 rig_debug(RIG_DEBUG_ERR, "%s: cannot get f/w version\n", __func__);
-                rig->state.rigport.retry = retry_save;
+                RIGPORT(rig)->retry = retry_save;
                 RETURNFUNC(-RIG_EPROTO);
             }
         }
 
-        rig_debug(RIG_DEBUG_TRACE, "%s: found f/w version %.1f\n", __func__,
+        rig_debug(RIG_DEBUG_TRACE, "%s: found f/w version %.2f\n", __func__,
                   priv->fw_rev_uint / 100.0);
     }
 
@@ -973,7 +1083,7 @@ int kenwood_open(RIG *rig)
         if (RIG_OK != err)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: no response from rig\n", __func__);
-            rig->state.rigport.retry = retry_save;
+            RIGPORT(rig)->retry = retry_save;
             RETURNFUNC(err);
         }
 
@@ -983,6 +1093,7 @@ int kenwood_open(RIG *rig)
         priv->verify_cmd[1] = 'A';
         priv->verify_cmd[2] = caps->cmdtrm;
         priv->verify_cmd[3] = '\0';
+        priv->verify_cmd_len = 3;
         strcpy(id, "ID019");      /* fake a TS-2000 */
     }
     else
@@ -990,7 +1101,7 @@ int kenwood_open(RIG *rig)
         if (err != RIG_OK)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: cannot get identification\n", __func__);
-            rig->state.rigport.retry = retry_save;
+            RIGPORT(rig)->retry = retry_save;
             RETURNFUNC(err);
         }
     }
@@ -1042,15 +1153,19 @@ int kenwood_open(RIG *rig)
                   __func__, kenwood_id_string_list[i].id);
 
         // current vfo is rx_vfo
-        rig_get_vfo(rig, &rig->state.rx_vfo);
+        rig_get_vfo(rig, &STATE(rig)->rx_vfo);
 
         if (kenwood_id_string_list[i].model == rig->caps->rig_model)
         {
             vfo_t tx_vfo;
             rig_debug(RIG_DEBUG_VERBOSE, "%s: found the right driver for %s(%u)\n",
                       __func__, rig->caps->model_name, rig->caps->rig_model);
+
             /* get current AI state so it can be restored */
-            kenwood_get_trn(rig, &priv->trn_state);  /* ignore errors */
+            if (rig->caps->rig_model != RIG_MODEL_PT8000A) // doesn't know AI command
+            {
+                kenwood_get_trn(rig, &priv->trn_state);  /* ignore errors */
+            }
 
             /* Currently we cannot cope with AI mode so turn it off in
                case last client left it on */
@@ -1077,17 +1192,22 @@ int kenwood_open(RIG *rig)
                           rig_strvfo(priv->tx_vfo));
             }
 
-            rig->state.rigport.retry = retry_save;
+            RIGPORT(rig)->retry = retry_save;
 
             RETURNFUNC(RIG_OK);
         }
 
         /* driver mismatch */
-        rig_debug(RIG_DEBUG_VERBOSE,
-                  "%s: not the right driver apparently (found %u, asked for %d, checked %s)\n",
-                  __func__, rig->caps->rig_model,
-                  kenwood_id_string_list[i].model,
-                  rig->caps->model_name);
+        // SDRCONSOLE identifies as TS-2000 -- even though it's a sub/superset
+        if (rig->caps->rig_model == RIG_MODEL_SDRCONSOLE
+                && kenwood_id_string_list[i].model != 2014)
+        {
+            rig_debug(RIG_DEBUG_VERBOSE,
+                      "%s: not the right driver apparently (found %u, asked for %d, checked %s)\n",
+                      __func__, rig->caps->rig_model,
+                      kenwood_id_string_list[i].model,
+                      rig->caps->model_name);
+        }
 
         // we continue to search for other matching IDs/models
     }
@@ -1098,7 +1218,7 @@ int kenwood_open(RIG *rig)
 
     // we're making this non fatal
     // mismatched IDs can still be tested
-    rig->state.rigport.retry = retry_save;
+    RIGPORT(rig)->retry = retry_save;
 
     RETURNFUNC(RIG_OK);
 }
@@ -1106,7 +1226,7 @@ int kenwood_open(RIG *rig)
 
 int kenwood_close(RIG *rig)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -1119,7 +1239,7 @@ int kenwood_close(RIG *rig)
                                                  it's not supported */
     }
 
-    if (rig->state.auto_power_off)
+    if (STATE(rig)->auto_power_off)
     {
         rig_debug(RIG_DEBUG_TRACE, "%s: got PS1 so powerdown\n", __func__);
         rig_set_powerstat(rig, 0);
@@ -1154,27 +1274,28 @@ int kenwood_get_id(RIG *rig, char *buf)
  */
 int kenwood_get_if(RIG *rig)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
     int retval;
     int post_write_delay_save = 0;
 
     ENTERFUNC;
-    
+
     // Malachite has a 400ms delay but some get commands can work with no delay
     if (RIG_IS_MALACHITE)
     {
-        post_write_delay_save = rig->state.post_write_delay;
-        rig->state.post_write_delay = 0;
+        post_write_delay_save = STATE(rig)->post_write_delay;
+        STATE(rig)->post_write_delay = 0;
     }
 
     retval = kenwood_safe_transaction(rig, "IF", priv->info,
-                                        KENWOOD_MAX_BUF_LEN, caps->if_len);
+                                      KENWOOD_MAX_BUF_LEN, caps->if_len);
 
     if (RIG_IS_MALACHITE)
     {
-        rig->state.post_write_delay = post_write_delay_save;
+        STATE(rig)->post_write_delay = post_write_delay_save;
     }
+
     RETURNFUNC(retval);
 }
 
@@ -1189,7 +1310,7 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
     char cmdbuf[12];
     int retval;
     char vfo_function;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
     rig_debug(RIG_DEBUG_VERBOSE,
@@ -1205,16 +1326,16 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
     if (vfo == RIG_VFO_B &&  priv->is_emulation && priv->curr_mode > 0)
     {
         HAMLIB_TRACE;
-        RETURNFUNC2(RIG_OK);
+        RETURNFUNC(RIG_OK);
     }
 
 #if 0
 
-    if (rig->state.current_vfo == vfo)
+    if (STATE(rig)->current_vfo == vfo)
     {
         rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo already is %s...skipping\n", __func__,
                   rig_strvfo(vfo));
-        RETURNFUNC2(RIG_OK);
+        RETURNFUNC(RIG_OK);
     }
 
 #endif
@@ -1234,24 +1355,24 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
         break;
 
     case RIG_VFO_TX:
-        vfo_function = rig->state.tx_vfo == RIG_VFO_B ? '1' : '0';
+        vfo_function = STATE(rig)->tx_vfo == RIG_VFO_B ? '1' : '0';
         break;
 
 #if 0 // VFO_RX really should NOT be VFO_CURR as VFO_CURR could be either VFO
 
     case RIG_VFO_RX:
-        vfo_function = rig->state.rx_vfo == RIG_VFO_B ? '1' : '0';
+        vfo_function = STATE(rig)->rx_vfo == RIG_VFO_B ? '1' : '0';
         break;
 #endif
 
     case RIG_VFO_CURR:
         HAMLIB_TRACE;
-        rig->state.current_vfo = RIG_VFO_CURR;
-        RETURNFUNC2(RIG_OK);
+        STATE(rig)->current_vfo = RIG_VFO_CURR;
+        RETURNFUNC(RIG_OK);
 
     default:
         rig_debug(RIG_DEBUG_ERR, "%s: unsupported VFO %s\n", __func__, rig_strvfo(vfo));
-        RETURNFUNC2(-RIG_EINVAL);
+        RETURNFUNC(-RIG_EINVAL);
     }
 
     //if rig=ts2000 then check Satellite mode status
@@ -1265,7 +1386,7 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
 
         if (retval != RIG_OK)
         {
-            RETURNFUNC2(retval);
+            RETURNFUNC(retval);
         }
 
         rig_debug(RIG_DEBUG_VERBOSE, "%s: satellite mode status %s\n", __func__,
@@ -1276,7 +1397,7 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
         {
             //SAT mode doesn't allow FR command (cannot select VFO)
             //selecting VFO is useless in SAT MODE
-            RETURNFUNC2(RIG_OK);
+            RETURNFUNC(RIG_OK);
         }
     }
 
@@ -1307,17 +1428,17 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
 
     if (retval != RIG_OK)
     {
-        RETURNFUNC2(retval);
+        RETURNFUNC(retval);
     }
 
     HAMLIB_TRACE;
-    rig->state.current_vfo = vfo;
+    STATE(rig)->current_vfo = vfo;
 
     /* if FN command then there's no FT or FR */
     /* If split mode on, the don't change TxVFO */
     if ('N' == cmdbuf[1] || priv->split != RIG_SPLIT_OFF)
     {
-        RETURNFUNC2(RIG_OK);
+        RETURNFUNC(RIG_OK);
     }
 
     HAMLIB_TRACE;
@@ -1356,7 +1477,7 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
             break;
 
         default:
-            rig_debug(RIG_DEBUG_ERR, "%s: unhandled VFO=%s, deafaulting to VFOA\n",
+            rig_debug(RIG_DEBUG_ERR, "%s: unhandled VFO=%s, defaulting to VFOA\n",
                       __func__, rig_strvfo(priv->tx_vfo));
 
         }
@@ -1369,7 +1490,7 @@ int kenwood_set_vfo(RIG *rig, vfo_t vfo)
     cmdbuf[1] = 'T';
     RETURNFUNC(kenwood_transaction(rig, cmdbuf, NULL, 0));
 #else
-    RETURNFUNC2(retval);
+    RETURNFUNC(retval);
 #endif
 }
 
@@ -1440,7 +1561,7 @@ int kenwood_get_vfo_main_sub(RIG *rig, vfo_t *vfo)
  */
 int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     char cmdbuf[12];
     int retval;
     unsigned char vfo_function;
@@ -1463,7 +1584,7 @@ int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
         RETURNFUNC2(kenwood_transaction(rig, cmdbuf, NULL, 0));
     }
 
-    if (vfo == RIG_VFO_CURR) { vfo = rig->state.current_vfo; }
+    if (vfo == RIG_VFO_CURR) { vfo = STATE(rig)->current_vfo; }
 
     if (vfo == RIG_VFO_TX || vfo == RIG_VFO_RX) { vfo = vfo_fixup(rig, vfo, split); }
 
@@ -1563,9 +1684,9 @@ int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
     tsplit = RIG_SPLIT_OFF; // default in case rig does not set split status
     retval = rig_get_split_vfo(rig, vfo, &tsplit, &tx_vfo);
 
-    priv->split = rig->state.cache.split = split;
-    rig->state.cache.split_vfo = txvfo;
-    elapsed_ms(&rig->state.cache.time_split, HAMLIB_ELAPSED_SET);
+    priv->split = CACHE(rig)->split = split;
+    CACHE(rig)->split_vfo = txvfo;
+    elapsed_ms(&CACHE(rig)->time_split, HAMLIB_ELAPSED_SET);
 
     // and it should be OK to do a SPLIT_OFF at any time so we won's skip that
     if (retval == RIG_OK && split == RIG_SPLIT_ON && tsplit == RIG_SPLIT_ON)
@@ -1585,7 +1706,7 @@ int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
             || rig->caps->rig_model == RIG_MODEL_KX2
             || rig->caps->rig_model == RIG_MODEL_KX3)
     {
-        rig_set_freq(rig, RIG_VFO_B, rig->state.cache.freqMainA);
+        rig_set_freq(rig, RIG_VFO_B, CACHE(rig)->freqMainA);
     }
 
     if (retval != RIG_OK)
@@ -1594,8 +1715,8 @@ int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
     }
 
     /* Remember whether split is on, for kenwood_set_vfo */
-    priv->split = rig->state.cache.split = split;
-    elapsed_ms(&rig->state.cache.time_split, HAMLIB_ELAPSED_SET);
+    priv->split = CACHE(rig)->split = split;
+    elapsed_ms(&CACHE(rig)->time_split, HAMLIB_ELAPSED_SET);
 
     RETURNFUNC2(RIG_OK);
 }
@@ -1607,7 +1728,7 @@ int kenwood_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
  */
 int kenwood_set_split(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     char cmdbuf[6];
     int retval;
 
@@ -1632,7 +1753,7 @@ int kenwood_set_split(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 }
 
 
-/* IF TB
+/* IF
  *  Gets split VFO status from kenwood_get_if()
  *
  */
@@ -1641,37 +1762,14 @@ int kenwood_get_split_vfo_if(RIG *rig, vfo_t rxvfo, split_t *split,
 {
     int transmitting;
     int retval;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct rig_state *rs = STATE(rig);
+    struct kenwood_priv_data *priv = rs->priv;
 
     ENTERFUNC;
 
     if (!split || !txvfo)
     {
         RETURNFUNC(-RIG_EINVAL);
-    }
-
-    if (RIG_IS_TS990S)
-    {
-        char buf[4];
-
-        if (RIG_OK == (retval = kenwood_safe_transaction(rig, "TB", buf, sizeof(buf),
-                                3)))
-        {
-            if ('1' == buf[2])
-            {
-                *split = RIG_SPLIT_ON;
-                *txvfo = RIG_VFO_SUB;
-                priv->tx_vfo = rig->state.tx_vfo = *txvfo;
-            }
-            else
-            {
-                *split = RIG_SPLIT_OFF;
-                *txvfo = RIG_VFO_MAIN;
-                priv->tx_vfo = rig->state.tx_vfo = *txvfo;
-            }
-        }
-
-        RETURNFUNC(retval);
     }
 
     retval = kenwood_get_if(rig);
@@ -1707,35 +1805,43 @@ int kenwood_get_split_vfo_if(RIG *rig, vfo_t rxvfo, split_t *split,
     switch (priv->info[30])
     {
     case '0':
-        if (rig->state.rx_vfo == RIG_VFO_A)
+        rs->rx_vfo = STATE(rig)->current_vfo;
+
+        if (rs->rx_vfo == RIG_VFO_A)
         {
             HAMLIB_TRACE;
-            *txvfo = rig->state.tx_vfo = priv->tx_vfo = (*split
-                                         && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
+            *txvfo = rs->tx_vfo = priv->tx_vfo = (*split
+                                                  && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
         }
-        else if (rig->state.rx_vfo == RIG_VFO_B)
+        else if (rs->rx_vfo == RIG_VFO_B)
         {
             HAMLIB_TRACE;
-            *txvfo = rig->state.tx_vfo = priv->tx_vfo = (*split
-                                         && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
+            *txvfo = rs->tx_vfo = priv->tx_vfo = (*split
+                                                  && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
+        }
+        else if (rs->rx_vfo == RIG_VFO_CURR)
+        {
+            HAMLIB_TRACE;
+            *txvfo = rs->tx_vfo = priv->tx_vfo = (*split
+                                                  && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
         }
         else
         {
             rig_debug(RIG_DEBUG_WARN, "%s(%d): unknown rx_vfo=%s\n", __func__, __LINE__,
-                      rig_strvfo(rig->state.rx_vfo));
+                      rig_strvfo(rs->rx_vfo));
             *txvfo = RIG_VFO_A; // pick a default
-            rig->state.rx_vfo = priv->tx_vfo = RIG_VFO_A;
+            rs->rx_vfo = priv->tx_vfo = RIG_VFO_A;
         }
 
         break;
 
     case '1':
-        if (rig->state.rx_vfo == RIG_VFO_A)
+        if (rs->rx_vfo == RIG_VFO_A)
         {
             HAMLIB_TRACE;
             *txvfo = priv->tx_vfo = (*split && !transmitting) ? RIG_VFO_A : RIG_VFO_B;
         }
-        else if (rig->state.rx_vfo == RIG_VFO_B)
+        else if (rs->rx_vfo == RIG_VFO_B)
         {
             HAMLIB_TRACE;
             *txvfo = priv->tx_vfo = (*split && !transmitting) ? RIG_VFO_B : RIG_VFO_A;
@@ -1743,9 +1849,9 @@ int kenwood_get_split_vfo_if(RIG *rig, vfo_t rxvfo, split_t *split,
         else
         {
             rig_debug(RIG_DEBUG_WARN, "%s(%d): unknown rx_vfo=%s\n", __func__, __LINE__,
-                      rig_strvfo(rig->state.rx_vfo));
+                      rig_strvfo(rs->rx_vfo));
             *txvfo = RIG_VFO_A; // pick a default
-            rig->state.rx_vfo = RIG_VFO_A;
+            rs->rx_vfo = RIG_VFO_A;
         }
 
         break;
@@ -1779,7 +1885,8 @@ int kenwood_get_vfo_if(RIG *rig, vfo_t *vfo)
 {
     int retval;
     int split_and_transmitting;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct rig_state *rs = STATE(rig);
+    struct kenwood_priv_data *priv = rs->priv;
 
     ENTERFUNC;
 
@@ -1805,10 +1912,10 @@ int kenwood_get_vfo_if(RIG *rig, vfo_t *vfo)
     switch (priv->info[30])
     {
     case '0':
-        *vfo = rig->state.rx_vfo = rig->state.tx_vfo = priv->tx_vfo =
-                                       split_and_transmitting ? RIG_VFO_B : RIG_VFO_A;
+        *vfo = rs->rx_vfo = rs->tx_vfo = priv->tx_vfo =
+                                             split_and_transmitting ? RIG_VFO_B : RIG_VFO_A;
 
-        if (priv->info[32] == '1') { priv->tx_vfo = rig->state.tx_vfo = RIG_VFO_B; }
+        if (priv->info[32] == '1') { priv->tx_vfo = rs->tx_vfo = RIG_VFO_B; }
 
         break;
 
@@ -1832,7 +1939,6 @@ int kenwood_get_vfo_if(RIG *rig, vfo_t *vfo)
     RETURNFUNC(RIG_OK);
 }
 
-
 /*
  * kenwood_set_freq
  */
@@ -1843,13 +1949,13 @@ int kenwood_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     vfo_t tvfo;
     freq_t tfreq = 0;
     int err;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called vfo=%s freq=%.0f\n", __func__,
               rig_strvfo(vfo), freq);
 
     tvfo = (vfo == RIG_VFO_CURR
-            || vfo == RIG_VFO_VFO) ? rig->state.current_vfo : vfo;
+            || vfo == RIG_VFO_VFO) ? STATE(rig)->current_vfo : vfo;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: tvfo=%s\n", __func__, rig_strvfo(tvfo));
 
@@ -1861,10 +1967,10 @@ int kenwood_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
         if (RIG_OK != err) { RETURNFUNC2(err); }
     }
 
-    // Malchite is so slow we don't do the get_freq
-    // And when we have detected Doppler operations we just set the freq all the time 
+    // Malachite is so slow we don't do the get_freq
+    // And when we have detected Doppler operations we just set the freq all the time
     // This should provide stable timing for set_ptt operation so relay delays are consistent
-    if (!RIG_IS_MALACHITE && rig->state.doppler == 0) 
+    if (!RIG_IS_MALACHITE && STATE(rig)->doppler == 0)
     {
         rig_get_freq(rig, tvfo, &tfreq);
 
@@ -1914,6 +2020,8 @@ int kenwood_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     if (priv->verify_cmd[1] == 'A' && vfo_letter == 'B') { priv->verify_cmd[1] = 'A'; }
 
     err = kenwood_transaction(rig, freqbuf, NULL, 0);
+    hl_usleep(50 *
+              1000); // TS480 is slow to change freq so give it some time as well as others just in case
 
     if (priv->verify_cmd[1] == 'B' && vfo_letter == 'B') { priv->verify_cmd[1] = 'A'; }
 
@@ -1962,7 +2070,7 @@ int kenwood_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 int kenwood_get_freq_if(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     char freqbuf[50];
     int retval;
 
@@ -1997,7 +2105,7 @@ int kenwood_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
     int retval;
     unsigned char vfo_letter = '\0';
     vfo_t tvfo;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -2007,7 +2115,7 @@ int kenwood_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
     }
 
     tvfo = (vfo == RIG_VFO_CURR
-            || vfo == RIG_VFO_VFO) ? rig->state.current_vfo : vfo;
+            || vfo == RIG_VFO_VFO) ? STATE(rig)->current_vfo : vfo;
 
     if (RIG_VFO_CURR == tvfo)
     {
@@ -2076,7 +2184,7 @@ int kenwood_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
 {
     int retval;
     char buf[7];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -2101,6 +2209,29 @@ int kenwood_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
     RETURNFUNC(RIG_OK);
 }
 
+/* RF
+ * kenwood_get_rit_new (also usable as kenwood_get_xit_new)
+ *   Gets the RIT or XIT value using dedicated command
+ *   and without using IF.
+ */
+int kenwood_get_rit_new(RIG *rig, vfo_t vfo, shortfreq_t *rit)
+{
+    int retval, tempf;
+    char rfbuf[10];
+
+    ENTERFUNC;
+    if (!rit) { RETURNFUNC(-RIG_EINVAL); }
+    retval = kenwood_safe_transaction(rig, "RF", rfbuf, sizeof rfbuf, 7);
+    if (retval != RIG_OK) {RETURNFUNC(retval); }
+    tempf = atoi(rfbuf + 3);
+    if (rfbuf[2] == '1')
+    {
+        tempf = -tempf;
+    }
+    *rit = tempf;
+    RETURNFUNC(RIG_OK);
+}
+
 /*
  * rit can only move up/down by 10 Hz, so we use a loop...
  */
@@ -2112,7 +2243,7 @@ int kenwood_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
     int rit_enabled;
     int xit_enabled;
     shortfreq_t curr_rit;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: vfo=%s, rit=%ld\n",
               __func__,
@@ -2183,7 +2314,7 @@ int kenwood_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
     {
         SNPRINTF(buf, sizeof(buf), "R%c", (rit > 0) ? 'U' : 'D');
         diff = labs(((curr_rit - rit) + (curr_rit - rit) >= 0 ? 5 : -5) /
-                    10); // round to nearest 10Hz
+                    10); // round to nearest 10 Hz
         rig_debug(RIG_DEBUG_TRACE, "%s: rit=%ld, curr_rit=%ld, diff=%d\n", __func__,
                   rit, curr_rit, diff);
         rig_debug(RIG_DEBUG_TRACE, "%s: rit change loop=%d\n", __func__, diff);
@@ -2195,6 +2326,30 @@ int kenwood_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
     }
 
     RETURNFUNC2(retval);
+}
+
+/* RU/RD
+ * Set the RIT/XIT frequency offset
+ *  using dedicated commands (not IF)
+ */
+int kenwood_set_rit_new(RIG *rig, vfo_t vfo, shortfreq_t rit)
+{
+    int retval, diff;
+    shortfreq_t oldrit;
+    char rdbuf[10];
+
+    ENTERFUNC;
+    if (labs(rit) > 9999) { RETURNFUNC(-RIG_EINVAL); }
+    retval = kenwood_get_rit_new(rig, vfo, &oldrit);
+    if (retval != RIG_OK) { RETURNFUNC(retval); }
+    if (rit == oldrit)  // if the new value is the same
+    {
+        RETURNFUNC(RIG_OK); // Nothing to do
+    }
+    diff = rit - oldrit;
+    SNPRINTF(rdbuf, sizeof rdbuf, "R%c%05d;", diff < 0 ? 'D' : 'U', abs(diff));
+    retval = kenwood_transaction(rig, rdbuf, NULL, 0);
+    RETURNFUNC(retval);
 }
 
 /*
@@ -2216,7 +2371,7 @@ int kenwood_set_xit(RIG *rig, vfo_t vfo, shortfreq_t rit)
 
 int kenwood_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
 {
-    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+    ENTERFUNC;
 
     if (RIG_IS_TS990S)
     {
@@ -2321,15 +2476,15 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     int err;
     int datamode = 0;
     int needdata;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE,
               "%s called, vfo=%s, mode=%s, width=%d, curr_vfo=%s\n", __func__,
               rig_strvfo(vfo), rig_strrmode(mode), (int)width,
-              rig_strvfo(rig->state.current_vfo));
+              rig_strvfo(STATE(rig)->current_vfo));
 
-    // we wont' set opposite VFO if the mode is the same as requested
+    // we won't set opposite VFO if the mode is the same as requested
     // setting VFOB mode requires split modifications which cause VFO flashing
     // this should generally work unless the user changes mode on VFOB
     // in which case VFOB won't get mode changed until restart
@@ -2380,6 +2535,13 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         if (RIG_MODE_PKTUSB == mode) { mode = RIG_MODE_RTTYR; }
     }
 
+    if (RIG_IS_TS990S)
+    {
+        if (mode == RIG_MODE_PKTUSB) { mode = RIG_MODE_USBD1; }
+
+        if (mode == RIG_MODE_PKTLSB) { mode = RIG_MODE_LSBD1; }
+    }
+
     kmode = rmode2kenwood(mode, caps->mode_table);
 
     if (kmode < 0)
@@ -2401,7 +2563,36 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     rig_debug(RIG_DEBUG_VERBOSE, "%s: kmode=%d, cmode=%c, datamode=%c\n", __func__,
               kmode, c, data_mode);
 
-    if (RIG_IS_TS990S)
+    if (RIG_IS_TS890S)
+    {
+        char sf[20];
+        char sfcmd[] = "SF0;";
+
+        // TS890 has SF command -- unique so far
+        if (vfo != RIG_VFO_A)
+        {
+            sfcmd[2] = '1';
+        }
+
+        err = kenwood_transaction(rig, sfcmd, sf, sizeof(sf));
+
+        if (err != RIG_OK)
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: %s failed: %s\n", __func__, sfcmd, rigerror(err));
+            return err;
+        }
+
+        sf[14] = c;
+        err = kenwood_transaction(rig, sf, NULL, 0);
+
+        if (err != RIG_OK)
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: %s failed: %s\n", __func__, sf, rigerror(err));
+        }
+
+        return err;
+    }
+    else if (RIG_IS_TS990S)
     {
         /* The TS990s has targetable read mode but can only set the mode
            of the current VFO :( So we need to toggle the operating VFO
@@ -2410,6 +2601,7 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
            RIG_TARGETABLE_MODE since the toggle is not required for
            reading the mode. */
         vfo_t curr_vfo;
+
         err = kenwood_get_vfo_main_sub(rig, &curr_vfo);
 
         if (err != RIG_OK) { RETURNFUNC2(err); }
@@ -2426,10 +2618,14 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 
         if (err == RIG_OK && vfo != RIG_VFO_CURR && vfo != curr_vfo)
         {
-            int err2 = kenwood_set_vfo_main_sub(rig, curr_vfo);
+            int err2;
+
+            err2 = kenwood_set_vfo_main_sub(rig, curr_vfo);
 
             if (err2 != RIG_OK) { RETURNFUNC2(err2); }
         }
+
+        return RIG_OK;
     }
     else
     {
@@ -2461,6 +2657,7 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     {
         SNPRINTF(buf, sizeof(buf), "MD%c", c);
         err = kenwood_transaction(rig, buf, NULL, 0);
+
         if (err != RIG_OK)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: MD cmd failed: %s\n", __func__, rigerror(err));
@@ -2474,7 +2671,7 @@ int kenwood_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     if (vfo == RIG_VFO_CURR)
     {
         HAMLIB_TRACE;
-        vfo = rig->state.current_vfo;
+        vfo = STATE(rig)->current_vfo;
     }
 
     if ((vfo & (RIG_VFO_A | RIG_VFO_MAIN)) && ((priv->datamodeA ==  0 && datamode)
@@ -2631,7 +2828,7 @@ static int kenwood_get_filter_width(RIG *rig, rmode_t mode, pbwidth_t *width)
     if (filter_value >= 50) // then it's probably a custom filter width
     {
         *width = filter_value;
-        return (RIG_OK);
+        RETURNFUNC(RIG_OK);
     }
 
     RETURNFUNC(-RIG_EINVAL);
@@ -2642,17 +2839,18 @@ static int kenwood_get_filter_width(RIG *rig, rmode_t mode, pbwidth_t *width)
  */
 int kenwood_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    char cmd[4];
-    char modebuf[10];
+    char cmd[5];
+    char modebuf[20];
     int offs;
+    int len = 6;
     int retval;
     int kmode;
 
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called, curr_vfo=%s\n", __func__,
-              rig_strvfo(rig->state.current_vfo));
+              rig_strvfo(STATE(rig)->current_vfo));
 
     if (!mode || !width)
     {
@@ -2664,11 +2862,27 @@ int kenwood_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
     /* only need to get it if it has to be initialized */
     if (priv->curr_mode > 0 && priv->is_emulation && vfo == RIG_VFO_B)
     {
-        rig->state.current_vfo = RIG_VFO_A;
+        STATE(rig)->current_vfo = RIG_VFO_A;
         RETURNFUNC2(RIG_OK);
     }
 
-    if (RIG_IS_TS990S)
+    if (RIG_IS_TS890S)
+    {
+        len = 16;
+
+        // TS890 has SF command -- unique so far
+        if (vfo == RIG_VFO_A)
+        {
+            strcpy(cmd, "SF0;");
+            offs = 14;
+        }
+        else
+        {
+            strcpy(cmd, "SF1;");
+            offs = 14;
+        }
+    }
+    else if (RIG_IS_TS990S)
     {
         char c;
 
@@ -2682,8 +2896,10 @@ int kenwood_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 
         switch (vfo)
         {
+        case RIG_VFO_A:
         case RIG_VFO_MAIN: c = '0'; break;
 
+        case RIG_VFO_B:
         case RIG_VFO_SUB: c = '1'; break;
 
         default:
@@ -2709,7 +2925,7 @@ int kenwood_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
         }
     }
 
-    retval = kenwood_safe_transaction(rig, cmd, modebuf, 6, offs + 1);
+    retval = kenwood_safe_transaction(rig, cmd, modebuf, len, offs + 1);
 
     if (retval != RIG_OK)
     {
@@ -2803,7 +3019,7 @@ int kenwood_get_mode_if(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
     int err;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -2854,15 +3070,15 @@ static int kenwood_get_micgain_minmax(RIG *rig, int *micgain_now,
     // we batch these commands together for speed
     char *cmd = "MG;MG000;MG;MG255;MG;MG000;";
     int n;
-    struct rig_state *rs = &rig->state;
+    struct hamlib_port *rp = RIGPORT(rig);
 
     ENTERFUNC;
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, strlen(cmd));
+    retval = write_block(rp, (unsigned char *) cmd, strlen(cmd));
 
     if (retval != RIG_OK) { RETURNFUNC(retval); }
 
-    retval = read_string(&rs->rigport, (unsigned char *) levelbuf, sizeof(levelbuf),
+    retval = read_string(rp, (unsigned char *) levelbuf, sizeof(levelbuf),
                          NULL, 0, 1, 1);
 
     rig_debug(RIG_DEBUG_TRACE, "%s: retval=%d\n", __func__, retval);
@@ -2908,6 +3124,7 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
     int max_length = 18;
     int expected_length;
     int retval;
+    int simple_PC = 0; // flag to do just a simple PC command
     char levelbuf[max_length + 1];
     // read power_now, set 0, read power_min, set 255, read_power_max; set 0
     // we set back to 0 for safety and if restore is true we restore power_min
@@ -2915,9 +3132,12 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
     // we batch these commands together for speed
     char *cmd;
     int n;
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
+    struct hamlib_port *rp = RIGPORT(rig);
 
     ENTERFUNC;
+
+    if (power_now == NULL || power_min == NULL) { simple_PC = 1; }
 
     switch (rig->caps->rig_model)
     {
@@ -2928,16 +3148,20 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
     // TS890S can't take power levels outside 5-100 and 5-25
     // So all we'll do is read power_now
     case RIG_MODEL_TS890S:
-        rig->state.power_min = *power_min = 5;
-        rig->state.power_max = *power_max = 100;
+        rs->power_min = 5;
+        rs->power_max = 100;
 
-        if (rig->state.current_mode == RIG_MODE_AM) { *power_max = 50; }
+        if (power_min) { *power_min = 5; }
 
-        if (rig->state.current_freq >= 70)
+        if (power_max) { *power_max = 100; }
+
+        if (rs->current_mode == RIG_MODE_AM) { *power_max = 25; }
+
+        if (rs->current_freq >= 70000000)
         {
-            rig->state.power_max = 50;
+            rs->power_max = 50;
 
-            if (rig->state.current_mode == RIG_MODE_AM) { *power_max = 13; }
+            if (rs->current_mode == RIG_MODE_AM) { *power_max = 13; }
         }
 
 
@@ -2945,26 +3169,36 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
         break;
 
     default:
-        cmd = "PC;PC000;PC;PC255;PC;PC000;";
+        if (simple_PC)
+        {
+            cmd = "PC;";
+        }
+        else
+        {
+            cmd = "PC;PC000;PC;PC255;PC;PC000;";
+        }
     }
 
     // Don't do this if PTT is on...don't want to max out power!!
-    if (rig->state.cache.ptt == RIG_PTT_ON)
+    if (CACHE(rig)->ptt == RIG_PTT_ON)
     {
         rig_debug(RIG_DEBUG_TRACE, "%s: ptt on so not checking min/max power levels\n",
                   __func__);
         // return the last values we got
-        *power_now = rig->state.power_now;
-        *power_min = rig->state.power_min;
-        *power_max = rig->state.power_max;
+        *power_now = rs->power_now;
+
+        if (power_min) { *power_min = rs->power_min; }
+
+        if (power_max) { *power_max = rs->power_max; }
+
         RETURNFUNC(RIG_OK);
     }
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, strlen(cmd));
+    retval = write_block(rp, (unsigned char *) cmd, strlen(cmd));
 
     if (retval != RIG_OK) { RETURNFUNC(retval); }
 
-    if (RIG_IS_TS890S || RIG_IS_TS480)
+    if (RIG_IS_TS890S || RIG_IS_TS480 || simple_PC)
     {
         expected_length = 6;
     }
@@ -2973,7 +3207,7 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
         expected_length = 18;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) levelbuf,
+    retval = read_string(rp, (unsigned char *) levelbuf,
                          expected_length + 1,
                          NULL, 0, 0, 1);
 
@@ -2988,7 +3222,7 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
         RETURNFUNC(-RIG_EPROTO);
     }
 
-    if (RIG_IS_TS890S || RIG_IS_TS480)
+    if (RIG_IS_TS890S || RIG_IS_TS480 || simple_PC)
     {
         n = sscanf(levelbuf, "PC%d;", power_now);
 
@@ -3018,12 +3252,15 @@ static int kenwood_get_power_minmax(RIG *rig, int *power_now, int *power_min,
         }
     }
 
-    rig_debug(RIG_DEBUG_TRACE, "%s: returning now=%d, min=%d, max=%d\n", __func__,
-              *power_now, *power_min, *power_max);
 
-    rig->state.power_now = *power_now;
-    rig->state.power_min = *power_min;
-    rig->state.power_max = *power_max;
+    rs->power_now = *power_now;
+
+    if (!simple_PC)
+    {
+        rs->power_min = *power_min;
+        rs->power_max = *power_max;
+    }
+
     RETURNFUNC(RIG_OK);
 }
 
@@ -3142,7 +3379,8 @@ int kenwood_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char levelbuf[16];
     int i, kenwood_val, len, result;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct rig_state *rs = STATE(rig);
+    struct kenwood_priv_data *priv = rs->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
     gran_t *level_info;
 
@@ -3150,6 +3388,7 @@ int kenwood_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
     /* Check input parameter against level_gran limits */
     result = check_level_param(rig, level, val, &level_info);
+
     if (result != RIG_OK) { RETURNFUNC(result); }
 
     if (RIG_LEVEL_IS_FLOAT(level))
@@ -3167,18 +3406,28 @@ int kenwood_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
     case RIG_LEVEL_RFPOWER:
     {
-        int power_now, power_min, power_max;
-        // Power min/max can vary so we query to find them out every time
-        retval = kenwood_get_power_minmax(rig, &power_now, &power_min, &power_max, 0);
+        retval = RIG_OK;
+        pbwidth_t twidth;
+        int err = rig_get_mode(rig, vfo, &priv->curr_mode, &twidth);
 
-        if (retval != RIG_OK) { RETURNFUNC(retval); }
+        // https://github.com/Hamlib/Hamlib/issues/1595
+        if (!err && priv->last_mode_pc !=
+                priv->curr_mode)  // only need to check when mode changes
+        {
+            priv->last_mode_pc = priv->curr_mode;
+            // Power min/max can vary so we query to find them out every time
+            retval = kenwood_get_power_minmax(rig, &priv->power_now, &priv->power_min,
+                                              &priv->power_max, 0);
+
+            if (retval != RIG_OK) { RETURNFUNC(retval); }
+        }
 
         // https://github.com/Hamlib/Hamlib/issues/465
-        kenwood_val = val.f * power_max;
+        kenwood_val = val.f * priv->power_max;
 
-        if (kenwood_val < power_min) { kenwood_val = power_min; }
+        if (kenwood_val < priv->power_min) { kenwood_val = priv->power_min; }
 
-        if (kenwood_val > power_max) { kenwood_val = power_max; }
+        if (kenwood_val > priv->power_max) { kenwood_val = priv->power_max; }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "PC%03d", kenwood_val);
         break;
@@ -3288,9 +3537,9 @@ int kenwood_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         {
             int foundit = 0;
 
-            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rig->state.attenuator[i]; i++)
+            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rs->attenuator[i]; i++)
             {
-                if (val.i == rig->state.attenuator[i])
+                if (val.i == rs->attenuator[i])
                 {
                     SNPRINTF(levelbuf, sizeof(levelbuf), "RA%0*d", len, i + 1);
                     foundit = 1;
@@ -3317,9 +3566,9 @@ int kenwood_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         {
             int foundit = 0;
 
-            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rig->state.preamp[i]; i++)
+            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rs->preamp[i]; i++)
             {
-                if (val.i == rig->state.preamp[i])
+                if (val.i == rs->preamp[i])
                 {
                     SNPRINTF(levelbuf, sizeof(levelbuf), "PA%01d", i + 1);
                     foundit = 1;
@@ -3522,7 +3771,8 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     int retval;
     int lvl;
     int i, ret, agclevel, len, value;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct rig_state *rs = STATE(rig);
+    struct kenwood_priv_data *priv = rs->priv;
     struct kenwood_priv_caps *caps = kenwood_caps(rig);
     gran_t *level_info;
 
@@ -3534,11 +3784,9 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     }
 
     level_info = &rig->caps->level_gran[rig_setting2idx(level)];
-    
+
     switch (level)
     {
-        int power_now, power_min, power_max;
-
     case RIG_LEVEL_RAWSTR:
         if (RIG_IS_TS590S || RIG_IS_TS590SG)
         {
@@ -3647,23 +3895,23 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (retval != RIG_OK)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(lvlbuf);
 
         if (ack_len != len)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (sscanf(&lvlbuf[len - 3], "%d", &lvl) != 1)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         val->f = (float) lvl / 255.f;
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
     }
 
     case RIG_LEVEL_ATT:
@@ -3685,7 +3933,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         {
             for (i = 0; i < lvl && i < HAMLIB_MAXDBLSTSIZ; i++)
             {
-                if (rig->state.attenuator[i] == 0)
+                if (rs->attenuator[i] == 0)
                 {
                     rig_debug(RIG_DEBUG_ERR, "%s: "
                               "unexpected att level %d\n",
@@ -3699,7 +3947,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
                 RETURNFUNC(-RIG_EINTERNAL);
             }
 
-            val->i = rig->state.attenuator[i - 1];
+            val->i = rs->attenuator[i - 1];
         }
 
         break;
@@ -3722,7 +3970,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
             for (i = 0; i < lvl && i < HAMLIB_MAXDBLSTSIZ; i++)
             {
-                if (rig->state.preamp[i] == 0)
+                if (rs->preamp[i] == 0)
                 {
                     rig_debug(RIG_DEBUG_ERR, "%s: "
                               "unexpected preamp level %d\n",
@@ -3736,7 +3984,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
                 RETURNFUNC(-RIG_EINTERNAL);
             }
 
-            val->i = rig->state.preamp[i - 1];
+            val->i = rs->preamp[i - 1];
         }
         else
         {
@@ -3749,14 +3997,31 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         break;
 
     case RIG_LEVEL_RFPOWER:
-        // Power min/max can vary so we query to find them out every time
-        retval = kenwood_get_power_minmax(rig, &power_now, &power_min, &power_max, 1);
+    {
+        pbwidth_t twidth;
+        int err = rig_get_mode(rig, vfo, &priv->curr_mode, &twidth);
 
-        if (retval != RIG_OK) { RETURNFUNC(retval); }
+        // https://github.com/Hamlib/Hamlib/issues/1595
+        if (!err && priv->last_mode_pc !=
+                priv->curr_mode)  // only need to check when mode changes
+        {
+            priv->last_mode_pc = priv->curr_mode;
+            // Power min/max can vary so we query to find them out every time
+            retval = kenwood_get_power_minmax(rig, &priv->power_now, &priv->power_min,
+                                              &priv->power_max, 0);
 
-        power_min = 0; // our return scale is 0-max to match the input scale
-        val->f = (power_now - power_min) / (float)(power_max - power_min);
+            if (retval != RIG_OK) { RETURNFUNC(retval); }
+        }
+        else
+        {
+            retval = kenwood_get_power_minmax(rig, &priv->power_now, NULL, NULL, 0);
+        }
+
+        priv->power_min = 0; // our return scale is 0-max to match the input scale
+        val->f = (priv->power_now - priv->power_min) / (float)(priv->power_max -
+                 priv->power_min);
         RETURNFUNC(RIG_OK);
+    }
 
     case RIG_LEVEL_AF:
     {
@@ -3767,8 +4032,8 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         // This could be done by rig but easy enough to make it automagic
         if (priv->ag_format < 0)
         {
-            int retry_save = rig->state.rigport.retry;
-            rig->state.rigport.retry = 0;  // speed up this check so no retries
+            int retry_save = RIGPORT(rig)->retry;
+            RIGPORT(rig)->retry = 0;  // speed up this check so no retries
             rig_debug(RIG_DEBUG_TRACE, "%s: AF format check determination...\n", __func__);
             // Determine AG format
             // =-1 == Undetermine
@@ -3806,7 +4071,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
                 }
             }
 
-            rig->state.rigport.retry = retry_save;
+            RIGPORT(rig)->retry = retry_save;
         }
 
         rig_debug(RIG_DEBUG_TRACE, "%s: ag_format=%d\n", __func__, priv->ag_format);
@@ -3882,6 +4147,7 @@ int kenwood_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             rig_debug(RIG_DEBUG_ERR, "%s: Error getting MICGAIN\n", __func__);
             RETURNFUNC(ret);
         }
+
         vali = val->i;
         val->f = (vali - priv->micgain_min) / (float)(priv->micgain_max -
                  priv->micgain_min);
@@ -4140,7 +4406,8 @@ int kenwood_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
         RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
 
     case RIG_FUNC_NR:
-        if (RIG_IS_TS890S)
+        if (RIG_IS_TS890S || RIG_IS_TS590S || RIG_IS_TS590SG || RIG_IS_TS480
+                || RIG_IS_TS2000 || RIG_IS_QRPLABS)
         {
             char c = '1';
 
@@ -4371,7 +4638,7 @@ int kenwood_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
  */
 int kenwood_set_ctcss_tone(RIG *rig, vfo_t vfo, tone_t tone)
 {
-    const struct rig_caps *caps;
+    struct rig_caps *caps;
     char tonebuf[16];
     int i;
 
@@ -4393,14 +4660,15 @@ int kenwood_set_ctcss_tone(RIG *rig, vfo_t vfo, tone_t tone)
     }
 
     /* TODO: replace menu no 57 by a define */
-    SNPRINTF(tonebuf, sizeof(tonebuf), "EX%03d%04d", 57, i + 1);
+    SNPRINTF(tonebuf, sizeof(tonebuf), "EX%03d%04d", 57,
+             i + kenwood_caps(rig)->tone_table_base);
 
     RETURNFUNC(kenwood_transaction(rig, tonebuf, NULL, 0));
 }
 
 int kenwood_set_ctcss_tone_tn(RIG *rig, vfo_t vfo, tone_t tone)
 {
-    const struct rig_caps *caps = rig->caps;
+    struct rig_caps *caps = rig->caps;
     char buf[16];
     int i;
 
@@ -4444,11 +4712,12 @@ int kenwood_set_ctcss_tone_tn(RIG *rig, vfo_t vfo, tone_t tone)
             RETURNFUNC(-RIG_EINVAL);
         }
 
-        SNPRINTF(buf, sizeof(buf), "TN%c%02d", c, i + 1);
+        SNPRINTF(buf, sizeof(buf), "TN%c%02d", c,
+                 i + kenwood_caps(rig)->tone_table_base);
     }
     else
     {
-        SNPRINTF(buf, sizeof(buf), "TN%02d", i + 1);
+        SNPRINTF(buf, sizeof(buf), "TN%02d", i + kenwood_caps(rig)->tone_table_base);
     }
 
     RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
@@ -4456,12 +4725,12 @@ int kenwood_set_ctcss_tone_tn(RIG *rig, vfo_t vfo, tone_t tone)
 
 /*
  * kenwood_get_ctcss_tone
- * Assumes rig->state.priv != NULL
+ * Assumes STATE(rig)->priv != NULL
  */
 int kenwood_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
-    const struct rig_caps *caps;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
+    struct rig_caps *caps;
     char tonebuf[3];
     int i, retval;
     unsigned int tone_idx;
@@ -4475,7 +4744,14 @@ int kenwood_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
 
     caps = rig->caps;
 
-    if (RIG_IS_TS990S)
+    if (RIG_IS_TS890S)
+    {
+        char buf[5];
+
+        retval = kenwood_safe_transaction(rig, "TN", buf, sizeof(buf), 4);
+        memcpy(tonebuf, buf + 2, 2);
+    }
+    else if (RIG_IS_TS990S)
     {
         char cmd[4];
         char buf[6];
@@ -4518,7 +4794,7 @@ int kenwood_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
     tonebuf[2] = '\0';
     tone_idx = atoi(tonebuf);
 
-    if (tone_idx == 0)
+    if (tone_idx < kenwood_caps(rig)->tone_table_base)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: CTCSS tone is zero (%s)\n",
                   __func__, tonebuf);
@@ -4536,14 +4812,14 @@ int kenwood_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
         }
     }
 
-    *tone = caps->ctcss_list[tone_idx - 1];
+    *tone = caps->ctcss_list[tone_idx - kenwood_caps(rig)->tone_table_base];
 
     RETURNFUNC(RIG_OK);
 }
 
 int kenwood_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
 {
-    const struct rig_caps *caps = rig->caps;
+    struct rig_caps *caps = rig->caps;
     char buf[16];
     int i;
 
@@ -4587,11 +4863,12 @@ int kenwood_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
             RETURNFUNC(-RIG_EINVAL);
         }
 
-        SNPRINTF(buf, sizeof(buf), "CN%c%02d", c, i + 1);
+        SNPRINTF(buf, sizeof(buf), "CN%c%02d", c,
+                 i + kenwood_caps(rig)->tone_table_base);
     }
     else
     {
-        SNPRINTF(buf, sizeof(buf), "CN%02d", i + 1);
+        SNPRINTF(buf, sizeof(buf), "CN%02d", i + kenwood_caps(rig)->tone_table_base);
     }
 
     RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
@@ -4599,7 +4876,7 @@ int kenwood_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
 
 int kenwood_get_ctcss_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 {
-    const struct rig_caps *caps;
+    struct rig_caps *caps;
     char cmd[4];
     char tonebuf[6];
     int offs;
@@ -4656,7 +4933,7 @@ int kenwood_get_ctcss_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 
     tone_idx = atoi(tonebuf + offs);
 
-    if (tone_idx == 0)
+    if (tone_idx < kenwood_caps(rig)->tone_table_base)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: CTCSS is zero (%s)\n",
                   __func__, tonebuf);
@@ -4674,7 +4951,7 @@ int kenwood_get_ctcss_sql(RIG *rig, vfo_t vfo, tone_t *tone)
         }
     }
 
-    *tone = caps->ctcss_list[tone_idx - 1];
+    *tone = caps->ctcss_list[tone_idx - kenwood_caps(rig)->tone_table_base];
 
     RETURNFUNC(RIG_OK);
 }
@@ -4730,6 +5007,10 @@ int kenwood_set_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t option)
         }
 
         SNPRINTF(cmd, sizeof(cmd), "AN0%c%c99", c, a);
+    }
+    else if (RIG_IS_TS890S)
+    {
+        SNPRINTF(cmd, sizeof(cmd), "AN%c999", a);
     }
     else if (RIG_IS_TS590S || RIG_IS_TS590SG)
     {
@@ -4797,6 +5078,11 @@ int kenwood_get_ant(RIG *rig, vfo_t vfo, ant_t dummy, value_t *option,
         retval = kenwood_safe_transaction(rig, "AN0", ackbuf, sizeof(ackbuf), 7);
         offs = 4;
     }
+    else if (RIG_IS_TS890S)
+    {
+        retval = kenwood_safe_transaction(rig, "AN", ackbuf, sizeof(ackbuf), 6);
+        offs = 2;
+    }
     else if (RIG_IS_TS590S || RIG_IS_TS590SG)
     {
         retval = kenwood_safe_transaction(rig, "AN", ackbuf, sizeof(ackbuf), 5);
@@ -4840,7 +5126,7 @@ int kenwood_get_ant(RIG *rig, vfo_t vfo, ant_t dummy, value_t *option,
  */
 int kenwood_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     int retval;
 
     ENTERFUNC;
@@ -5001,8 +5287,11 @@ int kenwood_set_trn(RIG *rig, int trn)
 
     switch (rig->caps->rig_model)
     {
-    char buf[5];
+        char buf[5];
+
     case RIG_MODEL_POWERSDR: // powersdr doesn't have AI command
+    case RIG_MODEL_THETIS: // powersdr doesn't have AI command
+    case RIG_MODEL_PT8000A: // powersdr doesn't have AI command
         RETURNFUNC(-RIG_ENAVAIL);
 
     case RIG_MODEL_TS990S:
@@ -5037,7 +5326,7 @@ int kenwood_get_trn(RIG *rig, int *trn)
 
     /* these rigs only have AI[0|1] set commands and no AI query */
     if (RIG_IS_TS450S || RIG_IS_TS690S || RIG_IS_TS790 || RIG_IS_TS850
-            || RIG_IS_TS950S || RIG_IS_TS950SDX || RIG_IS_POWERSDR)
+            || RIG_IS_TS950S || RIG_IS_TS950SDX || RIG_IS_POWERSDR || RIG_IS_THETIS)
     {
         RETURNFUNC(-RIG_ENAVAIL);
     }
@@ -5074,8 +5363,8 @@ int kenwood_get_trn(RIG *rig, int *trn)
 int kenwood_set_powerstat(RIG *rig, powerstat_t status)
 {
     int retval;
-    struct rig_state *state = &rig->state;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct hamlib_port *rp = RIGPORT(rig);
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     if ((priv->is_k3 || priv->is_k3s) && status == RIG_POWER_ON)
     {
@@ -5085,7 +5374,7 @@ int kenwood_set_powerstat(RIG *rig, powerstat_t status)
     }
 
     int i = 0;
-    int retry_save = rig->state.rigport.retry;
+    int retry_save = rp->retry;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called status=%d\n", __func__, status);
 
@@ -5093,11 +5382,11 @@ int kenwood_set_powerstat(RIG *rig, powerstat_t status)
     {
         // When powering on a Kenwood rig needs dummy bytes to wake it up,
         // then wait at least 200ms and within 2 seconds issue the power-on command again
-        write_block(&state->rigport, (unsigned char *) "PS1;", 4);
+        write_block(rp, (unsigned char *) "PS1;", 4);
         hl_usleep(500000);
     }
 
-    rig->state.rigport.retry = 0;
+    rp->retry = 0;
 
     retval = kenwood_transaction(rig,
                                  (status == RIG_POWER_ON) ? "PS1;" : "PS0;",
@@ -5113,7 +5402,7 @@ int kenwood_set_powerstat(RIG *rig, powerstat_t status)
 
             if (retval == RIG_OK)
             {
-                rig->state.rigport.retry = retry_save;
+                rp->retry = retry_save;
                 RETURNFUNC2(retval);
             }
 
@@ -5121,7 +5410,7 @@ int kenwood_set_powerstat(RIG *rig, powerstat_t status)
         }
     }
 
-    rig->state.rigport.retry = retry_save;
+    rp->retry = retry_save;
 
     if (i == 9)
     {
@@ -5141,8 +5430,8 @@ int kenwood_get_powerstat(RIG *rig, powerstat_t *status)
 {
     char pwrbuf[6];
     int result;
-    struct rig_state *state = &rig->state;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct hamlib_port *rp = RIGPORT(rig);
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -5167,19 +5456,19 @@ int kenwood_get_powerstat(RIG *rig, powerstat_t *status)
     short timeout_retry_save;
     int timeout_save;
 
-    retry_save = state->rigport.retry;
-    timeout_retry_save = state->rigport.timeout_retry;
-    timeout_save = state->rigport.timeout;
+    retry_save = rp->retry;
+    timeout_retry_save = rp->timeout_retry;
+    timeout_save = rp->timeout;
 
-    state->rigport.retry = 0;
-    state->rigport.timeout_retry = 0;
-    state->rigport.timeout = 500;
+    rp->retry = 0;
+    rp->timeout_retry = 0;
+    rp->timeout = 500;
 
     result = kenwood_safe_transaction(rig, "PS", pwrbuf, 6, 3);
 
-    state->rigport.retry = retry_save;
-    state->rigport.timeout_retry = timeout_retry_save;
-    state->rigport.timeout = timeout_save;
+    rp->retry = retry_save;
+    rp->timeout_retry = timeout_retry_save;
+    rp->timeout = timeout_save;
 
     // Rig may respond here already
     if (result == RIG_OK)
@@ -5206,9 +5495,10 @@ int kenwood_get_powerstat(RIG *rig, powerstat_t *status)
     // after waiting for at least 200ms and within 2 seconds after dummy data
     hl_usleep(500000);
     // Discard any unsolicited data
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
     result = kenwood_safe_transaction(rig, "PS", pwrbuf, 6, 3);
+
     if (result != RIG_OK)
     {
         RETURNFUNC(result);
@@ -5274,8 +5564,9 @@ int kenwood_reset(RIG *rig, reset_t reset)
 int kenwood_send_morse(RIG *rig, vfo_t vfo, const char *msg)
 {
     char morsebuf[40], m2[30];
-    int msg_len, retval, i;
+    int msg_len, retval;
     const char *p;
+    struct kenwood_priv_data *priv;
 
     ENTERFUNC;
 
@@ -5304,17 +5595,16 @@ int kenwood_send_morse(RIG *rig, vfo_t vfo, const char *msg)
                 RETURNFUNC(retval);
             }
 
-            /*
-             * If answer is "KY0;", there is space in buffer and we can proceed.
-             * If answer is "KY1;", we have to wait a while
-             * If answer is "KY2;", there is space in buffer and we aren't sending so we can proceed.
-             * If answer is something else, return with error to prevent infinite loops
-             */
+            // If answer is "KY0;", there is space in buffer and we can proceed.
+            // If answer is "KY1;", we have to wait a while
+            // If answer is "KY2;", there is space in buffer and we aren't sending so we can proceed.
+            // If answer is something else, return with error to prevent infinite loops
+
             if (!strncmp(m2, "KY0", 3)) { break; }
 
             if (!strncmp(m2, "KY2", 3)) { break; }
 
-            if (!strncmp(m2, "KY1", 3)) { hl_usleep(50*1000); }
+            if (!strncmp(m2, "KY1", 3)) { hl_usleep(50 * 1000); }
             else { RETURNFUNC(-RIG_EINVAL); }
         }
 
@@ -5339,14 +5629,32 @@ int kenwood_send_morse(RIG *rig, vfo_t vfo, const char *msg)
             SNPRINTF(morsebuf, sizeof(morsebuf), "KY %s", m2);
             break;
 
+        case RIG_MODEL_TS590S:
+        //??case RIG_MODEL_TS590SG:
+            /* The command must consist of 28 bytes right aligned.
+             * See https://github.com/Hamlib/Hamlib/issues/1634
+             */
+            SNPRINTF(morsebuf, sizeof(morsebuf), "KY %24s", m2);
+            break;
+
+        case RIG_MODEL_TS890S:
+            SNPRINTF(morsebuf, sizeof morsebuf, "KY2%s", m2);
+            break;
+
+        case RIG_MODEL_TS990S:
+            // Variable message length only on newer firmware
+            priv = STATE(rig)->priv;
+            if (priv->fw_rev_uint >= 110)
+            {
+                SNPRINTF(morsebuf, sizeof morsebuf, "KY2%s", m2);
+                break;
+            }
+            HL_FALLTHROUGH
+
         default:
             /* the command must consist of 28 bytes 0x20 padded */
             SNPRINTF(morsebuf, sizeof(morsebuf), "KY %-24s", m2);
 
-            for (i = strlen(morsebuf) - 1; i > 0 && morsebuf[i] == ' '; --i)
-            {
-                morsebuf[i] = 0x20;
-            }
         }
 
         retval = kenwood_transaction(rig, morsebuf, NULL, 0);
@@ -5378,60 +5686,35 @@ int kenwood_stop_morse(RIG *rig, vfo_t vfo)
  */
 int kenwood_send_voice_mem(RIG *rig, vfo_t vfo, int bank)
 {
-    char cmd[16];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    char cmd[32];
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     ENTERFUNC;
 
-#if 0 // don't really need to turn on the list
-    SNPRINTF(cmd, sizeof(cmd), "PB01");
-    kenwood_transaction(rig, cmd, NULL, 0);
-#endif
-    if ((bank < 1 || bank > 3) &&
-        (rig->caps->rig_model == RIG_MODEL_TS2000
-        || rig->caps->rig_model == RIG_MODEL_TS480))
+    if (bank < priv->voice_mem_min || bank > priv->voice_mem_max)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: TS2000/TS480 channel is from 1 to 3\n", __func__);
-        return -RIG_EINVAL;
+        rig_debug(RIG_DEBUG_ERR, "%s: Voice channels from %d to %d, %d out of range\n", __func__,
+                  (int)priv->voice_mem_min, (int)priv->voice_mem_max, bank);
+        RETURNFUNC(-RIG_EINVAL);
     }
-    // some rigs have 5 channels -- newew ones  have 10 channels
-    if ((bank  < 1 || bank > 5)
-        && (rig->caps->rig_model == RIG_MODEL_TS590SG
-        || rig->caps->rig_model == RIG_MODEL_TS590S))
-    {
-        rig_debug(RIG_DEBUG_ERR, "%s: TS590S/SG channel is from 1 to 5\n", __func__);
-        return -RIG_EINVAL;
-    }
-    if (rig->caps->rig_model == RIG_MODEL_TS2000
-        || (rig->caps->rig_model == RIG_MODEL_TS480
-        || (rig->caps->rig_model == RIG_MODEL_TS590SG
-        || rig->caps->rig_model == RIG_MODEL_TS590S)))
-    {
-        SNPRINTF(cmd, sizeof(cmd), "PB%d", bank);
-    }
-    else
-    {
-        SNPRINTF(cmd, sizeof(cmd), "PB1%d1", bank);
-    }
+
+    if (!priv->voice_mem_start) { RETURNFUNC(-RIG_EINTERNAL); }
+    SNPRINTF(cmd, sizeof(cmd), priv->voice_mem_start, bank);
+
     priv->voice_bank = bank;
     RETURNFUNC(kenwood_transaction(rig, cmd, NULL, 0));
 }
 
 int kenwood_stop_voice_mem(RIG *rig, vfo_t vfo)
 {
-    char cmd[16];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    char cmd[32];
+    const struct kenwood_priv_data *priv = STATE(rig)->priv;
     ENTERFUNC;
-    if (rig->caps->rig_model == RIG_MODEL_TS2000
-        || (rig->caps->rig_model == RIG_MODEL_TS480
-        || (rig->caps->rig_model == RIG_MODEL_TS590SG
-        || rig->caps->rig_model == RIG_MODEL_TS590S)))
-    {
-        SNPRINTF(cmd, sizeof(cmd), "PB0");
-    }
-    else
-    {
-        SNPRINTF(cmd, sizeof(cmd), "PB1%d0", priv->voice_bank);
-    }
+
+    if (!priv->voice_mem_stop) { RETURNFUNC(-RIG_EINTERNAL); }
+
+    // priv->voice_bank may be unused
+    SNPRINTF(cmd, sizeof(cmd), priv->voice_mem_stop, priv->voice_bank);
+
     RETURNFUNC(kenwood_transaction(rig, cmd, NULL, 0));
 }
 
@@ -5588,7 +5871,7 @@ int kenwood_get_mem_if(RIG *rig, vfo_t vfo, int *ch)
 {
     int err;
     char buf[4];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -5825,9 +6108,9 @@ int kenwood_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
     RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
 }
 
-int kenwood_set_ext_parm(RIG *rig, token_t token, value_t val)
+int kenwood_set_ext_parm(RIG *rig, hamlib_token_t token, value_t val)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     char buf[4];
 
     ENTERFUNC;
@@ -5857,10 +6140,122 @@ int kenwood_set_ext_parm(RIG *rig, token_t token, value_t val)
     RETURNFUNC(-RIG_EINVAL);
 }
 
-int kenwood_get_ext_parm(RIG *rig, token_t token, value_t *val)
+/*
+ * kenwood_set_clock
+ */
+int kenwood_set_clock(RIG *rig, int year, int month, int day, int hour, int min,
+                      int sec, double msec, int utc_offset)
+{
+    char cmd[20];
+    int retval, kenwood_val;
+
+    /* Do the offset first.  Then if the clock is synced to NTP,
+     *  the set failure still should allow correct display
+     *
+     * utc_offset = hours * 100 + minutes
+     * Kenwood value = 15 minute intervals normalized to 56 ( = UTC+00)
+     */
+    // Convert utc_offset to minutes
+    kenwood_val = ((utc_offset / 100) * 60) + (utc_offset % 100);
+    // Now convert to 15 minute intervals, centered on 56
+    kenwood_val = kenwood_val / 15 + 56;
+    SNPRINTF(cmd, sizeof(cmd), "CK2%03d", kenwood_val);
+    retval = kenwood_transaction(rig, cmd, NULL, 0);
+
+    if (retval != RIG_OK) {return retval;}
+
+    // Offset is set, now check if clock is settable
+    retval = kenwood_transaction(rig, "CK6", cmd, sizeof(cmd));
+
+    if (retval != RIG_OK) {return retval;}
+
+    if (cmd[3] == '1')
+    {
+        // OK, autoset by NTP is on so we can't set it
+        // What should we tell the user?
+        // Until I hear otherwise, pretend everything worked, and
+        //   the local clock should display the correct time in whatever
+        //   zone the app thought it was trying to set.
+        return RIG_OK;
+    }
+
+    // Local clock should be settable; build the command
+    SNPRINTF(cmd, sizeof(cmd), "CK0%02d%02d%02d%02d%02d%02d", year % 100, month,
+             day,
+             hour, min, sec);
+
+    if (RIG_IS_TS990S)
+    {
+        // TS-990S does not have seconds
+        cmd[13] = '\0';
+    }
+
+    retval = kenwood_transaction(rig, cmd, NULL, 0);
+
+    return retval;
+}
+
+/*
+ * kenwood_get_clock
+ */
+int kenwood_get_clock(RIG *rig, int *year, int *month, int *day, int *hour,
+                      int *min, int *sec, double *msec, int *utc_offset)
+{
+    int retval;
+    int fields, diff;
+    char ans[20];
+
+    // Make sure the clock has been set at least once
+    retval = kenwood_transaction(rig, "CK1", ans, sizeof(ans));
+
+    if (retval != RIG_OK) {return retval;}
+
+    if (ans[3] != '1')
+    {
+        return -RIG_ENAVAIL;
+    }
+
+    // Get the local clock
+    retval = kenwood_transaction(rig, "CK0", ans, sizeof(ans));
+
+    if (retval != RIG_OK) {return retval;}
+
+    fields = sscanf(ans, "CK0%2d%2d%2d%2d%2d%2d", year, month, day, hour, min, sec);
+
+    // TS-890S doesn't define what P6 is, but it sure looks like seconds to me.
+    // TS-990S doesn't have a P6, so set it to 0
+    if (fields < 6)
+    {
+        *sec = 0;
+    }
+
+    // Add the century
+    if (*year <= 20) //TODO: Update this every decade or so
+    {
+        *year += 100;
+    }
+
+    *year += 2000;   //TODO: Update this every century or so
+
+    // Now figure out the time zone
+    retval = kenwood_transaction(rig, "CK2", ans, sizeof(ans));
+
+    if (retval != RIG_OK) {return retval;}
+
+    diff = (atoi(&ans[3]) - 56) * 15;   // UTC offset in minutes
+    // Pack as hours * 100 + minutes
+    *utc_offset = (diff / 60) * 100 + diff % 60;
+
+    // No msec available
+    *msec = 0;
+
+    return RIG_OK;
+}
+
+int kenwood_get_ext_parm(RIG *rig, hamlib_token_t token, value_t *val)
 {
     int err;
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -5909,7 +6304,7 @@ const char *kenwood_get_info(RIG *rig)
     char firmbuf[10];
     int retval;
 
-    ENTERFUNC;
+    ENTERFUNC2;
 
     if (!rig)
     {
@@ -6130,6 +6525,7 @@ DECLARE_INITRIG_BACKEND(kenwood)
     rig_register(&kx3_caps);
     rig_register(&k4_caps);
     rig_register(&xg3_caps);
+    rig_register(&sdrconsole_caps);
 
     rig_register(&ts440_caps);
     rig_register(&ts940_caps);
@@ -6164,7 +6560,10 @@ DECLARE_INITRIG_BACKEND(kenwood)
     rig_register(&tx500_caps);
     rig_register(&sdruno_caps);
     rig_register(&qrplabs_caps);
+    rig_register(&qrplabs_qmx_caps);
     rig_register(&fx4_caps);
+    rig_register(&thetis_caps);
+    rig_register(&trudx_caps);
 
     return (RIG_OK);
 }

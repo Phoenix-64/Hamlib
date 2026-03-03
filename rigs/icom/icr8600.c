@@ -128,14 +128,14 @@ static struct icom_priv_caps icr8600_priv_caps =
     .extcmds = icr8600_extcmds      /* Custom ext_cmd parameters */
 };
 
-const struct rig_caps icr8600_caps =
+struct rig_caps icr8600_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR8600),
     .model_name = "IC-R8600",
     .mfg_name = "Icom",
     .version =  BACKEND_VER ".4",
     .copyright = "LGPL",
-    .status = RIG_STATUS_BETA,
+    .status = RIG_STATUS_STABLE,
     .rig_type = RIG_TYPE_RECEIVER,
     .ptt_type = RIG_PTT_NONE,
     .dcd_type = RIG_DCD_RIG,

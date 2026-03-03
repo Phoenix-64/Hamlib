@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 #define TX500_ALL_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY)
@@ -94,6 +94,7 @@ tone_t tx500_dcs_list[] =
 static struct kenwood_priv_caps  tx500_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,     /* TS-2000 compatible ??? */
 };
 
 /* memory capabilities */
@@ -121,7 +122,7 @@ static struct kenwood_priv_caps  tx500_priv_caps  =
  * TX-500 rig capabilities.
  *
  */
-const struct rig_caps tx500_caps =
+struct rig_caps tx500_caps =
 {
     RIG_MODEL(RIG_MODEL_LAB599_TX500),
     .model_name = "TX-500",
@@ -853,7 +854,7 @@ int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (lvl > 9)
         {
-            val->i = rig->state.preamp[0];
+            val->i = STATE(rig)->preamp[0];
         }
 
         break;
@@ -884,7 +885,8 @@ int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (lvl > 99)
         {
-            val->i = rig->state.attenuator[0];    /* Since the TS-2000 only has one step on the attenuator */
+            val->i = STATE(
+                         rig)->attenuator[0];    /* Since the TS-2000 only has one step on the attenuator */
         }
 
         break;

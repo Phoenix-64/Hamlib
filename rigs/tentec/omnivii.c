@@ -25,8 +25,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include <serial.h>
-#include <hamlib/rig.h>
+#include "iofunc.h"
+#include "hamlib/rig.h"
 #include "tentec2.h"
 #include "bandplan.h"
 
@@ -119,7 +119,7 @@ static int tt588_set_ant(RIG *rig, vfo_t vfo, ant_t ant);
  *
  * Protocol is documented at the tentec site
  */
-const struct rig_caps tt588_caps =
+struct rig_caps tt588_caps =
 {
     RIG_MODEL(RIG_MODEL_TT588),
     .model_name = "TT-588 Omni VII",
@@ -257,24 +257,24 @@ static int tt588_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
                              const int *data_len)
 {
     int i, retval = -RIG_EINTERNAL;
-    struct  rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     // The original file had "A few XX's" due to sync problems
     // So I put this in a try loop which should, hopefully, never be seen
     for (i = 0; i < 3; ++i) // We'll try 3 times
     {
         char xxbuf[32];
-        rig_flush(&rs->rigport);
+        rig_flush(rp);
 
         // We add 1 to data_len here for the null byte inserted by read_string eventually
         // That way all the callers can use the expected response length for the cmd_len parameter here
         // Callers all need to ensure they have enough room in data for this
-        retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+        retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
         if (retval == RIG_OK)
         {
             // All responses except from "XX" terminate with EOM (i.e. \r) so that is our stop char
-            char *term = EOM;
+            const char *term = EOM;
 
             if (cmd[0] ==
                     'X') // we'll let the timeout take care of this as it shouldn't happen anyways
@@ -284,7 +284,7 @@ static int tt588_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
 
             if (data)
             {
-                retval = read_string(&rs->rigport, (unsigned char *) data, (*data_len) + 1,
+                retval = read_string(rp, (unsigned char *) data, (*data_len) + 1,
                                      term, strlen(term), 0,
                                      1);
 
@@ -307,9 +307,9 @@ static int tt588_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
             rig_debug(RIG_DEBUG_ERR, "%s: write_block failed, try#%d\n", __func__, i + 1);
         }
 
-        write_block(&rs->rigport, (unsigned char *) "XX" EOM,
+        write_block(rp, (unsigned char *) "XX" EOM,
                     3); // we wont' worry about the response here
-        retval = read_string(&rs->rigport, (unsigned char *) xxbuf, sizeof(xxbuf), "",
+        retval = read_string(rp, (unsigned char *) xxbuf, sizeof(xxbuf), "",
                              0, 0, 1); // this should timeout
 
         if (retval != RIG_OK)
@@ -330,16 +330,16 @@ int tt588_init(RIG *rig)
     struct tt588_priv_data *priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s:\n", __func__);
-    rig->state.priv = (struct tt588_priv_data *) calloc(1, sizeof(
-                          struct tt588_priv_data));
+    STATE(rig)->priv = (struct tt588_priv_data *) calloc(1, sizeof(
+                           struct tt588_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     memset(priv, 0, sizeof(struct tt588_priv_data));
 
@@ -380,7 +380,8 @@ static char which_vfo(const RIG *rig, vfo_t vfo)
 int tt588_get_vfo(RIG *rig, vfo_t *vfo)
 {
     static int getinfo = TRUE;
-    const struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    const struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(
+            rig)->priv;
 
     if (getinfo)   // this is the first call to this package so we do this here
     {
@@ -407,7 +408,7 @@ int tt588_get_vfo(RIG *rig, vfo_t *vfo)
  */
 int tt588_set_vfo(RIG *rig, vfo_t vfo)
 {
-    struct tt588_priv_data *priv = (struct tt588_priv_data *)rig->state.priv;
+    struct tt588_priv_data *priv = (struct tt588_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s\n", __func__, rig_strvfo(vfo));
 
@@ -461,7 +462,8 @@ int tt588_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
     int resp_len, retval;
     unsigned char cmdbuf[16], respbuf[32];
-    const struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    const struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(
+            rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -504,7 +506,7 @@ int tt588_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 /*
  * tt588_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int tt588_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
@@ -597,7 +599,8 @@ int tt588_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
     int resp_len, retval;
     unsigned char cmdbuf[16], respbuf[32];
     char ttmode;
-    const struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    const struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(
+            rig)->priv;
 
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s\n", __func__, rig_strvfo(vfo));
@@ -798,7 +801,8 @@ int tt588_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     unsigned char cmdbuf[32], respbuf[32], ttmode;
     int resp_len, retval;
 
-    const struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    const struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(
+            rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s mode=%s width=%d\n", __func__,
               rig_strvfo(vfo), rig_strrmode(mode), (int)width);
@@ -974,7 +978,7 @@ int tt588_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         else
         {
             // transmit reply example S<0x8f><0x01> 0x0f=15 watts, 0x01
-            // it appears 0x01 refelected = 0W since 0 means not read yet
+            // it appears 0x01 reflected = 0W since 0 means not read yet
             int strength;
             int reflected = (int)lvlbuf[2];
             reflected  = reflected > 0 ? reflected - 1 : 0;

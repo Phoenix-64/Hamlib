@@ -44,7 +44,7 @@ static const struct icom_priv_caps ic475_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic475_caps =
+struct rig_caps ic475_caps =
 {
     RIG_MODEL(RIG_MODEL_IC475),
     .model_name = "IC-475",
@@ -110,7 +110,7 @@ const struct rig_caps ic475_caps =
     },
 
     .tuning_steps =     {
-        {IC475_MODES, 10}, /* TBC: does this rig supports settin tuning step? */
+        {IC475_MODES, 10}, /* TBC: does this rig supports setting tuning step? */
         RIG_TS_END,
     },
     /* mode/filter list, remember: order matters! */
@@ -150,7 +150,7 @@ static const struct icom_priv_caps ic575_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic575_caps =
+struct rig_caps ic575_caps =
 {
     RIG_MODEL(RIG_MODEL_IC575),
     .model_name = "IC-575",
@@ -216,7 +216,7 @@ const struct rig_caps ic575_caps =
     },
 
     .tuning_steps =     {
-        {IC475_MODES, 10}, /* TBC: does this rig supports settin tuning step? */
+        {IC475_MODES, 10}, /* TBC: does this rig supports setting tuning step? */
         RIG_TS_END,
     },
     /* mode/filter list, remember: order matters! */

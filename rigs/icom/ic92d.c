@@ -93,14 +93,14 @@ static const struct icom_priv_caps ic92d_priv_caps =
     .serial_full_duplex = 1
 };
 
-const struct rig_caps ic92d_caps =
+struct rig_caps ic92d_caps =
 {
     RIG_MODEL(RIG_MODEL_IC92D),
     .model_name = "IC-92D", /* IC-E92D/IC-92AD */
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_HANDHELD,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,
@@ -124,7 +124,6 @@ const struct rig_caps ic92d_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
     },
     .parm_gran =  {},
     .ctcss_list =  common_ctcss_list,
@@ -226,7 +225,7 @@ const char *ic92d_get_info(RIG *rig)
     int ack_len, retval;
     static char info[64];
 
-    rs = &rig->state;
+    rs = STATE(rig);
     priv = (struct icom_priv_data *)rs->priv;
 
     // 018019fd

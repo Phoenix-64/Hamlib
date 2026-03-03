@@ -23,7 +23,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 #include "icom_defs.h"
 #include "frame.h"
@@ -135,7 +135,7 @@ static const struct icom_priv_caps ic910_priv_caps =
     .r2i_mode = ic910_r2i_mode
 };
 
-int ic910_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
+static int ic910_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
     switch (func)
     {
@@ -152,7 +152,7 @@ int ic910_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     }
 }
 
-int ic910_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
+static int ic910_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 {
     switch (func)
     {
@@ -167,7 +167,7 @@ int ic910_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
     }
 }
 
-int ic910_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+static int ic910_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -182,7 +182,7 @@ int ic910_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     }
 }
 
-int ic910_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
+static int ic910_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -196,12 +196,14 @@ int ic910_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     }
 }
 
-const struct rig_caps ic910_caps =
+extern int ic9700_set_vfo(RIG *rig, vfo_t vfo);
+
+struct rig_caps ic910_caps =
 {
     RIG_MODEL(RIG_MODEL_IC910),
     .model_name =   "IC-910",
     .mfg_name =   "Icom",
-    .version =    BACKEND_VER ".1",
+    .version =    BACKEND_VER ".2",
     .copyright =    "LGPL",
     .status =   RIG_STATUS_STABLE,
     .rig_type =   RIG_TYPE_TRANSCEIVER,
@@ -227,8 +229,6 @@ const struct rig_caps ic910_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 20 }, .step = { .i = 1 } },
     },
     .parm_gran =    {},
     .ctcss_list =  common_ctcss_list,
@@ -236,7 +236,7 @@ const struct rig_caps ic910_caps =
     .dcs_list =   NULL,
     .preamp =   { 20, RIG_DBLST_END, },
     .attenuator =   { 20, RIG_DBLST_END, },
-    .max_rit =    Hz(0),    /* SSB,CW: +-1.0kHz  FM: +-5.0kHz */
+    .max_rit =    Hz(0),    /* SSB,CW: +-1.0 kHz  FM: +-5.0 kHz */
     .max_xit =    Hz(0),
     .max_ifshift =    Hz(0),    /* 1.2kHz manual knob */
 //    .targetable_vfo = RIG_TARGETABLE_FREQ,
@@ -325,7 +325,7 @@ const struct rig_caps ic910_caps =
 
     .set_ptt = icom_set_ptt,
     .get_ptt = icom_get_ptt,
-    .set_vfo = icom_set_vfo,
+    .set_vfo = ic9700_set_vfo,
 //    .get_vfo = icom_get_vfo,
     .get_ts =  icom_get_ts,
     .set_ts =  icom_set_ts,

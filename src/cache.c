@@ -19,11 +19,13 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "cache.h"
+#include "hamlib/rig_state.h"
 #include "misc.h"
 
-#define CHECK_RIG_ARG(r) (!(r) || !(r)->caps || !(r)->state.comm_state)
+#define CHECK_RIG_ARG(r) (!(r) || !(r)->caps || !STATE(r)->comm_state)
 
 /**
  * \file cache.c
@@ -33,6 +35,9 @@
 
 int rig_set_cache_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
+    struct rig_cache *cachep = CACHE(rig);
+    struct rig_state *rs = STATE(rig);
+
     ENTERFUNC;
 
     rig_cache_show(rig, __func__, __LINE__);
@@ -40,73 +45,106 @@ int rig_set_cache_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     if (vfo == RIG_VFO_CURR)
     {
         // if CURR then update this before we figure out the real VFO
-        vfo = rig->state.current_vfo;
+        vfo = rs->current_vfo;
     }
     else if (vfo == RIG_VFO_TX)
     {
-        vfo = rig->state.tx_vfo;
+        vfo = rs->tx_vfo;
         rig_debug(RIG_DEBUG_VERBOSE, "%s: TX VFO = %s\n", __func__, rig_strvfo(vfo));
     }
     else if (vfo == RIG_VFO_RX)
     {
-        vfo = rig->state.rx_vfo;
+        vfo = rs->rx_vfo;
         rig_debug(RIG_DEBUG_VERBOSE, "%s: RX VFO = %s\n", __func__, rig_strvfo(vfo));
     }
 
     // pick a sane default
     if (vfo == RIG_VFO_NONE || vfo == RIG_VFO_CURR) { vfo = RIG_VFO_A; }
 
-    if (vfo == RIG_VFO_SUB && rig->state.cache.satmode) { vfo = RIG_VFO_SUB_A; };
+    if (vfo == RIG_VFO_SUB && cachep->satmode) { vfo = RIG_VFO_SUB_A; };
 
-    if (vfo == RIG_VFO_OTHER) { vfo = vfo_fixup(rig, vfo, rig->state.cache.split); }
+    if (vfo == RIG_VFO_OTHER) { vfo = vfo_fixup(rig, vfo, cachep->split); }
+
+    if (vfo == rs->current_vfo)
+    {
+        cachep->modeCurr = mode;
+
+        if (width > 0)
+        {
+            cachep->widthCurr = width;
+        }
+
+        elapsed_ms(&cachep->time_modeCurr, HAMLIB_ELAPSED_SET);
+    }
 
     switch (vfo)
     {
     case RIG_VFO_ALL: // we'll use NONE to reset all VFO caches
-        elapsed_ms(&rig->state.cache.time_modeMainA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_modeMainB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_modeMainC, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubC, HAMLIB_ELAPSED_INVALIDATE);
         break;
 
     case RIG_VFO_A:
     case RIG_VFO_VFO:
     case RIG_VFO_MAIN:
     case RIG_VFO_MAIN_A:
-        rig->state.cache.modeMainA = mode;
+        cachep->modeMainA = mode;
 
-        if (width > 0) { rig->state.cache.widthMainA = width; }
+        if (width > 0) { cachep->widthMainA = width; }
 
-        elapsed_ms(&rig->state.cache.time_modeMainA, HAMLIB_ELAPSED_SET);
-        elapsed_ms(&rig->state.cache.time_widthMainA, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_modeMainA, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_widthMainA, HAMLIB_ELAPSED_SET);
         break;
 
     case RIG_VFO_B:
     case RIG_VFO_SUB:
     case RIG_VFO_MAIN_B:
-        rig->state.cache.modeMainB = mode;
+        cachep->modeMainB = mode;
 
-        if (width > 0) { rig->state.cache.widthMainB = width; }
+        if (width > 0) { cachep->widthMainB = width; }
 
-        elapsed_ms(&rig->state.cache.time_modeMainB, HAMLIB_ELAPSED_SET);
-        elapsed_ms(&rig->state.cache.time_widthMainB, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_modeMainB, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_widthMainB, HAMLIB_ELAPSED_SET);
         break;
 
     case RIG_VFO_C:
     case RIG_VFO_MAIN_C:
-        rig->state.cache.modeMainC = mode;
+        cachep->modeMainC = mode;
 
-        if (width > 0) { rig->state.cache.widthMainC = width; }
+        if (width > 0) { cachep->widthMainC = width; }
 
-        elapsed_ms(&rig->state.cache.time_modeMainC, HAMLIB_ELAPSED_SET);
-        elapsed_ms(&rig->state.cache.time_widthMainC, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_modeMainC, HAMLIB_ELAPSED_SET);
+        elapsed_ms(&cachep->time_widthMainC, HAMLIB_ELAPSED_SET);
+        break;
+
+    case RIG_VFO_SUB_A:
+        cachep->modeSubA = mode;
+        elapsed_ms(&cachep->time_modeSubA, HAMLIB_ELAPSED_SET);
+        break;
+
+    case RIG_VFO_SUB_B:
+        cachep->modeSubB = mode;
+        elapsed_ms(&cachep->time_modeSubB, HAMLIB_ELAPSED_SET);
+        break;
+
+    case RIG_VFO_SUB_C:
+        cachep->modeSubC = mode;
+        elapsed_ms(&cachep->time_modeSubC, HAMLIB_ELAPSED_SET);
         break;
 
     case RIG_VFO_MEM:
-        rig->state.cache.modeMem = mode;
-        elapsed_ms(&rig->state.cache.time_modeMem, HAMLIB_ELAPSED_SET);
+        cachep->modeMem = mode;
+        elapsed_ms(&cachep->time_modeMem, HAMLIB_ELAPSED_SET);
         break;
 
     default:
@@ -122,6 +160,8 @@ int rig_set_cache_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 int rig_set_cache_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     int flag = HAMLIB_ELAPSED_SET;
+    struct rig_cache *cachep = CACHE(rig);
+    struct rig_state *rs = STATE(rig);
 
     if (rig_need_debug(RIG_DEBUG_CACHE))
     {
@@ -130,12 +170,12 @@ int rig_set_cache_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
     rig_debug(RIG_DEBUG_CACHE, "%s(%d):  vfo=%s, current_vfo=%s\n", __func__,
               __LINE__,
-              rig_strvfo(vfo), rig_strvfo(rig->state.current_vfo));
+              rig_strvfo(vfo), rig_strvfo(rs->current_vfo));
 
     if (vfo == RIG_VFO_CURR)
     {
         // if CURR then update this before we figure out the real VFO
-        vfo = rig->state.current_vfo;
+        vfo = rs->current_vfo;
     }
 
     // if freq == 0 then we are asking to invalidate the cache
@@ -144,7 +184,7 @@ int rig_set_cache_freq(RIG *rig, vfo_t vfo, freq_t freq)
     // pick a sane default
     if (vfo == RIG_VFO_NONE || vfo == RIG_VFO_CURR) { vfo = RIG_VFO_A; }
 
-    if (vfo == RIG_VFO_SUB && rig->state.cache.satmode) { vfo = RIG_VFO_SUB_A; };
+    if (vfo == RIG_VFO_SUB && cachep->satmode) { vfo = RIG_VFO_SUB_A; };
 
     if (rig_need_debug(RIG_DEBUG_CACHE))
     {
@@ -153,66 +193,83 @@ int rig_set_cache_freq(RIG *rig, vfo_t vfo, freq_t freq)
                   rig_strvfo(vfo), freq);
     }
 
+    if (vfo == rs->current_vfo)
+    {
+        cachep->freqCurr = freq;
+        elapsed_ms(&cachep->time_freqCurr, flag);
+    }
+
     switch (vfo)
     {
     case RIG_VFO_ALL: // we'll use NONE to reset all VFO caches
-        elapsed_ms(&rig->state.cache.time_freqMainA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqMainB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqMainC, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqSubA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqSubB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqSubC, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_freqMem, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_vfo, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_modeMainA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_modeMainB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_modeMainC, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainA, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainB, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_widthMainC, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_ptt, HAMLIB_ELAPSED_INVALIDATE);
-        elapsed_ms(&rig->state.cache.time_split, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqMainA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqMainB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqSubA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqSubB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqSubC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_freqMem, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_vfo, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_modeSubC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthMainC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubA, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubB, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_widthSubC, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_ptt, HAMLIB_ELAPSED_INVALIDATE);
+        elapsed_ms(&cachep->time_split, HAMLIB_ELAPSED_INVALIDATE);
         break;
 
     case RIG_VFO_A:
     case RIG_VFO_VFO:
     case RIG_VFO_MAIN:
     case RIG_VFO_MAIN_A:
-        rig->state.cache.freqMainA = freq;
-        elapsed_ms(&rig->state.cache.time_freqMainA, flag);
+        cachep->freqMainA = freq;
+        elapsed_ms(&cachep->time_freqMainA, flag);
         break;
 
     case RIG_VFO_B:
     case RIG_VFO_MAIN_B:
     case RIG_VFO_SUB:
-        rig->state.cache.freqMainB = freq;
-        elapsed_ms(&rig->state.cache.time_freqMainB, flag);
+        cachep->freqMainB = freq;
+        elapsed_ms(&cachep->time_freqMainB, flag);
         break;
 
     case RIG_VFO_C:
     case RIG_VFO_MAIN_C:
-        rig->state.cache.freqMainC = freq;
-        elapsed_ms(&rig->state.cache.time_freqMainC, flag);
+        cachep->freqMainC = freq;
+        elapsed_ms(&cachep->time_freqMainC, flag);
         break;
 
     case RIG_VFO_SUB_A:
-        rig->state.cache.freqSubA = freq;
-        elapsed_ms(&rig->state.cache.time_freqSubA, flag);
+        cachep->freqSubA = freq;
+        elapsed_ms(&cachep->time_freqSubA, flag);
         break;
 
     case RIG_VFO_SUB_B:
-        rig->state.cache.freqSubB = freq;
-        elapsed_ms(&rig->state.cache.time_freqSubB, flag);
+        cachep->freqSubB = freq;
+        elapsed_ms(&cachep->time_freqSubB, flag);
         break;
 
     case RIG_VFO_SUB_C:
-        rig->state.cache.freqSubC = freq;
-        elapsed_ms(&rig->state.cache.time_freqSubC, flag);
+        cachep->freqSubC = freq;
+        elapsed_ms(&cachep->time_freqSubC, flag);
         break;
 
     case RIG_VFO_MEM:
-        rig->state.cache.freqMem = freq;
-        elapsed_ms(&rig->state.cache.time_freqMem, flag);
+        cachep->freqMem = freq;
+        elapsed_ms(&cachep->time_freqMem, flag);
+        break;
+
+    case RIG_VFO_OTHER:
+        rig_debug(RIG_DEBUG_VERBOSE, "%s(%d): ignoring VFO_OTHER\n", __func__,
+                  __LINE__);
         break;
 
     default:
@@ -254,11 +311,17 @@ int rig_set_cache_freq(RIG *rig, vfo_t vfo, freq_t freq)
 int rig_get_cache(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq,
                   rmode_t *mode, int *cache_ms_mode, pbwidth_t *width, int *cache_ms_width)
 {
+    struct rig_cache *cachep;
+    struct rig_state *rs;
+
     if (CHECK_RIG_ARG(rig) || !freq || !cache_ms_freq ||
             !mode || !cache_ms_mode || !width || !cache_ms_width)
     {
         return -RIG_EINVAL;
     }
+
+    cachep = CACHE(rig);
+    rs = STATE(rig);
 
     if (rig_need_debug(RIG_DEBUG_CACHE))
     {
@@ -267,25 +330,25 @@ int rig_get_cache(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq,
 
     rig_debug(RIG_DEBUG_CACHE, "%s(%d):  vfo=%s, current_vfo=%s\n", __func__,
               __LINE__,
-              rig_strvfo(vfo), rig_strvfo(rig->state.current_vfo));
+              rig_strvfo(vfo), rig_strvfo(rs->current_vfo));
 
     if (vfo == RIG_VFO_CURR)
     {
-        vfo = rig->state.current_vfo;
+        vfo = rs->current_vfo;
     }
     else if (vfo == RIG_VFO_TX)
     {
-        vfo = rig->state.tx_vfo;
+        vfo = rs->tx_vfo;
         rig_debug(RIG_DEBUG_VERBOSE, "%s: TX VFO = %s\n", __func__, rig_strvfo(vfo));
     }
     else if (vfo == RIG_VFO_RX)
     {
-        vfo = rig->state.rx_vfo;
+        vfo = rs->rx_vfo;
         rig_debug(RIG_DEBUG_VERBOSE, "%s: RX VFO = %s\n", __func__, rig_strvfo(vfo));
     }
     else if (vfo == RIG_VFO_OTHER)
     {
-        switch (rig->state.current_vfo)
+        switch (rs->current_vfo)
         {
         case RIG_VFO_CURR:
             break;  // no change
@@ -322,9 +385,15 @@ int rig_get_cache(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq,
             vfo = RIG_VFO_SUB_A;
             break;
 
+        case RIG_VFO_NONE:
+            rig_debug(RIG_DEBUG_VERBOSE, "%s(%d): ignoring VFO_NONE\n", __func__,
+                      __LINE__);
+            break;
+
         default:
-            rig_debug(RIG_DEBUG_WARN, "%s(%d): unknown vfo=%s, curr_vfo=%s\n", __func__, __LINE__,
-                      rig_strvfo(vfo), rig_strvfo(rig->state.current_vfo));
+            rig_debug(RIG_DEBUG_WARN, "%s(%d): unknown vfo=%s, curr_vfo=%s\n", __func__,
+                      __LINE__,
+                      rig_strvfo(vfo), rig_strvfo(rs->current_vfo));
         }
     }
 
@@ -332,31 +401,31 @@ int rig_get_cache(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq,
     if (vfo == RIG_VFO_CURR || vfo == RIG_VFO_NONE) { vfo = RIG_VFO_A; }
 
     // If we're in satmode we map SUB to SUB_A
-    if (vfo == RIG_VFO_SUB && rig->state.cache.satmode) { vfo = RIG_VFO_SUB_A; };
+    if (vfo == RIG_VFO_SUB && cachep->satmode) { vfo = RIG_VFO_SUB_A; };
 
     switch (vfo)
     {
     case RIG_VFO_CURR:
-        *freq = rig->state.cache.freqCurr;
-        *mode = rig->state.cache.modeCurr;
-        *width = rig->state.cache.widthCurr;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqCurr,
+        *freq = cachep->freqCurr;
+        *mode = cachep->modeCurr;
+        *width = cachep->widthCurr;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqCurr,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeCurr,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeCurr,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthCurr,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthCurr,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_OTHER:
-        *freq = rig->state.cache.freqOther;
-        *mode = rig->state.cache.modeOther;
-        *width = rig->state.cache.widthOther;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqOther,
+        *freq = cachep->freqOther;
+        *mode = cachep->modeOther;
+        *width = cachep->widthOther;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqOther,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeOther,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeOther,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthOther,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthOther,
                                      HAMLIB_ELAPSED_GET);
         break;
 
@@ -364,87 +433,87 @@ int rig_get_cache(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq,
     case RIG_VFO_VFO:
     case RIG_VFO_MAIN:
     case RIG_VFO_MAIN_A:
-        *freq = rig->state.cache.freqMainA;
-        *mode = rig->state.cache.modeMainA;
-        *width = rig->state.cache.widthMainA;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqMainA,
+        *freq = cachep->freqMainA;
+        *mode = cachep->modeMainA;
+        *width = cachep->widthMainA;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqMainA,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeMainA,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeMainA,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthMainA,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthMainA,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_B:
     case RIG_VFO_SUB:
     case RIG_VFO_MAIN_B:
-        *freq = rig->state.cache.freqMainB;
-        *mode = rig->state.cache.modeMainB;
-        *width = rig->state.cache.widthMainB;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqMainB,
+        *freq = cachep->freqMainB;
+        *mode = cachep->modeMainB;
+        *width = cachep->widthMainB;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqMainB,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeMainB,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeMainB,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthMainB,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthMainB,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_SUB_A:
-        *freq = rig->state.cache.freqSubA;
-        *mode = rig->state.cache.modeSubA;
-        *width = rig->state.cache.widthSubA;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqSubA,
+        *freq = cachep->freqSubA;
+        *mode = cachep->modeSubA;
+        *width = cachep->widthSubA;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqSubA,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeSubA,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeSubA,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthSubA,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthSubA,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_SUB_B:
-        *freq = rig->state.cache.freqSubB;
-        *mode = rig->state.cache.modeSubB;
-        *width = rig->state.cache.widthSubB;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqSubB,
+        *freq = cachep->freqSubB;
+        *mode = cachep->modeSubB;
+        *width = cachep->widthSubB;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqSubB,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeSubB,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeSubB,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthSubB,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthSubB,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_C:
         //case RIG_VFO_MAINC: // not used by any rig yet
-        *freq = rig->state.cache.freqMainC;
-        *mode = rig->state.cache.modeMainC;
-        *width = rig->state.cache.widthMainC;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqMainC,
+        *freq = cachep->freqMainC;
+        *mode = cachep->modeMainC;
+        *width = cachep->widthMainC;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqMainC,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeMainC,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeMainC,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthMainC,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthMainC,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_SUB_C:
-        *freq = rig->state.cache.freqSubC;
-        *mode = rig->state.cache.modeSubC;
-        *width = rig->state.cache.widthSubC;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqSubC,
+        *freq = cachep->freqSubC;
+        *mode = cachep->modeSubC;
+        *width = cachep->widthSubC;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqSubC,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeSubC,
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeSubC,
                                     HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthSubC,
+        *cache_ms_width = elapsed_ms(&cachep->time_widthSubC,
                                      HAMLIB_ELAPSED_GET);
         break;
 
     case RIG_VFO_MEM:
-        *freq = rig->state.cache.freqMem;
-        *mode = rig->state.cache.modeMem;
-        *width = rig->state.cache.widthMem;
-        *cache_ms_freq = elapsed_ms(&rig->state.cache.time_freqMem, HAMLIB_ELAPSED_GET);
-        *cache_ms_mode = elapsed_ms(&rig->state.cache.time_modeMem, HAMLIB_ELAPSED_GET);
-        *cache_ms_width = elapsed_ms(&rig->state.cache.time_widthMem,
+        *freq = cachep->freqMem;
+        *mode = cachep->modeMem;
+        *width = cachep->widthMem;
+        *cache_ms_freq = elapsed_ms(&cachep->time_freqMem, HAMLIB_ELAPSED_GET);
+        *cache_ms_mode = elapsed_ms(&cachep->time_modeMem, HAMLIB_ELAPSED_GET);
+        *cache_ms_width = elapsed_ms(&cachep->time_widthMem,
                                      HAMLIB_ELAPSED_GET);
         break;
 
@@ -500,28 +569,49 @@ int rig_get_cache_freq(RIG *rig, vfo_t vfo, freq_t *freq, int *cache_ms_freq_p)
     return retval;
 }
 
+/* Get cache timeout period
+ * Returns value in msec, -1 if error
+ */
+int HAMLIB_API rig_get_cache_timeout_ms(RIG *rig, hamlib_cache_t selection)
+{
+    rig_debug(RIG_DEBUG_TRACE, "%s: called selection=%d\n", __func__, selection);
+    if (!rig) {return -1;}
+    return CACHE(rig)->timeout_ms;
+}
+
+int HAMLIB_API rig_set_cache_timeout_ms(RIG *rig, hamlib_cache_t selection,
+                                        int ms)
+{
+    rig_debug(RIG_DEBUG_TRACE, "%s: called selection=%d, ms=%d\n", __func__,
+              selection, ms);
+    if (!rig) {return -RIG_EINVAL;}
+    CACHE(rig)->timeout_ms = ms;
+    return RIG_OK;
+}
 
 void rig_cache_show(RIG *rig, const char *func, int line)
 {
+    struct rig_cache *cachep = CACHE(rig);
+
     rig_debug(RIG_DEBUG_CACHE,
               "%s(%d): freqMainA=%.0f, modeMainA=%s, widthMainA=%d\n", func, line,
-              rig->state.cache.freqMainA, rig_strrmode(rig->state.cache.modeMainA),
-              (int)rig->state.cache.widthMainA);
+              cachep->freqMainA, rig_strrmode(cachep->modeMainA),
+              (int)cachep->widthMainA);
     rig_debug(RIG_DEBUG_CACHE,
               "%s(%d): freqMainB=%.0f, modeMainB=%s, widthMainB=%d\n", func, line,
-              rig->state.cache.freqMainB, rig_strrmode(rig->state.cache.modeMainB),
-              (int)rig->state.cache.widthMainB);
+              cachep->freqMainB, rig_strrmode(cachep->modeMainB),
+              (int)cachep->widthMainB);
 
-    if (rig->state.vfo_list & RIG_VFO_SUB_A)
+    if (STATE(rig)->vfo_list & RIG_VFO_SUB_A)
     {
         rig_debug(RIG_DEBUG_CACHE,
                   "%s(%d): freqSubA=%.0f, modeSubA=%s, widthSubA=%d\n", func, line,
-                  rig->state.cache.freqSubA, rig_strrmode(rig->state.cache.modeSubA),
-                  (int)rig->state.cache.widthSubA);
+                  cachep->freqSubA, rig_strrmode(cachep->modeSubA),
+                  (int)cachep->widthSubA);
         rig_debug(RIG_DEBUG_CACHE,
                   "%s(%d): freqSubB=%.0f, modeSubB=%s, widthSubB=%d\n", func, line,
-                  rig->state.cache.freqSubB, rig_strrmode(rig->state.cache.modeSubB),
-                  (int)rig->state.cache.widthSubB);
+                  cachep->freqSubB, rig_strrmode(cachep->modeSubB),
+                  (int)cachep->widthSubB);
     }
 }
 

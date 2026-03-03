@@ -18,6 +18,7 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 /*
  * Edited by Martin Ewing AA6E, March, 2012
@@ -26,7 +27,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 
@@ -52,6 +53,7 @@
 static struct kenwood_priv_caps  ts950_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,
 };
 
 /*
@@ -61,7 +63,7 @@ static struct kenwood_priv_caps  ts950_priv_caps  =
  *
  * Reference: TS-950 series External Control Instruction Manual (1992)
  */
-const struct rig_caps ts950s_caps =
+struct rig_caps ts950s_caps =
 {
     RIG_MODEL(RIG_MODEL_TS950S),
     .model_name = "TS-950S",
@@ -208,7 +210,7 @@ const struct rig_caps ts950s_caps =
 };
 
 
-const struct rig_caps ts950sdx_caps =
+struct rig_caps ts950sdx_caps =
 {
     RIG_MODEL(RIG_MODEL_TS950SDX),
     .model_name = "TS-950SDX",

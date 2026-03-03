@@ -26,9 +26,8 @@
 #ifndef _AMP_GEMINI_H
 #define _AMP_GEMINI_H 1
 
-#include <hamlib/amplifier.h>
-#include <iofunc.h>
-#include <serial.h>
+#include "hamlib/amplifier.h"
+#include "iofunc.h"
 
 // Is this big enough?
 #define GEMINIBUFSZ 1024
@@ -47,7 +46,7 @@ struct gemini_priv_data
     double vswr;
     int current; // Amps
     int temperature; // Centigrade
-    char state[5];
+    char state[8];
     int ptt;
     char trip[256];
 };

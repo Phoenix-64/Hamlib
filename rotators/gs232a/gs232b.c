@@ -29,6 +29,8 @@
 #include <math.h>
 
 #include "hamlib/rotator.h"
+#include "hamlib/port.h"
+#include "hamlib/rot_state.h"
 #include "serial.h"
 #include "misc.h"
 #include "idx_builtin.h"
@@ -46,7 +48,7 @@
  * cmdstr - Command to be sent to the rig.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed, but answer will still be read.
- * data_len - in: Size of buffer. It is the caller's responsibily to provide
+ * data_len - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -60,19 +62,17 @@ static int
 gs232b_transaction(ROT *rot, const char *cmdstr,
                    char *data, size_t data_len, int no_reply)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int retval;
     int retry_read = 0;
 
-    rs = &rot->state;
-
 transaction_write:
 
-    rig_flush(&rs->rotport);
+    rig_flush(rotp);
 
     if (cmdstr)
     {
-        retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+        retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
         if (retval != RIG_OK)
         {
@@ -81,7 +81,7 @@ transaction_write:
 
         if (!data)
         {
-            write_block(&rs->rotport, (unsigned char *) EOM, strlen(EOM));
+            write_block(rotp, (unsigned char *) EOM, strlen(EOM));
         }
     }
 
@@ -100,7 +100,7 @@ transaction_write:
 
 
     memset(data, 0, data_len);
-    retval = read_string(&rs->rotport, (unsigned char *) data, data_len,
+    retval = read_string(rotp, (unsigned char *) data, data_len,
                          REPLY_EOM, strlen(REPLY_EOM), 0, 1);
 
     if (strncmp(data, "\r\n", 2) == 0 || strchr(data, '>'))
@@ -114,7 +114,7 @@ transaction_write:
 
     if (retval < 0)
     {
-        if (retry_read++ < rot->state.rotport.retry)
+        if (retry_read++ < rotp->retry)
         {
             goto transaction_write;
         }
@@ -131,7 +131,7 @@ transaction_write:
                   "%s: Command is not correctly terminated '%s'\n",
                   __func__, data);
 
-        if (retry_read++ < rig->state.rotport.retry)
+        if (retry_read++ < rotp->retry)
         {
             goto transaction_write;
         }
@@ -228,7 +228,7 @@ gs232b_rot_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
      * directives, any amount of space is matched, including none in the input.
      */
     // There's a 12PR1A rotor  that only returns AZ so we may only get AZ=xxx
-    if (sscanf(posbuf, "AZ=%d EL=%d", &int_az, &int_el) == 0)
+    if (sscanf(posbuf, "AZ=%d EL=%d", &int_az, &int_el) <= 0)
     {
         // only give error if we didn't parse anything
         rig_debug(RIG_DEBUG_ERR, "%s: wrong reply '%s', expected AZ=xxx EL=xxx\n",
@@ -267,7 +267,7 @@ gs232b_rot_stop(ROT *rot)
 
 static int gs232b_rot_get_level(ROT *rot, setting_t level, value_t *val)
 {
-    const struct rot_state *rs = &rot->state;
+    const struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
@@ -287,16 +287,17 @@ static int gs232b_rot_get_level(ROT *rot, setting_t level, value_t *val)
 
 static int gs232b_rot_set_level(ROT *rot, setting_t level, value_t val)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
     char cmdstr[24];
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
     switch (level)
     {
-    int retval;
+
     case ROT_LEVEL_SPEED:
     {
+        int retval;
         int speed = val.i;
 
         if (speed < 1)
@@ -309,7 +310,7 @@ static int gs232b_rot_set_level(ROT *rot, setting_t level, value_t val)
         }
 
         /* between 1 (slowest) and 4 (fastest) */
-        SNPRINTF(cmdstr, sizeof(cmdstr), "X%u" EOM, speed);
+        SNPRINTF(cmdstr, sizeof(cmdstr), "X%d" EOM, speed);
         retval = gs232b_transaction(rot, cmdstr, NULL, 0, 1);
 
         if (retval != RIG_OK)
@@ -395,7 +396,7 @@ static int gs232b_rot_move(ROT *rot, int direction, int speed)
 
 static int gs232b_rot_init(ROT *rot)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 

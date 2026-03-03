@@ -21,14 +21,14 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "jrc.h"
 
 
 #define NRD535_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY|RIG_MODE_ECSS|RIG_MODE_FAX)    /* + FAX */
 
-#define NRD535_FUNC (RIG_FUNC_FAGC|RIG_FUNC_NB)
+#define NRD535_FUNC (RIG_FUNC_NB|RIG_FUNC_NB2)
 
 #define NRD535_LEVEL (RIG_LEVEL_RAWSTR|RIG_LEVEL_STRENGTH|RIG_LEVEL_ATT|RIG_LEVEL_IF|RIG_LEVEL_AGC|RIG_LEVEL_CWPITCH) /*RIG_LEVEL_BWC*/
 
@@ -69,7 +69,6 @@
     .freq = 1,  \
     .mode = 1,  \
     .width = 1, \
-    .funcs = RIG_FUNC_FAGC, \
     .levels = RIG_LEVEL_ATT|RIG_LEVEL_AGC, \
 }
 
@@ -89,7 +88,7 @@ static const struct jrc_priv_caps nrd535_priv_caps =
  * NRD-535 rig capabilities.
  *
  */
-const struct rig_caps nrd535_caps =
+struct rig_caps nrd535_caps =
 {
     RIG_MODEL(RIG_MODEL_NRD535),
     .model_name = "NRD-535D",
@@ -210,5 +209,4 @@ const struct rig_caps nrd535_caps =
 /*
  * Function definitions below
  */
-
 

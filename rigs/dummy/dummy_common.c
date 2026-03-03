@@ -30,6 +30,11 @@ struct ext_list *alloc_init_ext(const struct confparams *cfp)
     struct ext_list *elp;
     int i, nb_ext;
 
+    if (cfp == NULL)
+    {
+        return NULL;
+    }
+
     for (nb_ext = 0; !RIG_IS_EXT_END(cfp[nb_ext]); nb_ext++)
         ;
 
@@ -51,9 +56,14 @@ struct ext_list *alloc_init_ext(const struct confparams *cfp)
     return elp;
 }
 
-struct ext_list *find_ext(struct ext_list *elp, token_t token)
+struct ext_list *find_ext(struct ext_list *elp, hamlib_token_t token)
 {
     int i;
+
+    if (elp == NULL)
+    {
+        return NULL;
+    }
 
     for (i = 0; elp[i].token != 0; i++)
     {

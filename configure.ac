@@ -14,7 +14,7 @@ dnl Please do not use '-' in the version number, as package managers will fail,
 dnl however, the use of '~' should be fine as apt (others?) will treat
 dnl it as an earlier version than the actual release.  TNX KA6MAL
 dnl PACKAGE_NAME + " " + PACKAGE_VERSION must not exceed 20 chars!
-AC_INIT([Hamlib],[4.6~git],[hamlib-developer@lists.sourceforge.net],[hamlib],[http://www.hamlib.org])
+AC_INIT([Hamlib],[5.0.0~git],[hamlib-developer@lists.sourceforge.net],[hamlib],[http://www.hamlib.org])
 #AC_INIT([PRODUCT_NAME], [Hamlib])
 #AC_DEFINE([Hamlib], [PRODUCT_VERSION_RESOURCE])
 
@@ -43,39 +43,41 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 ## ------------------------------ ##
 ## Hamlib specific configuration. ##
 ## ------------------------------ ##
-AC_ARG_ENABLE([shared],
-              [AS_HELP_STRING([--enable-shared],
-                              [Enable shared libraries @<:@default=yes@:>@])],
-              [enable_shared=$enableval],
-              [enable_shared=yes])
-AC_ARG_ENABLE([static],
-              [AS_HELP_STRING([--enable-static],
-                              [Enable static libraries @<:@default=check@:>@])],
-              [enable_static=$enableval],
-              [enable_static=check])
-
-AS_IF([test "x$enable_static" = "xyes"], [
-    enable_shared=no
-])
-AS_IF([test "x$enable_static" = "xyes" && test "x$enable_shared" = "xyes"], [
-    AC_MSG_ERROR([Both --enable-static and --enable-shared cannot be enabled at the same time.])
-])
+dnl AC_ARG_ENABLE([shared],
+dnl               [AS_HELP_STRING([--enable-shared],
+dnl                               [Enable shared libraries @<:@default=yes@:>@])],
+dnl               [enable_shared=$enableval],
+dnl               [enable_shared=yes])
+dnl AC_ARG_ENABLE([static],
+dnl               [AS_HELP_STRING([--enable-static],
+dnl                               [Enable static libraries @<:@default=check@:>@])],
+dnl               [enable_static=$enableval],
+dnl               [enable_static=check])
+dnl
+dnl AS_IF([test "x$enable_static" = "xyes"], [
+dnl     enable_shared=no
+dnl ])
+dnl AS_IF([test "x$enable_static" = "xyes" && test "x$enable_shared" = "xyes"], [
+dnl     AC_MSG_ERROR([Both --enable-static and --enable-shared cannot be enabled at the same time.])
+dnl ])
 
 dnl New backends must be listed here!  Also the new Makefile path must be
 dnl added to AC_CONFIG_FILES near the end of this file.  See README.developer
 dnl Beware of duplication should a backend directory include both rig and
 dnl rotor definitions, e.g. "dummy".  Optional backends will not be listed
 dnl here but will be added later, e.g. "winradio".
-RIG_BACKEND_LIST="rigs/adat rigs/alinco rigs/aor rigs/barrett rigs/codan rigs/dorji rigs/drake rigs/dummy rigs/elad rigs/flexradio rigs/icom rigs/icmarine rigs/jrc rigs/kachina rigs/kenwood rigs/kit rigs/lowe rigs/pcr rigs/prm80 rigs/racal rigs/rft rigs/rs rigs/skanti rigs/tapr rigs/tentec rigs/tuner rigs/uniden rigs/winradio rigs/wj rigs/yaesu rigs/gomspace rigs/mds rigs/anytone"
-ROT_BACKEND_LIST="rotators/amsat rotators/apex rotators/ars rotators/celestron rotators/cnctrk rotators/grbltrk rotators/easycomm rotators/ether6 rotators/flir rotators/fodtrack rotators/gs232a rotators/heathkit rotators/m2 rotators/meade rotators/rotorez rotators/sartek rotators/saebrtrack rotators/spid rotators/ts7400 rotators/prosistel rotators/ioptron rotators/satel rotators/radant"
+RIG_BACKEND_LIST="rigs/adat rigs/alinco rigs/aor rigs/barrett rigs/codan rigs/dorji rigs/drake rigs/dummy rigs/elad rigs/flexradio rigs/icom rigs/icmarine rigs/jrc rigs/kachina rigs/kenwood rigs/kit rigs/lowe rigs/pcr rigs/prm80 rigs/racal rigs/rft rigs/rs rigs/skanti rigs/tapr rigs/tentec rigs/tuner rigs/uniden rigs/wj rigs/yaesu rigs/gomspace rigs/mds rigs/anytone rigs/motorola rigs/commradio rigs/guohetec"
+RIG_BACKEND_OPTIONAL_LIST=""
+ROT_BACKEND_LIST="rotators/amsat rotators/apex rotators/ars rotators/celestron rotators/cnctrk rotators/grbltrk rotators/easycomm rotators/ether6 rotators/flir rotators/fodtrack rotators/gs232a rotators/heathkit rotators/m2 rotators/meade rotators/rotorez rotators/sartek rotators/saebrtrack rotators/spid rotators/ts7400 rotators/prosistel rotators/ioptron rotators/satel rotators/skywatcher rotators/radant"
+ROT_BACKEND_OPTIONAL_LIST=""
 # Amplifiers are all in the amplifiers directory
 AMP_BACKEND_LIST="amplifiers/elecraft amplifiers/gemini amplifiers/expert"
 
 dnl See README.release on setting these values
 # Values given to -version-info when linking.  See libtool documentation.
 # Set them here to keep c++/Makefile and src/Makefile in sync.
-ABI_VERSION=4
-ABI_REVISION=6
+ABI_VERSION=5
+ABI_REVISION=0
 ABI_PATCH=0
 ABI_AGE=0
 
@@ -94,7 +96,7 @@ AC_SUBST([ABI_AGE])
 AM_CPPFLAGS="${AM_CPPFLAGS} -DIN_HAMLIB"
 
 # Add Hamlib header include paths
-AM_CPPFLAGS="${AM_CPPFLAGS} -I\$(top_srcdir)/include -I\$(top_srcdir)/src -I\$(top_srcdir)/lib -I\$(top_builddir)/include  -I\$(top_srcdir)/include/hamlib"
+AM_CPPFLAGS="${AM_CPPFLAGS} -I\$(top_srcdir)/include -I\$(top_srcdir)/src -I\$(top_srcdir)/lib -I\$(top_builddir)/include  -I\$(top_srcdir)/include/hamlib -D_TIME_BITS=64 -D_FILE_OFFSET_BITS=64"
 
 
 ## --------------- ##
@@ -109,10 +111,13 @@ AC_PROG_AWK
 AC_PROG_INSTALL
 AC_PROG_LN_S
 
-# TODO: check whether CXX is functional
-AC_CHECK_PROG([cf_with_cxx], ["${CXX}"], [yes], [no])
-
-AM_CONDITIONAL([ENABLE_CXX], [test x"${cf_with_cxx}" = "xyes"])
+dnl check whether CXX is functional
+AX_CXX_COMPILE_STDCXX([11],[noext],[optional])
+AS_IF([test "$HAVE_CXX11" = 1],
+       [cf_with_cxx=yes],
+       [cf_with_cxx=no]
+)
+AM_CONDITIONAL([ENABLE_CXX], [test "$HAVE_CXX11" = 1])
 
 dnl Broke on older Automake, so test for its existence.
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
@@ -167,7 +172,7 @@ dnl If pthread support is found, this macro defines HAVE_PTHREAD and
 dnl AC_SUBST's PTHREAD_LIBS, PTHREAD_CFLAGS, and PTHREAD_CC making those
 dnl variables available in Makefiles.
 # macros/ax_pthread.m4
-AX_PTHREAD
+AX_PTHREAD([], [AC_MSG_ERROR([POSIX threads not found])])
 
 AC_SYS_POSIX_TERMIOS()
 
@@ -342,46 +347,12 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]],
 "Have you considered GCC lately?."])
 		  ])
 
-dnl Check for libusb, treat LIBUSB_LIBS and LIBUSB_CFLAGS as precious variables
-AC_MSG_CHECKING([whether to build USB dependent backends])
-AC_ARG_WITH([libusb],
-    [AS_HELP_STRING([--without-libusb],
-	[disable USB dependent backends @<:@default=yes@:>@])],
-	[cf_with_libusb=no],
-	[cf_with_libusb=yes]
-    )
-
-AC_MSG_RESULT([$cf_with_libusb])
-AM_CONDITIONAL([HAVE_LIBUSB], [test x"${cf_with_libusb}" = "xyes"])
-
-LIBUSB=""
-AC_ARG_VAR([LIBUSB_CFLAGS], [C compiler flags for libusb, overriding configure defaults])
-AC_ARG_VAR([LIBUSB_LIBS], [linker flags for libusb, overriding configure check (useful for specifying static libusb-1.0.a (see INSTALL))])
-
-AS_IF([test x"${cf_with_libusb}" = "xyes"], [
-    AS_IF([test -z $LIBUSB_LIBS],
-	[AC_CHECK_LIB([usb-1.0], [libusb_init], [LIBUSB_LIBS="-lusb-1.0"],
-	    [AC_MSG_WARN([libusb_init was not found in libusb-1.0--USB backends will be disabled])]
-        [cf_with_libusb="no"])
-	], [cf_with_libusb="yes"])
-
-    AS_IF([test x"${cf_with_libusb}" = "xyes"],
-	[AC_CHECK_HEADERS([libusb.h libusb-1.0/libusb.h])
-	 AC_DEFINE([HAVE_LIBUSB],
-		   [1],
-		   [Define if libusb-1.0 is available])
-	LIBUSB="libusb-1.0"])])
-
-# Only used in hamlib.pc.in
-AC_SUBST([LIBUSB])
-
-
 dnl Check if readline support in rigctl/rotctl is wanted
 AC_MSG_CHECKING([whether to use readline in rigctl/rotctl])
 AC_ARG_WITH([readline],
     [AS_HELP_STRING([--without-readline],
 	[disable readline in rigctl/rotctl @<:@default=yes@:>@])],
-	[cf_with_readline_support=no],
+	[cf_with_readline_support=$with_readline],
 	[cf_with_readline_support=yes]
     )
 
@@ -397,59 +368,60 @@ AS_IF([test x"$ax_cv_lib_readline" = "xno"], [
     cf_with_readline_support=no
     ])
 
-dnl Check if INDI support in rigctl/rotctl is wanted
-AC_MSG_CHECKING([whether to use INDI in rigctl/rotctl])
-#AS_IF([test x"${cf_with_cxx_binding}" = "xyes"], [
-    AC_ARG_WITH([indi],
-        [AS_HELP_STRING([--without-indi],
-    	[disable INDI in rigctl/rotctl @<:@default=yes@:>@])],
-    	[cf_with_indi_support=yes],
-    	[cf_with_indi_support=no]
-    )
-#])
+dnl Check if INDI support in rotctl/rotctld is wanted
+AC_MSG_CHECKING([whether to use INDI in rotctl/rotctld])
 
-AS_IF([test x"$cf_with_indi_support" != "xno"], [
-    # INDI support needs a C++ compiler, tested for presence above.
-    AS_IF([test x"${cf_with_cxx}" != "xyes"], [
-	AC_MSG_WARN([INDI support needs a C++ compiler.])
-	cf_with_indi_support=no
-    ])
-])
+AC_ARG_WITH([indi],
+    [AS_HELP_STRING([--without-indi],
+        [disable INDI in rotctl/rotctld @<:@default=detect@:>@])],
+    [cf_with_indi_support=$withval],
+    [cf_with_indi_support=detect]
+)
+
+AC_MSG_RESULT([$cf_with_indi_support])
 
 AS_IF([test x"$cf_with_indi_support" != "xno"], [
     # macros/ax_lib_nova.m4
     AX_LIB_NOVA
 
-    AS_IF([test x"$ax_cv_lib_nova" = "xno"], [
-	AC_MSG_WARN([libnova support not found, required by INDI.])
-	cf_with_indi_support=no
-	])
-
-    AS_IF([test x"$ax_cv_lib_nova" != "xno"], [
-	# macros/ax_lib_indi.m4
-	AX_LIB_INDI
-
-	AS_IF([test x"$ax_cv_lib_indi" = "xno"], [
-	    AC_MSG_WARN([INDI support not found.])
-	    cf_with_indi_support=no
-	])
-
-	AS_IF([test x"$cf_with_indi_support" != "xno"], [
-	    ROT_BACKEND_LIST="$ROT_BACKEND_LIST rotators/indi"
-	])
-    ])
+    # macros/ax_lib_indi.m4
+    AX_LIB_INDI
 ])
+
+AS_IF([test x"$cf_with_indi_support" = "xyes"], [
+    AS_IF([test x"$cf_with_cxx" = "xno"],
+        [AC_MSG_ERROR([INDI support needs a C++ compiler.])]
+    )
+
+    AS_IF([test x"$ax_cv_lib_nova" = "xno"],
+        [AC_MSG_ERROR([libnova support not found, required by INDI.])]
+    )
+
+    AS_IF([test x"$ax_cv_lib_indi" = "xno"],
+        [AC_MSG_ERROR([libindi support not found, required by INDI.])]
+    )
+])
+
+AS_IF([test x"$cf_with_indi_support" = "xdetect"], [
+    AS_IF([test x"$cf_with_cxx" = "xno" -o x"$ax_cv_lib_nova" = "xno" -o x"$ax_cv_lib_indi" = "xno"],
+          [cf_with_indi_support=no],
+          [cf_with_indi_support=yes]
+    )
+])
+
+AS_IF([test x"$cf_with_indi_support" != "xno"],
+	[ROT_BACKEND_LIST="$ROT_BACKEND_LIST rotators/indi"],
+	[ROT_BACKEND_OPTIONAL_LIST="$ROT_BACKEND_OPTIONAL_LIST rotators/indi"]
+)
 
 dnl Check if libgd-dev is installed, so we can enable rigmatrix
 AC_MSG_CHECKING([whether to build HTML rig feature matrix])
 AC_ARG_ENABLE([html-matrix],
     [AS_HELP_STRING([--disable-html-matrix],
 	[do not generate HTML rig feature matrix (requires libgd-dev) @<:@default=check@:>@])],
-	[cf_enable_html_matrix=no],
+	[cf_enable_html_matrix=$enable_html_matrix],
 	[cf_enable_html_matrix=check]
     )
-
-AC_MSG_RESULT([$cf_enable_html_matrix])
 
 AS_IF([test x"$cf_enable_html_matrix" != "xno"],
     [AC_CHECK_HEADERS([gd.h],
@@ -462,6 +434,7 @@ AS_IF([test x"$cf_enable_html_matrix" != "xno"],
 	)
     ])
 
+AC_MSG_RESULT([$cf_enable_html_matrix])
 AM_CONDITIONAL([HTML_MATRIX], [test x"${cf_enable_html_matrix}" = "xyes"])
 
 
@@ -469,10 +442,51 @@ AM_CONDITIONAL([HTML_MATRIX], [test x"${cf_enable_html_matrix}" = "xyes"])
 ## PKG Config support ##
 ## ------------------ ##
 
-dnl These features rely on the external pkg-config functionality being available.
-dnl Test for pkg-config only when these features are enabled.
+dnl These features rely on the external pkg-config/pkgconf functionality being
+dnl available.  At least pkg-config/pkgconf version 0.29.2 or newer is required
+dnl for support of these modules.  If pkg-config or pkgconf is not installed,
+dnl their support will be gracefully disabled.
 
-# libxml2 required rigmem xml support, make it user optional
+dnl Ensure that the PKG_PREREQ macro is defined:
+m4_ifndef([PKG_PREREQ],
+    [m4_fatal([must install pkg-config (or pkgconf) 0.29.2 or later before running bootstrap])])
+
+PKG_PREREQ([0.29.2])
+PKG_PROG_PKG_CONFIG([0.29.2])
+
+dnl Check for libusb, treat LIBUSB_LIBS and LIBUSB_CFLAGS as precious variables.
+AC_MSG_CHECKING([whether to build USB dependent backends])
+AC_ARG_WITH([libusb],
+    [AS_HELP_STRING([--without-libusb],
+        [disable USB dependent backends @<:@default=yes@:>@])],
+        [cf_with_libusb=$with_libusb],
+        [cf_with_libusb=yes]
+    )
+
+AC_MSG_RESULT([$cf_with_libusb])
+
+dnl Only used in hamlib.pc.in
+HAMLIB_PC_LIBUSB=""
+
+AS_IF([test x"${cf_with_libusb}" = "xyes"], [
+    PKG_CHECK_MODULES([LIBUSB],
+                      [libusb-1.0],
+                      [AC_DEFINE([HAVE_LIBUSB],
+                          [1],
+                          [Define if libusb-1.0 is available])
+                      HAMLIB_PC_LIBUSB="libusb-1.0"],
+                      [AC_MSG_WARN([libusb-1.0 or pkg_config not found, USB backend support will be disabled])
+                      cf_with_libusb=no
+                      ])
+    ])
+
+AC_SUBST([HAMLIB_PC_LIBUSB])
+
+dnl Configure the tests/Makefile.am conditional
+AM_CONDITIONAL([TESTS_HAVE_LIBUSB], [test x"${cf_with_libusb}" = "xyes"])
+
+
+dnl libxml2 required for rigmem XML support; make it build time optional.
 AC_MSG_CHECKING([whether to build rigmem XML support])
 AC_ARG_WITH([xml-support],
 	    [AS_HELP_STRING([--with-xml-support],
@@ -481,8 +495,19 @@ AC_ARG_WITH([xml-support],
 	    [cf_with_xml_support=no])
 AC_MSG_RESULT([$cf_with_xml_support])
 
+AS_IF([test x"${cf_with_xml_support}" = "xyes"], [
+      PKG_CHECK_MODULES([LIBXML2],
+			[libxml-2.0],
+			[AC_DEFINE([HAVE_XML2],
+				   [1],
+				   [Define if libxml2 is available])],
+			[AC_MSG_WARN([libxml-2.0 or pkgconf/pkg-config not found, XML support will be disabled])
+			])
+      ])
 
-# USRP needs a C++ compiler, tested for presence above.
+
+dnl USRP needs a C++ compiler, tested for presence above.
+dnl Default is to not build USRP support.
 AS_IF([test x"${cf_with_cxx}" = "xyes"], [
       AC_MSG_CHECKING([whether to build USRP backend])
       AC_ARG_ENABLE([usrp],
@@ -491,39 +516,6 @@ AS_IF([test x"${cf_with_cxx}" = "xyes"], [
 		    [cf_with_usrp=$enableval],
 		    [cf_with_usrp="no"])
       AC_MSG_RESULT([$cf_with_usrp])
-      ])
-
-dnl Only check for pkg-config when either of the dependent features are enabled.
-
-AS_IF([test x"${cf_with_xml_support}" = "xyes" || test x"${cf_with_usrp}" = "xyes"], [
-dnl Check for pkg-config presence and if not installed define a dummy macro
-dnl to disable libxml2 and USRP use.  Code borrowed from:
-dnl http://lists.gnu.org/archive/html/automake/2011-03/msg00008.html
-dnl
-dnl Check for pkg-config program, used for configuring some libraries.
-       m4_define_default([PKG_PROG_PKG_CONFIG],
-		[AC_MSG_CHECKING([pkg-config])
-		 AC_MSG_RESULT([no])])
-
-       PKG_PROG_PKG_CONFIG
-
-dnl If the pkg-config autoconf support isn't installed, define its
-dnl autoconf macro to disable any packages depending on it.
-       m4_define_default([PKG_CHECK_MODULES],
-		[AC_MSG_CHECKING([$1])
-		 AC_MSG_RESULT([no])
-		 $4])
-      ])
-
-
-AS_IF([test x"${cf_with_xml_support}" = "xyes"], [
-      PKG_CHECK_MODULES([LIBXML2],
-			[libxml-2.0],
-			[AC_DEFINE([HAVE_XML2],
-				   [1],
-				   [Define if libxml2 is available])],
-			[AC_MSG_WARN([libxml-2.0 pkg-config not found, XML support will be disabled])
-			])
       ])
 
 AC_SUBST([LIBXML2_LIBS])
@@ -546,20 +538,32 @@ BINDING_LIST=""
 BINDING_LIB_TARGETS=""
 
 
-dnl Check if cxx-binding not wanted, default is to build it
+dnl Check if cxx-binding not wanted, default is to build it if a C++ compiler is available
 
 # C++ binding
 AC_MSG_CHECKING([whether to build C++ binding])
 AC_ARG_WITH([cxx-binding],
 	    [AS_HELP_STRING([--without-cxx-binding],
-			    [do not build C++ binding @<:@default=yes@:>@])],
+			[do not build C++ binding @<:@default=detect@:>@])],
 	    [cf_with_cxx_binding=$withval],
-	    [cf_with_cxx_binding=$cf_with_cxx])
+	    [cf_with_cxx_binding=detect])
 AC_MSG_RESULT([$cf_with_cxx_binding])
+
+case "${cf_with_cxx_binding}" in
+  detect)   cf_with_cxx_binding=$cf_with_cxx ;;
+  yes)
+            AS_IF([test x"${cf_with_cxx}" != "xyes"],
+                [AC_MSG_ERROR([C++ binding needs a C++ compiler.])]
+            )
+            ;;
+  no)       ;;
+  *)        AC_MSG_ERROR([invalid value for --without-cxx-binding: ${cf_with_cxx_binding}]) ;;
+esac
 
 AS_IF([test x"${cf_with_cxx_binding}" = "xyes"],
       [BINDINGS="${BINDINGS} c++"])
 
+AM_CONDITIONAL([ENABLE_CXX], [test x"${cf_with_cxx_binding}" = "xyes"])
 
 dnl Check if perl-binding is wanted, default is to not build it
 
@@ -601,7 +605,7 @@ AC_MSG_RESULT([$cf_with_python_binding])
 dnl AX_PYTHON_DEVEL from macros/ax_python_devel.m4
 AS_IF([test x"${cf_with_python_binding}" = "xyes"],[
     dnl Order matters!	AX_PYTHON_DEVEL must be first for PYTHON_VERSION to be honored.
-    AX_PYTHON_DEVEL([">='2.1'"])
+    AX_PYTHON_DEVEL([>='2.1'])
     AM_PATH_PYTHON([2.1],, [:])
 
     BINDING_LIST="${BINDING_LIST} python"
@@ -615,9 +619,32 @@ AS_IF([test x"${cf_with_python_binding}" = "xyes"],[
 
 AM_CONDITIONAL([ENABLE_PYTHON], [test x"${cf_with_python_binding}" = "xyes"])
 
-dnl Determine whether to install pytest.py or py3test.py to $(docdir)/examples
-AM_PYTHON_CHECK_VERSION([${PYTHON}], [3.0], [pyver_3="yes"], [pyver_3="no"])
-AM_CONDITIONAL([PYVER_3], [test x"${pyver_3}" = x"yes"])
+AC_ARG_ENABLE([pytest],
+    [AS_HELP_STRING([--enable-pytest],
+        [execute Python tests @<:@default=check@:>@])
+    ],
+    [enable_pytest=check]
+)
+
+AS_IF([test "x$enable_pytest" != "xno"],
+    [AC_PATH_PROG([PYTEST], [pytest])]
+)
+
+AS_IF([test "x$PYTEST" = "x"],
+    [have_pytest=no],
+    [have_pytest=yes]
+)
+
+AS_IF([test "x$enable_pytest" = "xyes"],
+    [AS_IF([test "x$have_pytest" = "xno"],
+        [AC_MSG_ERROR([pytest requested but not found])]
+    )]
+)
+
+# "check" is replaced by the result ("yes" or "no")
+enable_pytest=$have_pytest
+
+AC_SUBST([enable_pytest])
 
 # Tcl binding
 AC_MSG_CHECKING([Whether to build Tcl bindings])
@@ -637,14 +664,14 @@ AS_IF([test x"${build_tcl}" = "xyes"],[
             AC_MSG_WARN([Unable to find Tcl pkgconfig])
             SC_PATH_TCLCONFIG
             SC_LOAD_TCLCONFIG
-        ])
 
-    tcl_save_CPPFLAGS=$CPPFLAGS
-    CPPFLAGS="$CPPFLAGS $TCL_INCLUDE_SPEC"
-    AC_CHECK_HEADERS([tcl.h],
-	[],
-	[AC_MSG_ERROR([Unable to find Tcl headers])])
-    CPPFLAGS=$tcl_save_CPPFLAGS
+            tcl_save_CPPFLAGS=$CPPFLAGS
+            CPPFLAGS="$CPPFLAGS $TCL_INCLUDE_SPEC"
+            AC_CHECK_HEADERS([tcl.h],
+            [],
+            [AC_MSG_ERROR([Unable to find Tcl headers])])
+            CPPFLAGS=$tcl_save_CPPFLAGS
+        ])
 
     BINDING_LIST="${BINDING_LIST} tcl"
     BINDING_ALL="${BINDING_ALL} all-tcl"
@@ -667,6 +694,10 @@ AC_SUBST([TCL_CFLAGS])
 
 
 dnl Check for lua availability, so we can enable HamlibLua
+
+dnl Newer ax_lua.m4 macro, at least Serial 47, requires LUAJIT be present.
+AM_CONDITIONAL([LUAJIT], [false])
+
 # Lua bindings
 AC_MSG_CHECKING([whether to build lua binding])
 AC_ARG_WITH([lua-binding],
@@ -729,8 +760,11 @@ AC_MSG_CHECKING([whether to build winradio backend])
 AC_ARG_ENABLE([winradio],
 	      [AS_HELP_STRING([--disable-winradio],
 			      [do not build winradio backend @<:@default=yes@:>@])],
-	      [cf_with_winradio="no"],
-	      [cf_with_winradio="yes" AC_DEFINE([HAVE_WINRADIO],[1],[Define if winradio backend is built])])
+	      [cf_with_winradio="${enable_winradio}"],
+	      [cf_with_winradio="yes" ])
+AS_IF([test x"${cf_with_winradio}" = "xyes"],
+      [AC_DEFINE([HAVE_WINRADIO],[1],[Define if winradio backend is built])]
+)
 AC_MSG_RESULT([$cf_with_winradio])
 
 dnl Parallel port device disable
@@ -738,26 +772,22 @@ AC_MSG_CHECKING([whether to build parallel port devices])
 AC_ARG_ENABLE([parallel],
 	      [AS_HELP_STRING([--disable-parallel],
 			      [do not build parallel devices @<:@default=yes@:>@])],
-	      [cf_with_parallel="no"],
-	      [cf_with_parallel="yes" AC_DEFINE([HAVE_PARALLEL],[1],[Define if parallel devices are to be built])])
+	      [cf_with_parallel="${enable_parallel}"],
+	      [cf_with_parallel="yes"])
+AS_IF([test x"${cf_with_parallel}" = "xyes"],
+      [AC_DEFINE([HAVE_PARALLEL],[1],[Define if parallel devices are to be built])]
+)
 AC_MSG_RESULT([$cf_with_parallel])
 
 DL_LIBS=""
 
 AS_IF([test x"${cf_with_winradio}" = "xyes"],
-      [RIGS_BACKEND_LIST="$RIGS_BACKEND_LIST rigs/winradio"
+      [RIG_BACKEND_LIST="$RIG_BACKEND_LIST rigs/winradio"
 dnl Check for libdl and set DL_LIBS if found--used for linradio WR-G313 backend.
        AC_CHECK_LIB([dl], [dlopen], [DL_LIBS="-ldl"],
 		    [AC_MSG_WARN([dlopen was not found in libdl--linradio backend will be disabled])])
-      ])
-
-# Still need -ldl if we have it
-AS_IF([test x"${cf_with_winradio}" = "xno"],
-      [RIGS_BACKEND_LIST="$RIGS_BACKEND_LIST"
-dnl Check for libdl and set DL_LIBS if found--used for linradio WR-G313 backend.
-       AC_CHECK_LIB([dl], [dlopen], [DL_LIBS="-ldl"],
-		    [AC_MSG_WARN([dlopen was not found in libdl--linradio backend will be disabled])])
-      ])
+      ],
+      [RIG_BACKEND_OPTIONAL_LIST="$RIG_BACKEND_OPTIONAL_LIST rigs/winradio"])
 
 dnl Set conditional compilation for G-313.
 AS_CASE(["$host_os"],
@@ -786,9 +816,6 @@ AS_IF([test x"${DL_LIBS}" = "x-ldl"],
 
 AC_SUBST([DL_LIBS])
 
-dnl check for c++11
-AX_CXX_COMPILE_STDCXX([11],[noext],[mandatory])
-
 
 dnl stuff that requires C++ support
 AS_IF([test x"${cf_with_usrp}" = "xyes"],[
@@ -800,11 +827,6 @@ AS_IF([test x"${cf_with_usrp}" = "xyes"],[
 
 AM_CONDITIONAL([HAVE_USRP], [test x"${cf_with_usrp}" = "xyes"])
 
-AM_CONDITIONAL(BUILD_OS_IS_UBUNTU, [test x"$build_os" = ubuntu])
-AM_CONDITIONAL(BUILD_OS_IS_FEDORA, [test x"$build_os" = fedora])
-echo Build_OS is $build_os
-
-
 
 ## -------------------------------- ##
 ## Prepare rig backend dependencies ##
@@ -812,15 +834,12 @@ echo Build_OS is $build_os
 
 dnl otherwise parallel 'make -jn' will fail
 
-## ---------------------------------- ##
-## Prepare rig backend dependencies ##
-## ---------------------------------- ##
-
 for be in ${RIG_BACKEND_LIST} ; do
 	RIGDIR=$(echo $be | awk -F "/" '{print $2}')
 	RIG_BACKENDEPS="${RIG_BACKENDEPS} \$(top_builddir)/rigs/${RIGDIR}/libhamlib-${RIGDIR}.la"
 done
 
+AC_SUBST([RIG_BACKEND_OPTIONAL_LIST])
 AC_SUBST([RIG_BACKEND_LIST])
 AC_SUBST([RIG_BACKENDEPS])
 
@@ -836,6 +855,7 @@ for be in ${ROT_BACKEND_LIST} ; do
 	ROT_BACKENDEPS="${ROT_BACKENDEPS} \$(top_builddir)/rotators/${ROTDIR}/libhamlib-${ROTDIR}.la"
 done
 
+AC_SUBST([ROT_BACKEND_OPTIONAL_LIST])
 AC_SUBST([ROT_BACKEND_LIST])
 AC_SUBST([ROT_BACKENDEPS])
 
@@ -898,12 +918,14 @@ rotators/spid/Makefile
 rotators/ts7400/Makefile
 rotators/indi/Makefile
 rotators/satel/Makefile
+rotators/skywatcher/Makefile
 rotators/radant/Makefile
 rigs/adat/Makefile
 rigs/alinco/Makefile
 rigs/aor/Makefile
 rigs/barrett/Makefile
 rigs/codan/Makefile
+rigs/commradio/Makefile
 rigs/dorji/Makefile
 rigs/drake/Makefile
 rigs/dummy/Makefile
@@ -929,9 +951,11 @@ rigs/uniden/Makefile
 rigs/winradio/Makefile
 rigs/wj/Makefile
 rigs/yaesu/Makefile
+rigs/guohetec/Makefile
 rigs/gomspace/Makefile
 rigs/mds/Makefile
 rigs/anytone/Makefile
+rigs/motorola/Makefile
 tests/Makefile
 scripts/Makefile
 android/Makefile
@@ -949,27 +973,28 @@ echo \
 
  ${PACKAGE_NAME} Version ${PACKAGE_VERSION} configuration:
 
- Prefix 	${prefix}
- Preprocessor	${CPP} ${CPPFLAGS}
- C Compiler	${CC} ${CFLAGS}
- C++ Compiler	${CXX} ${CXXFLAGS}
+ Prefix             ${prefix}
+ Preprocessor       ${CPP} ${CPPFLAGS}
+ C Compiler         ${CC} ${CFLAGS}
+ C++ Compiler       ${CXX} ${CXXFLAGS}
 
  Package features:
-    With C++ binding		    ${cf_with_cxx_binding}
-    With Perl binding		    ${cf_with_perl_binding}
-    With Python binding 	    ${cf_with_python_binding}
-    With TCL binding		    ${build_tcl}
-    With Lua binding		    ${cf_with_lua_binding}
-    With rigmem XML support	    ${cf_with_xml_support}
-    With Readline support	    ${cf_with_readline_support}
-    With INDI support		    ${cf_with_indi_support}
+    With C++ binding                ${cf_with_cxx_binding}
+    With Perl binding               ${cf_with_perl_binding}
+    With Python binding             ${cf_with_python_binding}
+    With TCL binding                ${build_tcl}
+    With Lua binding                ${cf_with_lua_binding}
+    With rigmem XML support         ${cf_with_xml_support}
+    With Readline support           ${cf_with_readline_support}
+    With INDI support               ${cf_with_indi_support}
 
     Enable HTML rig feature matrix  ${cf_enable_html_matrix}
-    Enable WinRadio		    ${cf_with_winradio}
-    Enable Parallel		    ${cf_with_parallel}
-    Enable USRP 		    ${cf_with_usrp}
-    Enable USB backends 	    ${cf_with_libusb}
-    Enable shared libs		    ${enable_shared}
-    Enable static libs		    ${enable_static}
+    Enable WinRadio                 ${cf_with_winradio}
+    Enable Parallel                 ${cf_with_parallel}
+    Enable USRP                     ${cf_with_usrp}
+    Enable USB backends             ${cf_with_libusb}
+    Enable shared libs              ${enable_shared}
+    Enable static libs              ${enable_static}
+    Enable Python tests             ${enable_pytest}
 
 -----------------------------------------------------------------------"

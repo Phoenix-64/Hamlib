@@ -81,16 +81,16 @@ static const struct icom_priv_caps ic703_priv_caps =
     ic706_ts_sc_list
 };
 
-const struct rig_caps ic703_caps =
+struct rig_caps ic703_caps =
 {
     RIG_MODEL(RIG_MODEL_IC703),
     .model_name = "IC-703",
     .mfg_name =  "Icom",
-    .version =  BACKEND_VER ".1",
+    .version =  BACKEND_VER ".2",
     .copyright =  "LGPL",
     .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_MOBILE,
-    .ptt_type =  RIG_PTT_NONE,
+    .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_RIG,
     .port_type =  RIG_PORT_SERIAL,
     .serial_rate_min =  300,
@@ -112,7 +112,6 @@ const struct rig_caps ic703_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
     },
     .parm_gran =  {},
     .ctcss_list =  common_ctcss_list,

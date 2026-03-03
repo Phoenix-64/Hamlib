@@ -26,14 +26,16 @@
 #  include <sys/ioctl.h>
 #endif
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
+#include "hamlib/rot_state.h"
 #include "parallel.h"
 #include "register.h"
 
 static int
 if100_set_position(ROT *rot, azimuth_t az, elevation_t el)
 {
-    hamlib_port_t *port = &rot->state.rotport;
+    hamlib_port_t *port = ROTPORT(rot);
+    struct rot_state *rs = ROTSTATE(rot);
     int retval;
     int az_i;
     int el_i;
@@ -42,10 +44,10 @@ if100_set_position(ROT *rot, azimuth_t az, elevation_t el)
 
     rig_debug(RIG_DEBUG_TRACE, "%s called: %f %f\n", __func__, az, el);
 
-    az_scale = 255. / (rot->state.max_az - rot->state.min_az);
+    az_scale = 255. / (rs->max_az - rs->min_az);
     el_scale = 255. / 180;
 
-    az_i = (int)round((az - rot->state.min_az) * az_scale);
+    az_i = (int)round((az - rs->min_az) * az_scale);
     el_i = (int)round(el * el_scale);
 
     rig_debug(RIG_DEBUG_TRACE, "%s output az: %d el: %d\n", __func__, az_i, el_i);
@@ -100,7 +102,7 @@ const struct rot_caps if100_rot_caps =
     .mfg_name =         "AMSAT",
     .version =          "20110531.0",
     .copyright =        "LGPL",
-    .status =           RIG_STATUS_BETA,
+    .status =           RIG_STATUS_STABLE,
     .rot_type =         ROT_TYPE_OTHER,
     .port_type =        RIG_PORT_PARALLEL,
     .write_delay =      0,

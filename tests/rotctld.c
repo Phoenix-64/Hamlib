@@ -22,7 +22,7 @@
  *
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,11 +51,9 @@
 #  include <netdb.h>
 #endif
 
-#ifdef HAVE_PTHREAD
-#  include <pthread.h>
-#endif
+#include <pthread.h>
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 
 #include "rig.h"
 #include "rotctl_parse.h"
@@ -69,9 +67,14 @@ struct handle_data
     socklen_t clilen;
 };
 
-void *handle_socket(void *arg);
 
-void usage();
+/*
+ * Prototypes
+ */
+void *handle_socket(void *arg);
+static void usage(FILE *fout);
+static void short_usage(FILE *fout);
+
 
 /*
  * Reminder: when adding long options,
@@ -152,7 +155,7 @@ int main(int argc, char *argv[])
 
     int retcode;        /* generic return code from functions */
 
-    int verbose = 0;
+    int verbose = RIG_DEBUG_NONE;
     int show_conf = 0;
     int dump_caps_opt = 0;
     const char *rot_file = NULL;
@@ -166,12 +169,11 @@ int main(int argc, char *argv[])
     char host[NI_MAXHOST];
     char serv[NI_MAXSERV];
 
-#ifdef HAVE_PTHREAD
     pthread_t thread;
     pthread_attr_t attr;
-#endif
     struct handle_data *arg;
 
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -188,7 +190,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -196,42 +198,18 @@ int main(int argc, char *argv[])
             exit(0);
 
         case 'm':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             my_model = atoi(optarg);
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_file = optarg;
             break;
 
         case 'R':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_file2 = optarg;
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -241,12 +219,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'C':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (*conf_parms != '\0')
             {
                 strcat(conf_parms, ",");
@@ -259,50 +231,28 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms));
+            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms) - 1);
             break;
 
         case 't':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             portno = optarg;
             break;
 
         case 'T':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             src_addr = optarg;
             break;
 
         case 'o':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             az_offset = atof(optarg);
             break;
 
         case 'O':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             el_offset = atof(optarg);
+            break;
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         case 'L':
@@ -322,12 +272,11 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            usage();    /* unknown option? */
+            /* unknown getopt option */
+            short_usage(stderr);
             exit(1);
         }
     }
-
-    rig_set_debug(verbose);
 
     rig_debug(RIG_DEBUG_VERBOSE, "rotctld, %s\n", hamlib_version2);
     rig_debug(RIG_DEBUG_VERBOSE, "%s",
@@ -345,44 +294,49 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    char *token=strtok(conf_parms,",");
+    char *token = strtok(conf_parms, ",");
 
-    while(token)
+    while (token)
     {
         char mytoken[100], myvalue[100];
-        token_t lookup;
-        sscanf(token,"%99[^=]=%99s", mytoken, myvalue);
+        hamlib_token_t lookup;
+        sscanf(token, "%99[^=]=%99s", mytoken, myvalue);
         //printf("mytoken=%s,myvalue=%s\n",mytoken, myvalue);
-        lookup = rot_token_lookup(my_rot,mytoken);
+        lookup = rot_token_lookup(my_rot, mytoken);
+
         if (lookup == 0)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s', use -L switch to see\n", __func__, mytoken);
+            rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s', use -L switch to see\n",
+                      __func__, mytoken);
             token = strtok(NULL, ",");
             continue;
         }
-        retcode = rot_set_conf(my_rot, rot_token_lookup(my_rot,mytoken), myvalue);
+
+        retcode = rot_set_conf(my_rot, lookup, myvalue);
+
         if (retcode != RIG_OK)
         {
             fprintf(stderr, "Config parameter error: %s\n", rigerror(retcode));
             exit(2);
         }
+
         token = strtok(NULL, ",");
     }
 
     if (rot_file)
     {
-        strncpy(my_rot->state.rotport.pathname, rot_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(ROTPORT(my_rot)->pathname, rot_file, HAMLIB_FILPATHLEN - 1);
     }
 
     if (rot_file2)
     {
-        strncpy(my_rot->state.rotport2.pathname, rot_file2, HAMLIB_FILPATHLEN - 1);
+        strncpy(ROTPORT2(my_rot)->pathname, rot_file2, HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
     if (serial_rate != 0)
     {
-        my_rot->state.rotport.parm.serial.rate = serial_rate;
+        ROTPORT(my_rot)->parm.serial.rate = serial_rate;
     }
 
     /*
@@ -412,8 +366,8 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    my_rot->state.az_offset = az_offset;
-    my_rot->state.el_offset = el_offset;
+    ROTSTATE(my_rot)->az_offset = az_offset;
+    ROTSTATE(my_rot)->el_offset = el_offset;
 
     if (verbose > 0)
     {
@@ -472,7 +426,7 @@ int main(int argc, char *argv[])
     if (retcode != 0)
     {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(retcode));
-        exit(2);
+        exit(1);
     }
 
     saved_result = result;
@@ -623,7 +577,6 @@ int main(int argc, char *argv[])
                   host,
                   serv);
 
-#ifdef HAVE_PTHREAD
         pthread_attr_init(&attr);
         pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
@@ -635,12 +588,7 @@ int main(int argc, char *argv[])
             break;
         }
 
-#else
-        handle_socket(arg);
-        retcode = 1;
-#endif
     }
-
     while (retcode == 0);
 
     rot_close(my_rot); /* close port */
@@ -750,38 +698,42 @@ handle_exit:
 #endif
     free(arg);
 
-#ifdef HAVE_PTHREAD
     pthread_exit(NULL);
-#endif
     return NULL;
 }
 
 
-void usage()
+static void usage(FILE *fout)
 {
-    printf("Usage: rotctld [OPTION]... [COMMAND]...\n"
+    fprintf(fout, "Usage: rotctld [OPTION]...\n"
            "Daemon serving COMMANDs to a connected antenna rotator.\n\n");
 
-    printf(
-        "  -m, --model=ID                select rotator model number. See model list\n"
+    fprintf(fout,
+        "  -m, --model=ID                select rotator model number. See model list (-l)\n"
         "  -r, --rot-file=DEVICE         set device of the rotator to operate on\n"
         "  -R, --rot-file2=DEVICE        set device of the 2nd rotator controller to operate on\n"
         "  -s, --serial-speed=BAUD       set serial speed of the serial port\n"
         "  -t, --port=NUM                set TCP listening port, default %s\n"
         "  -T, --listen-addr=IPADDR      set listening IP address, default ANY\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
-        "  -o, --set-azoffset==VAL       set offset for azimuth\n"
-        "  -O, --set-eloffset==VAL       set offset for elevation\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
+        "  -o, --set-azoffset=VAL        set offset for azimuth\n"
+        "  -O, --set-eloffset=VAL        set offset for elevation\n"
         "  -L, --show-conf               list all config parameters\n"
         "  -l, --list                    list all model numbers and exit\n"
         "  -u, --dump-caps               dump capabilities and exit\n"
-        "  -v, --verbose                 set verbose mode, cumulative\n"
+        "  -v, --verbose                 set verbose mode, cumulative (-v to -vvvvv)\n"
         "  -Z, --debug-time-stamps       enable time stamps for debug messages\n"
         "  -h, --help                    display this help and exit\n"
         "  -V, --version                 output version information and exit\n\n",
         portno);
 
-    usage_rot(stdout);
+    usage_rot(fout);
+}
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
+
+static void short_usage(FILE *fout)
+{
+    fprintf(fout, "Usage: rotctld [OPTION]... [-m ID] [-r DEVICE] [-s BAUD]\n");
+    fprintf(fout, "Daemon serving COMMANDs to a connected antenna rotator.\n\n");
+    fprintf(fout, "Type: rotctld --help for extended usage.\n");
 }

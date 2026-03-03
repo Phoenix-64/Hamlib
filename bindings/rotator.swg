@@ -18,6 +18,19 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+%{
+#include <hamlib/rotator.h>
+%}
+
+%include macros.swg
+%immutable rot_caps::model_name;
+%immutable rot_caps::mfg_name;
+%immutable rot_caps::version;
+%immutable rot_caps::copyright;
+
+%include <hamlib/rotator.h>
+%include <hamlib/rotlist.h>
+%include <hamlib/rot_state.h>
 
 %inline %{
 
@@ -55,7 +68,7 @@ typedef struct Rot {
 		}
 		/* install shortcuts */
 		r->caps = r->rot->caps;
-		r->state = &r->rot->state;
+		r->state = &r->rot->state; rot_data_pointer(r->rot, RIG_PTRX_ROTSTATE);
 		r->do_exception = 0;    /* default is disabled */
 		r->error_status = RIG_OK;
 		return r;
@@ -78,6 +91,16 @@ typedef struct Rot {
 	ROTMETHOD0(open)
 	ROTMETHOD0(close)
 
+	ROTMETHOD2(set_ext_func, hamlib_token_t, int)
+	ROTMETHOD2(set_ext_level, hamlib_token_t, value_t)
+	ROTMETHOD2(set_ext_parm, hamlib_token_t, value_t)
+
+	ROTMETHOD2(set_func, setting_t, int)
+
+	ROTMETHOD2(set_level, setting_t, value_t)
+
+	ROTMETHOD2(set_parm, setting_t, value_t)
+
 	ROTMETHOD2(set_position, azimuth_t, elevation_t)
         extern void get_position(azimuth_t *OUTPUT, elevation_t *OUTPUT);
 	ROTMETHOD0(stop)
@@ -88,28 +111,43 @@ typedef struct Rot {
 	ROTMETHOD1(token_lookup, const_char_string)	/* conf */
 
 	void set_conf(const char *name, const char *val) {
-		token_t tok = rot_token_lookup(self->rot, name);
+		hamlib_token_t tok = rot_token_lookup(self->rot, name);
 		if (tok == RIG_CONF_END)
 			self->error_status = -RIG_EINVAL;
 		else
 			self->error_status = rot_set_conf(self->rot, tok, val);
 	}
 
-	ROTMETHOD2(set_conf, token_t, const_char_string)
+	ROTMETHOD2(set_conf, hamlib_token_t, const_char_string)
 
-        const char *get_conf(token_t tok) {
+	ROT_GENERATE_HAS_GET_SET(func)
+	ROT_GENERATE_HAS_GET_SET(level)
+	ROT_GENERATE_HAS_GET_SET(parm)
+
+#ifdef SWIGPYTHON
+	ROT_GET_LONG(func)
+	ROT_GET_LONG(ext_func)
+
+	ROT_GET_VALUE_T(level)
+	ROT_GET_VALUE_T(ext_level)
+
+	ROT_GET_VALUE_T(parm)
+	ROT_GET_VALUE_T(ext_parm)
+#endif
+
+        const char *get_conf(hamlib_token_t tok) {
                 static char s[128] = "";
-                self->error_status = rot_get_conf(self->rot, tok, s);
+                self->error_status = rot_get_conf2(self->rot, tok, s, sizeof s);
                 return s;
         }
 
         const char *get_conf(const char *name) {
-                token_t tok = rot_token_lookup(self->rot, name);
+                hamlib_token_t tok = rot_token_lookup(self->rot, name);
                 static char s[128] = "";
                 if (tok == RIG_CONF_END)
                         self->error_status = -RIG_EINVAL;
                 else
-                        self->error_status = rot_get_conf(self->rot, tok, s);
+                        self->error_status = rot_get_conf2(self->rot, tok, s, sizeof s);
                 return s;
         }
 

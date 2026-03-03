@@ -52,14 +52,14 @@
  *
  *
  */
-const struct rig_caps dsp10_caps =
+struct rig_caps dsp10_caps =
 {
     RIG_MODEL(RIG_MODEL_DSP10),
     .model_name = "DSP-10",
     .mfg_name =  "TAPR",
     .version =  "20061007.0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

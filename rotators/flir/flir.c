@@ -23,13 +23,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>  /* String function definitions */
-#include <math.h>
 #include <sys/time.h>
 
 #include "hamlib/rotator.h"
+#include "hamlib/port.h"
+#include "hamlib/rot_state.h"
 #include "register.h"
 #include "idx_builtin.h"
-#include "serial.h"
+#include "iofunc.h"
 
 #include "flir.h"
 
@@ -63,22 +64,23 @@ struct flir_priv_data
 
     char *magic_conf;
 
-    float_t resolution_pp;
-    float_t resolution_tp;
+    double resolution_pp;
+    double resolution_tp;
 };
 
 static int flir_request(ROT *rot, char *request, char *response,
                         int resp_size)
 {
     int return_value = -RIG_EINVAL;
+    hamlib_port_t *rotp = ROTPORT(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    rig_flush(&rot->state.rotport);
+    rig_flush(rotp);
 
     if (request)
     {
-        return_value = write_block(&rot->state.rotport, (unsigned char *)request,
+        return_value = write_block(rotp, (unsigned char *)request,
                                    strlen(request));
 
         if (return_value != RIG_OK)
@@ -93,10 +95,11 @@ static int flir_request(ROT *rot, char *request, char *response,
     {
         int retry_read = 0;
         int read_char;
-        while (retry_read < rot->state.rotport.retry)
+
+        while (retry_read < rotp->retry)
         {
             memset(response, 0, (size_t)resp_size);
-            read_char = read_string(&rot->state.rotport, (unsigned char *)response,
+            read_char = read_string(rotp, (unsigned char *)response,
                                     resp_size,
                                     "\r\n", sizeof("\r\n"), 0, 1);
 
@@ -132,15 +135,15 @@ static int flir_init(ROT *rot)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    rot->state.priv = (struct flir_priv_data *)
-                      calloc(1, sizeof(struct flir_priv_data));
+    ROTSTATE(rot)->priv = (struct flir_priv_data *)
+                          calloc(1, sizeof(struct flir_priv_data));
 
-    if (!rot->state.priv)
+    if (!ROTSTATE(rot)->priv)
     {
         return -RIG_ENOMEM;
     }
 
-    priv = rot->state.priv;
+    priv = ROTSTATE(rot)->priv;
 
     priv->az = priv->el = 0;
 
@@ -157,7 +160,7 @@ static int flir_init(ROT *rot)
 static int flir_cleanup(ROT *rot)
 {
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -165,9 +168,9 @@ static int flir_cleanup(ROT *rot)
     free(priv->ext_levels);
     free(priv->ext_parms);
     free(priv->magic_conf);
-    free(rot->state.priv);
+    free(ROTSTATE(rot)->priv);
 
-    rot->state.priv = NULL;
+    ROTSTATE(rot)->priv = NULL;
 
     return RIG_OK;
 }
@@ -176,15 +179,16 @@ static int flir_open(ROT *rot)
 {
     struct flir_priv_data *priv;
     char return_str[MAXBUF];
-    float_t resolution_pp, resolution_tp;
+    double resolution_pp, resolution_tp;
     int return_value = RIG_OK;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    priv = rot->state.priv;
+    priv = ROTSTATE(rot)->priv;
 
     // Disable ECHO
     return_value = flir_request(rot, "ED\n", NULL, MAXBUF);
+
     if (return_value != RIG_OK)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: ED: %s\n", __func__, rigerror(return_value));
@@ -193,6 +197,7 @@ static int flir_open(ROT *rot)
 
     // Disable Verbose Mode
     return_value = flir_request(rot, "FT\n", return_str, MAXBUF);
+
     if (return_value != RIG_OK)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: FT: %s\n", __func__, rigerror(return_value));
@@ -202,8 +207,8 @@ static int flir_open(ROT *rot)
     // Get PAN resolution in arcsecs
     if (flir_request(rot, "PR\n", return_str, MAXBUF) == RIG_OK)
     {
-        sscanf(return_str, "* %f", &resolution_pp);
-        rig_debug(RIG_DEBUG_VERBOSE, "PAN resolution: %f arcsecs per position\n",
+        sscanf(return_str, "* %lf", &resolution_pp);
+        rig_debug(RIG_DEBUG_VERBOSE, "PAN resolution: %lf arcsecs per position\n",
                   resolution_pp);
         priv->resolution_pp = resolution_pp;
     }
@@ -215,8 +220,8 @@ static int flir_open(ROT *rot)
     // Get TILT resolution in arcsecs
     if (flir_request(rot, "TR\n", return_str, MAXBUF) == RIG_OK)
     {
-        sscanf(return_str, "* %f", &resolution_tp);
-        rig_debug(RIG_DEBUG_VERBOSE, "TILT resolution: %f arcsecs per position\n",
+        sscanf(return_str, "* %lf", &resolution_tp);
+        rig_debug(RIG_DEBUG_VERBOSE, "TILT resolution: %lf arcsecs per position\n",
                   resolution_tp);
         priv->resolution_tp = resolution_tp;
     }
@@ -235,12 +240,12 @@ static int flir_close(ROT *rot)
     return RIG_OK;
 }
 
-static int flir_set_conf(ROT *rot, token_t token, const char *val)
+static int flir_set_conf(ROT *rot, hamlib_token_t token, const char *val)
 {
     return -RIG_ENIMPL;
 }
 
-static int flir_get_conf(ROT *rot, token_t token, char *val)
+static int flir_get_conf(ROT *rot, hamlib_token_t token, char *val)
 {
     return -RIG_ENIMPL;
 }
@@ -251,7 +256,7 @@ static int flir_set_position(ROT *rot, azimuth_t az, elevation_t el)
     char return_str[MAXBUF];
     char cmd_str[MAXBUF];
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %.2f %.2f\n", __func__,
               az, el);
@@ -277,7 +282,7 @@ static int flir_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
     int32_t pan_positions, tilt_positions;
 
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -316,25 +321,29 @@ static int flir_stop(ROT *rot)
     int return_value = RIG_OK;
 
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
     azimuth_t az;
     elevation_t el;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     return_value = flir_request(rot, "H\n", NULL, MAXBUF);
+
     if (return_value != RIG_OK)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: H: %s\n", __func__, rigerror(return_value));
         return return_value;
     }
+
     // Wait 2s until rotor has stopped (Needs to be refactored)
     hl_usleep(2000000);
 
     return_value = flir_get_position(rot, &az, &el);
+
     if (return_value != RIG_OK)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: flrig_get_position: %s\n", __func__, rigerror(return_value));
+        rig_debug(RIG_DEBUG_ERR, "%s: flrig_get_position: %s\n", __func__,
+                  rigerror(return_value));
         return return_value;
     }
 
@@ -376,7 +385,7 @@ static int flir_reset(ROT *rot, rot_reset_t reset)
 static int flir_move(ROT *rot, int direction, int speed)
 {
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
     rig_debug(RIG_DEBUG_TRACE, "%s: Direction = %d, Speed = %d\n", __func__,
@@ -409,7 +418,7 @@ static const char *flir_get_info(ROT *rot)
     char info_str[101];
 
     struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                  ROTSTATE(rot)->priv;
 
     sprintf(priv->info, "No Info");
 
@@ -452,22 +461,22 @@ static int flir_get_level(ROT *rot, setting_t level, value_t *val)
     return -RIG_ENIMPL;
 }
 
-static int flir_set_ext_level(ROT *rot, token_t token, value_t val)
+static int flir_set_ext_level(ROT *rot, hamlib_token_t token, value_t val)
 {
     return -RIG_ENIMPL;
 }
 
-static int flir_get_ext_level(ROT *rot, token_t token, value_t *val)
+static int flir_get_ext_level(ROT *rot, hamlib_token_t token, value_t *val)
 {
     return -RIG_ENIMPL;
 }
 
-static int flir_set_ext_func(ROT *rot, token_t token, int status)
+static int flir_set_ext_func(ROT *rot, hamlib_token_t token, int status)
 {
     return -RIG_ENIMPL;
 }
 
-static int flir_get_ext_func(ROT *rot, token_t token, int *status)
+static int flir_get_ext_func(ROT *rot, hamlib_token_t token, int *status)
 {
     return -RIG_ENIMPL;
 }
@@ -482,12 +491,12 @@ static int flir_get_parm(ROT *rot, setting_t parm, value_t *val)
     return -RIG_ENIMPL;
 }
 
-static int flir_set_ext_parm(ROT *rot, token_t token, value_t val)
+static int flir_set_ext_parm(ROT *rot, hamlib_token_t token, value_t val)
 {
     return -RIG_ENIMPL;
 }
 
-static int flir_get_ext_parm(ROT *rot, token_t token, value_t *val)
+static int flir_get_ext_parm(ROT *rot, hamlib_token_t token, value_t *val)
 {
     return -RIG_ENIMPL;
 }
@@ -495,7 +504,7 @@ static int flir_get_ext_parm(ROT *rot, token_t token, value_t *val)
 static int flir_get_status(ROT *rot, rot_status_t *status)
 {
     const struct flir_priv_data *priv = (struct flir_priv_data *)
-                                  rot->state.priv;
+                                        ROTSTATE(rot)->priv;
     *status = priv->status;
 
     return RIG_OK;
@@ -509,9 +518,9 @@ struct rot_caps flir_caps =
     ROT_MODEL(ROT_MODEL_FLIR),
     .model_name =     "PTU Serial",
     .mfg_name =       "FLIR",
-    .version =        "20221126.0",
+    .version =        "20240818.0",
     .copyright =      "LGPL",
-    .status =         RIG_STATUS_ALPHA,
+    .status =         RIG_STATUS_BETA,
     .rot_type =       ROT_TYPE_AZEL,
     .port_type =      RIG_PORT_SERIAL,
     .serial_rate_min =   9600,

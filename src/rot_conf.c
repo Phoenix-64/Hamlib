@@ -18,6 +18,7 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 /**
  * \addtogroup rotator
@@ -30,21 +31,22 @@
  * \file rot_conf.c
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
-#include <stdarg.h>
 #include <stdio.h>   /* Standard input/output definitions */
 #include <string.h>  /* String function definitions */
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
+#include "hamlib/port.h"
+#include "hamlib/rot_state.h"
 
 #include "rot_conf.h"
 #include "token.h"
 
 
 /*
- * Configuration options available in the rot->state struct.
+ * Configuration options available in the rot_state struct.
  */
 static const struct confparams rotfrontend_cfg_params[] =
 {
@@ -132,23 +134,24 @@ static const struct confparams rotfrontend_serial_cfg_params[] =
  * \return RIG_OK or a **negative value** on error.
  *
  * \retval RIG_OK TOK_... value set successfully.
- * \retval RIG_EINVAL TOK_.. value not set.
+ * \retval -RIG_EINVAL TOK_.. value not set.
  *
  * \sa frontrot_get_conf()
  */
-int frontrot_set_conf(ROT *rot, token_t token, const char *val)
+int frontrot_set_conf(ROT *rot, hamlib_token_t token, const char *val)
 {
     struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int val_i;
 
-    rs = &rot->state;
+    rs = ROTSTATE(rot);
 
     rot_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     switch (token)
     {
     case TOK_PATHNAME:
-        strncpy(rs->rotport.pathname, val, HAMLIB_FILPATHLEN - 1);
+        strncpy(rotp->pathname, val, HAMLIB_FILPATHLEN - 1);
         strncpy(rs->rotport_deprecated.pathname, val, HAMLIB_FILPATHLEN - 1);
         break;
 
@@ -158,7 +161,7 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.write_delay = val_i;
+        rotp->write_delay = val_i;
         rs->rotport_deprecated.write_delay = val_i;
         break;
 
@@ -168,7 +171,7 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.post_write_delay = val_i;
+        rotp->post_write_delay = val_i;
         rs->rotport_deprecated.post_write_delay = val_i;
         break;
 
@@ -178,7 +181,7 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.timeout = val_i;
+        rotp->timeout = val_i;
         rs->rotport_deprecated.timeout = val_i;
         break;
 
@@ -188,12 +191,12 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.retry = val_i;
+        rotp->retry = val_i;
         rs->rotport_deprecated.retry = val_i;
         break;
 
     case TOK_SERIAL_SPEED:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -203,12 +206,12 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.parm.serial.rate = val_i;
+        rotp->parm.serial.rate = val_i;
         rs->rotport_deprecated.parm.serial.rate = val_i;
         break;
 
     case TOK_DATA_BITS:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -218,12 +221,12 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.parm.serial.data_bits = val_i;
+        rotp->parm.serial.data_bits = val_i;
         rs->rotport_deprecated.parm.serial.data_bits = val_i;
         break;
 
     case TOK_STOP_BITS:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -233,78 +236,74 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->rotport.parm.serial.stop_bits = val_i;
+        rotp->parm.serial.stop_bits = val_i;
         rs->rotport_deprecated.parm.serial.stop_bits = val_i;
         break;
 
     case TOK_PARITY:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "None"))
         {
-            rs->rotport.parm.serial.parity = RIG_PARITY_NONE;
-            rs->rotport_deprecated.parm.serial.parity = RIG_PARITY_NONE;
+            val_i = RIG_PARITY_NONE;
         }
         else if (!strcmp(val, "Odd"))
         {
-            rs->rotport.parm.serial.parity = RIG_PARITY_ODD;
-            rs->rotport_deprecated.parm.serial.parity = RIG_PARITY_ODD;
+            val_i = RIG_PARITY_ODD;
         }
         else if (!strcmp(val, "Even"))
         {
-            rs->rotport.parm.serial.parity = RIG_PARITY_EVEN;
-            rs->rotport_deprecated.parm.serial.parity = RIG_PARITY_EVEN;
+            val_i = RIG_PARITY_EVEN;
         }
         else if (!strcmp(val, "Mark"))
         {
-            rs->rotport.parm.serial.parity = RIG_PARITY_MARK;
-            rs->rotport_deprecated.parm.serial.parity = RIG_PARITY_MARK;
+            val_i = RIG_PARITY_MARK;
         }
         else if (!strcmp(val, "Space"))
         {
-            rs->rotport.parm.serial.parity = RIG_PARITY_SPACE;
-            rs->rotport_deprecated.parm.serial.parity = RIG_PARITY_SPACE;
+            val_i = RIG_PARITY_SPACE;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        rotp->parm.serial.parity = val_i;
+        rs->rotport_deprecated.parm.serial.parity = val_i;
         break;
 
     case TOK_HANDSHAKE:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "None"))
         {
-            rs->rotport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
-            rs->rotport_deprecated.parm.serial.handshake = RIG_HANDSHAKE_NONE;
+            val_i = RIG_HANDSHAKE_NONE;
         }
         else if (!strcmp(val, "XONXOFF"))
         {
-            rs->rotport.parm.serial.handshake = RIG_HANDSHAKE_XONXOFF;
-            rs->rotport_deprecated.parm.serial.handshake = RIG_HANDSHAKE_XONXOFF;
+            val_i = RIG_HANDSHAKE_XONXOFF;
         }
         else if (!strcmp(val, "Hardware"))
         {
-            rs->rotport.parm.serial.handshake = RIG_HANDSHAKE_HARDWARE;
-            rs->rotport_deprecated.parm.serial.handshake = RIG_HANDSHAKE_HARDWARE;
+            val_i = RIG_HANDSHAKE_HARDWARE;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        rotp->parm.serial.handshake = val_i;
+        rs->rotport_deprecated.parm.serial.handshake = val_i;
         break;
 
     case TOK_FLUSHX:
-        rs->rotport.flushx = atoi(val);
+        rotp->flushx = atoi(val);
         rs->rotport_deprecated.flushx = atoi(val);
         break;
 
@@ -330,59 +329,57 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
 
 
     case TOK_RTS_STATE:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "Unset"))
         {
-            rs->rotport.parm.serial.rts_state = RIG_SIGNAL_UNSET;
-            rs->rotport_deprecated.parm.serial.rts_state = RIG_SIGNAL_UNSET;
+            val_i = RIG_SIGNAL_UNSET;
         }
         else if (!strcmp(val, "ON"))
         {
-            rs->rotport.parm.serial.rts_state = RIG_SIGNAL_ON;
-            rs->rotport_deprecated.parm.serial.rts_state = RIG_SIGNAL_ON;
+            val_i = RIG_SIGNAL_ON;
         }
         else if (!strcmp(val, "OFF"))
         {
-            rs->rotport.parm.serial.rts_state = RIG_SIGNAL_OFF;
-            rs->rotport_deprecated.parm.serial.rts_state = RIG_SIGNAL_OFF;
+            val_i = RIG_SIGNAL_OFF;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        rotp->parm.serial.rts_state = val_i;
+        rs->rotport_deprecated.parm.serial.rts_state = val_i;
         break;
 
     case TOK_DTR_STATE:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "Unset"))
         {
-            rs->rotport.parm.serial.dtr_state = RIG_SIGNAL_UNSET;
-            rs->rotport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_UNSET;
+            val_i = RIG_SIGNAL_UNSET;
         }
         else if (!strcmp(val, "ON"))
         {
-            rs->rotport.parm.serial.dtr_state = RIG_SIGNAL_ON;
-            rs->rotport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_ON;
+            val_i = RIG_SIGNAL_ON;
         }
         else if (!strcmp(val, "OFF"))
         {
-            rs->rotport.parm.serial.dtr_state = RIG_SIGNAL_OFF;
-            rs->rotport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_OFF;
+            val_i = RIG_SIGNAL_OFF;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        rotp->parm.serial.dtr_state = val_i;
+        rs->rotport_deprecated.parm.serial.dtr_state = val_i;
         break;
 
 
@@ -406,75 +403,76 @@ int frontrot_set_conf(ROT *rot, token_t token, const char *val)
  * \return RIG_OK or a **negative value** on error.
  *
  * \retval RIG_OK TOK_... value queried successfully.
- * \retval RIG_EINVAL TOK_.. value not queried.
+ * \retval -RIG_EINVAL TOK_.. value not queried.
  *
  * \sa frontrot_set_conf()
  */
-int frontrot_get_conf(ROT *rot, token_t token, char *val, int val_len)
+int frontrot_get_conf(ROT *rot, hamlib_token_t token, char *val, int val_len)
 {
     struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     const char *s;
 
-    rs = &rot->state;
+    rs = ROTSTATE(rot);
 
     rot_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     switch (token)
     {
     case TOK_PATHNAME:
-        strncpy(val, rs->rotport.pathname, val_len - 1);
+        strncpy(val, rotp->pathname, val_len - 1);
         break;
 
     case TOK_WRITE_DELAY:
-        SNPRINTF(val, val_len, "%d", rs->rotport.write_delay);
+        SNPRINTF(val, val_len, "%d", rotp->write_delay);
         break;
 
     case TOK_POST_WRITE_DELAY:
-        SNPRINTF(val, val_len, "%d", rs->rotport.post_write_delay);
+        SNPRINTF(val, val_len, "%d", rotp->post_write_delay);
         break;
 
     case TOK_TIMEOUT:
-        SNPRINTF(val, val_len, "%d", rs->rotport.timeout);
+        SNPRINTF(val, val_len, "%d", rotp->timeout);
         break;
 
     case TOK_RETRY:
-        SNPRINTF(val, val_len, "%d", rs->rotport.retry);
+        SNPRINTF(val, val_len, "%d", rotp->retry);
         break;
 
     case TOK_SERIAL_SPEED:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->rotport.parm.serial.rate);
+        SNPRINTF(val, val_len, "%d", rotp->parm.serial.rate);
         break;
 
     case TOK_DATA_BITS:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->rotport.parm.serial.data_bits);
+        SNPRINTF(val, val_len, "%d", rotp->parm.serial.data_bits);
         break;
 
     case TOK_STOP_BITS:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->rotport.parm.serial.stop_bits);
+        SNPRINTF(val, val_len, "%d", rotp->parm.serial.stop_bits);
         break;
 
     case TOK_PARITY:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        switch (rs->rotport.parm.serial.parity)
+        switch (rotp->parm.serial.parity)
         {
         case RIG_PARITY_NONE:
             s = "None";
@@ -504,12 +502,12 @@ int frontrot_get_conf(ROT *rot, token_t token, char *val, int val_len)
         break;
 
     case TOK_HANDSHAKE:
-        if (rs->rotport.type.rig != RIG_PORT_SERIAL)
+        if (rotp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        switch (rs->rotport.parm.serial.handshake)
+        switch (rotp->parm.serial.handshake)
         {
         case RIG_HANDSHAKE_NONE:
             s = "None";
@@ -580,7 +578,7 @@ int frontrot_get_conf(ROT *rot, token_t token, char *val, int val_len)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The \a cfunc action completed successfully.
- * \retval RIG_EINVAL \a rot is NULL or inconsistent or \a cfunc is NULL.
+ * \retval -RIG_EINVAL \a rot is NULL or inconsistent or \a cfunc is NULL.
  */
 int HAMLIB_API rot_token_foreach(ROT *rot,
                                  int (*cfunc)(const struct confparams *,
@@ -650,7 +648,7 @@ const struct confparams *HAMLIB_API rot_confparam_lookup(ROT *rot,
         const char *name)
 {
     const struct confparams *cfp;
-    token_t token;
+    hamlib_token_t token;
 
     //rot_debug(RIG_DEBUG_VERBOSE, "%s called lookup=%s\n", __func__, name);
 
@@ -711,7 +709,7 @@ const struct confparams *HAMLIB_API rot_confparam_lookup(ROT *rot,
  *
  * \sa rot_confparam_lookup()
  */
-token_t HAMLIB_API rot_token_lookup(ROT *rot, const char *name)
+hamlib_token_t HAMLIB_API rot_token_lookup(ROT *rot, const char *name)
 {
     const struct confparams *cfp;
 
@@ -741,16 +739,16 @@ token_t HAMLIB_API rot_token_lookup(ROT *rot, const char *name)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The parameter was set successfully.
- * \retval RIG_EINVAL \a rot is NULL or inconsistent or \a token is invalid.
- * \retval RIG_ENAVAIL rot_caps#set_conf() capability is not available.
+ * \retval -RIG_EINVAL \a rot is NULL or inconsistent or \a token is invalid.
+ * \retval -RIG_ENAVAIL rot_caps#set_conf() capability is not available.
  *
  * \sa rot_get_conf()
  */
-int HAMLIB_API rot_set_conf(ROT *rot, token_t token, const char *val)
+int HAMLIB_API rot_set_conf(ROT *rot, hamlib_token_t token, const char *val)
 {
     rot_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    if (!rot || !rot->caps)
+    if (!rot || !rot->caps || !val)
     {
         return -RIG_EINVAL;
     }
@@ -797,21 +795,22 @@ int HAMLIB_API rot_set_conf(ROT *rot, token_t token, const char *val)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK Querying the parameter was successful.
- * \retval RIG_EINVAL \a rot is NULL or inconsistent.
- * \retval RIG_ENAVAIL rot_caps#get_conf() capability is not available.
+ * \retval -RIG_EINVAL \a rot is NULL or inconsistent.
+ * \retval -RIG_ENAVAIL rot_caps#get_conf() capability is not available.
  *
  * \sa rot_set_conf()
  */
 // This call will change in Hamlib 5.0 to pass val_len in
-//int HAMLIB_API rot_get_conf(ROT *rot, token_t token, char *val, int val_len)
+//int HAMLIB_API rot_get_conf(ROT *rot, hamlib_token_t token, char *val, int val_len)
 
-int HAMLIB_API rot_get_conf(ROT *rot, token_t token, char *val)
+int HAMLIB_API rot_get_conf(ROT *rot, hamlib_token_t token, char *val)
 {
     // 128 is the default size we are called with
     return rot_get_conf2(rot, token, val, 128);
 }
 
-int HAMLIB_API rot_get_conf2(ROT *rot, token_t token, char *val, int val_len)
+int HAMLIB_API rot_get_conf2(ROT *rot, hamlib_token_t token, char *val,
+                             int val_len)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 

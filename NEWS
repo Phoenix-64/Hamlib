@@ -2,17 +2,162 @@ Hamlib -- History of visible changes.
 
 Copyright (C) 2000-2003  Frank Singleton
 Copyright (C) 2000-2023  Stephane Fillod, and others
-Copyright (C) 2000-2023  Michael Black W9MDB, and others
+Copyright (C) 2000-2025  Michael Black W9MDB, and others
+Copyright (C) 2000-2026  The Hamlib Group
 
 Please send Hamlib bug reports to hamlib-developer@lists.sourceforge.net
 
-
++
 Version 5.x -- future
         * rig_get_conf deprecated and replaced by rig_get_conf2
         * rot_get_conf deprecated and replaced by rot_get_conf2
         * Change FT1000MP Mark V model names to align with FT1000MP
+        * Internal data structures moved out of rig_struct to individual
+          heap buffers
+
+Version 4.7.0
+        * 2026-02-15
+        * Revamp Kenwood voice memory handler - Fixes TS-890S & TS-990S (n3gb)
+        * libusb is now detected using the pkg-config facility.
+        * Some internal functions change names to avoid conflicts with apps.
+        * POSIX threads are required to build and run Hamlib. Note that it was
+          actually the case for 4.6.x, but now the configuration step will
+          fail instead of the compilation. (n3gb)
+        * Functions rig_get_conf, rot_get_conf, amp_get_conf deprecated;
+          use *_get_conf2() instead. Also rig_set_trn and rig_get_trn deprecated.
+        * Reduce/repair excess output from cppcheck.sh - mostly cosmetic changes (WIP)
+          Output from `wc -l cppcheck.log` - 4.6.2: 981  now: 581
+        * Remove dead getopt code.  GitHub PR #1709. (TNX Daniele Forsi)
+        * Move rig_cache to separate(calloc) storage. Prepare for other moves.
+          Issue #1420
+        * Many fixes for SWIG binding generation and improved Python support
+          and testing.  (TNX Daniele Forsi).
+        * Fix AGC for IC-R75, fix AGC for all Icom rigs.  (TNX Mark Fine).
+        * Separate PMR-171 and Q900 into new the GUOHETEC backend, add
+          additional support add clean up code.  (TNX FVsonar).
+        * New Drake R8 backend.  (TNX Mark Fine)
+        * New AF6SA WRC rotator backend.  (TNX Michael Morgan)
+        * New Yaesu FTX-1 model support (alpha).  (TNX Jeremy Miller).
+        * Update QRPLabs QMX backend for max serial rate of 230400 bps.  (TNX Mooneer Salem)
+        * Updates to Icom IC-F8101.  (TNX Mitchell Winkle and George Baltz)
+        * New rig model Icom ID-52A/W Plus.  (TNX Martin Andrich)
+        * Fix memory leaks in rigctld and rigctltcp.  (TNX Geroge Baltz)
+        * Fix Skywatcher backend for firmware that doesn't echo commands.  (TNX Daniel Forsi)
+        * Various manual page updates.  (TNX Daniel Forsi)
+        * Additional Yaesu FTX-1 capabilities.  (TNX KJ5HST)
+        * Refactor repeater offset and ANTIVOX with lookup tables in newcat.c (TNX KJ5HST)
+        * Fix unbounded string usage in tests/*ctl_parse.c. May cause crashes or worse.
+          Reported by Vlatko Kosturjak with Marlink Cyber.  (TNX George Baltz for the fix)
+        * Add extended commands for the IC-7300MK2--closes GitHub #1985.  (TNX George Baltz)
+        * Revert updating FLRig model name.  (TNX Peter Sumner & Philip Rose)
+        * Add manual pages for rigctltcp, rigtestlibusb, rigtestmcast, and rigtestmcastrx.
+          Pause building rigfreqwalk as the code does not align with the required
+          commandline parameters.
+
+Version 4.6.5
+        * 2025-09-05
+        * Update Kenwood CW buffer max message size, fix one byte buffer
+          overrun in icom.c.  (TNX George Baltz).
+        * Fix Segmentation Fault in rigs/dummy/netrigctl.c. (TNX Daniele Forsi)
+        * Fix segfault with set_parm KEYERTYPE in rigctl_parse.c. (TNX Daniele
+          Forsi)
+
+Version 4.6.4
+        * 2025-07-18--Hamlib's 25th birthday!!!
+        * Fix handling of unprintable characters in kenwood.c that broke radios
+          such as the TM-D710/TM-V71 that use EOM_TH (\r) as the command terminator.
+          (TNX, Lars Kellogg-Stedman and George Baltz).
+        * Fixed jrc_set_chan. (TNX Mark Fine).
+        * Fix memory leak in rigctl_parse.c and use unique separator character
+          for each rigctld connection--closes GitHub #1748. (TNX George Baltz).
+        * Fix powerstat check for Icom R75 which rejects the command.  (TNX Mark Fine).
+        * Restore TS-590S/SG RIG_LEVEL_RFPOWER_METER, Fix rotctl \dump_caps output
+          (TNX, George Baltz).
+        * Add CW sending capability to Flex SmartSDR.  (TNX Michael Morgan)
+        * Handle spaces correctly for Fles SmartSDR.  (TNX Michael Morgan)
+
+Version 4.6.3
+        * 2025-06-10
+        * Release dedicated to the memory of Michael Black, W9MDB (SK).  Mike was a
+          long-time contributor to Hamlib and led development of the project for over
+          five years from 2020 to 2025.  Mike passed away on March 28, 2025 due to
+          complications from ALS (Lou Gehrig's disease).
+
+        * JRC: Removed RIG_FUNC_FAGC from 535D as erroneous, Added RIG_FUNC_NB2
+          functionality to both 535D and 545. (TNX Mark Fine)
+        * Restore IC-7300 spectrum data callback - regression in 4.6 (n3gb)
+        * Add locking to rig_[gs]et_level() - fixes sending CW from tlf (n3gb)
+        * Fix attempt to use memory returned by setlocale() after being freed (TNX Mooneer Salem)
+        * Language bindings configuration and build fixes (TNX Daniele Forsi)
+        * Various build system and compilation fixes (TNX Daniele Forsi)
+        * IC-705 filter selection bandwidth for FM and WFM (TNX Kenji Rikitake)
+        * IC-705 COMP, VD, and ID meter calibration values (TNX Kenji Rikitake)
+        * Fix ACLog thousands separator
+        * Documentation updates, typo fixes, man page fixes (TNX Daniele Forsi)
+        * Drop redundant token lookups and make local functions static (TNX George Baltz)
+        * Fix rigctl showing hamlib_verson when connecting to rigctld
+        * Add rig CODAN 2110
+
+Version 4.6.2
+        * 2025-02-09
+        * Add missing levels for IC746/PRO RIG_LEVEL_RFPOWER_METER,RIG_LEVEL_RFPOWER_METER_WATTS,RIG_LEVEL_SWR,RIG_LEVEL_ALC
+        * Fix IC905 for gpredict
+        * Fix potential segfault on QMX 
+        * Fix pmr171
+        
+Version 4.6.1
+        * 2025-01-21
+        * Fix C++ builds failing on rig_list_foreach function
+        * Fix IC9100 rigctld startup to end up on VFOA
+        * Fix grig build by removing sys/socket.h -- apparently not needed
+        * Add new QMX entry to fix incompability with QDX
+        * Fix IC746/PROT to not use data byte
+        * FLRig to add DATA-U DATA-L modes
+        * Fix TS570 RIG_LEVEL_STRENGTH with cal table
+        * Remove get_powerstat from IC785X -- not supported
+        * Fix SDRConsole by removing lots of things it does not have
 
 Version 4.6
+        * 2024-12-24
+	* send_raw can now take hex digits as colon-separated -- e.g. send_raw icom xfe:xfe:x94:xe0:03:xfd
+	* Add IC7760
+        * IC7300 Mode filter can now be set by # (i.e. 1,2,3) 
+        * Fixed AF6SA WRC rotor controller
+        * Added Rhode&Schwarz XK852
+        * Added Xiegu X6200
+        * Added Commradio CTX-10
+        * Added Guoehe PMR-171
+        * Added csntechnoligies.net S.A.T Satellite rotor control
+        * Added PSTRotator control
+        * Added Flex SmartSDR slices A-H
+        * Added Motorola Micom M2/M3
+        * Added SDR Radio SDRConsole -- TS-2000 is now hardware flow control so need separate entry
+        * Added --set-conf=filter_usb, filter_usbd, and filter_cw to allow Icom rigs set mode to set filter number too
+        * Added macros for applications to obtain pointers to Hamlib structures(issues #1445, #1420, #487).
+          Internal conversion is still a WIP, but use of these macros will make the final cutover transparent to applications. 
+        * Added Guohe Q900 entry 
+        * Unify behavior of all rigctl split commands
+          * Make the set_split_* commands modify the state of the specified split VFO -- the current or targeted VFO do not have any effect
+          * Make the set_split_* commands enable split automatically if not enabled
+          * Make the get_split_* commands return frequency of 0 Hz, mode NONE and filter of 0 Hz if split is not enabled
+          * Allow all split commands to avoid VFO swapping if supported by the rig model
+        * Improve Icom backend to set/get frequency, mode and filter without VFO swapping if supported by the rig model
+        * Improve Yaesu newcat backend split handling
+        * Expose "Targetable features" (RIG_TARGETABLE_*) in dump_caps output to allow clients to determine which commands can be executed without VFO swapping
+        * Added RIG_FUNC_SYNC for FTDX101D/MP
+        * Added Barrett 4100
+        * Added DL2MAN (tr)uSDX -- needs refinement
+        * Added Thetis entry -- derived from FlexRadio/Apache PowerSDR
+        * Added VOICE/CW memory capability to many rigs -- thanks to David Balharrie M0DGB/G8FKH
+        * Add -# --skip_init option to rigctl to skip rig initialization -- useful for executing commands quickly
+        * rig_caps is no longer constant -- this may break some 3rd party relying on the "const" declaration.  Here's an example of how to handle compatibility.
+#ifdef RIGCAPS_NOT_CONST
+static int add_to_list(struct rig_caps* rc, void*)
+#else
+static int add_to_list(const struct rig_caps* rc, void*)
+#endif
+
+        * IC7610 now has IPP, DPP, and TX_INHIBIT functions set/get
         * Hamlib now starts a multicast server that sends out rig information.  Does not receive commands yet.
           See README.multicast
 
@@ -27,7 +172,7 @@ Version 4.6
         * Added rig_cm108_get/set_bit to API and get/set_gpio to rigctl(d) for GPIO1,2,3,4 access on CM108
         * Added BG2FX FX4/C/CR/L
         * Fixed IC7610 to use new 0x25 0x26 command added in latest firmware
-        * Fix W command in rigctld to work propery -- can take terminating char or # of bytes to expect
+        * Fix W command in rigctld to work properly -- can take terminating char or # of bytes to expect
         * Add rig_set_debug_filename so Python can redirect debug stream
         * Fix Yaesu LBL_NR to use proper values
         * Add IC-905
@@ -35,7 +180,6 @@ Version 4.6
         * Add saebrtrack rotor https://sites.google.com/site/marklhammond/saebrtrack
         * Add offset_vfoa and offset_vfob applying to rig_set_freq
         * Fix K4 to put it in K40 mode when requesting ID
-        * 2023-11-XX -- Planned for Nov 2023
         * Fixes for M2 Rotors
         * Add rigctlsync utility to synchronize frequency from a rig to SDR# (or others)
         * Add SDR# rig for use with SDR#'s gpredict plugin -- can only get/set freq 

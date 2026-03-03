@@ -28,21 +28,16 @@
  * \brief Parallel Port IO
  * \file parallel.c
  */
-#include <hamlib/rig.h>
-#include <hamlib/config.h>
+#include "hamlib/rig.h"
+#include "hamlib/config.h"
 
 #include <string.h>  /* String function definitions */
 #include <unistd.h>  /* UNIX standard function definitions */
 #include <fcntl.h>   /* File control definitions */
 #include <errno.h>   /* Error number definitions */
-#include <sys/types.h>
 
 #ifdef HAVE_SYS_IOCTL_H
 #  include <sys/ioctl.h>
-#endif
-
-#ifdef HAVE_SYS_PARAM_H
-#  include <sys/param.h>
 #endif
 
 #ifdef HAVE_WINDOWS_H
@@ -58,6 +53,7 @@
 #  include <winbase.h>
 #endif
 
+#include "hamlib/port.h"
 #include "parallel.h"
 
 #ifdef HAVE_LINUX_PPDEV_H

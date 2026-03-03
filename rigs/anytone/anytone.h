@@ -7,7 +7,7 @@
 
 #define ANYTONE_RESPSZ 64
 
-extern const struct rig_caps anytone_d578_caps;
+extern struct rig_caps anytone_d578_caps;
 
 #ifdef PTHREAD
 #include <pthread.h>
@@ -24,7 +24,7 @@ typedef struct _anytone_priv_data
 {
     ptt_t         ptt;
     vfo_t         vfo_curr;
-    int           runflag; // thread control
+    volatile int  runflag; // thread control
     char          buf[64];
     pthread_mutex_t mutex;
 } anytone_priv_data_t,

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 
@@ -52,6 +52,7 @@
 static struct kenwood_priv_caps  ts711_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,
 };
 
 /*
@@ -93,14 +94,14 @@ ts711_set_vfo(RIG *rig, vfo_t vfo)
 /*
  * ts711 rig capabilities.
  */
-const struct rig_caps ts711_caps =
+struct rig_caps ts711_caps =
 {
     RIG_MODEL(RIG_MODEL_TS711),
     .model_name = "TS-711",
     .mfg_name =  "Kenwood",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_NONE,

@@ -24,7 +24,7 @@
 
 #include "hamlib/rig.h"
 
-#define BACKEND_VER "20220113"
+#define BACKEND_VER "20240422"
 
 #define EOM "\x0d"
 #define TRUE 1
@@ -36,9 +36,10 @@
 // RET_LEN is # of max channels times the per-channel response length
 #define BARRETT_RET_LEN 24*1000
 
-extern const struct rig_caps barrett_caps;
-extern const struct rig_caps barrett950_caps;
-extern const struct rig_caps barrett4050_caps;
+extern struct rig_caps barrett_caps;
+extern struct rig_caps barrett950_caps;
+extern struct rig_caps barrett4050_caps;
+extern struct rig_caps barrett4100_caps;
 
 struct barrett_priv_data {
     char cmd_str[BARRETT_DATA_LEN];       /* command string buffer */
@@ -48,6 +49,7 @@ struct barrett_priv_data {
 };
 
 extern int barrett_transaction(RIG *rig, char *cmd, int expected, char **result);
+extern int barrett_transaction2(RIG *rig, char *cmd, int expected, char **result);
 
 extern int barrett_init(RIG *rig);
 extern int barrett_cleanup(RIG *rig);

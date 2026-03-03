@@ -38,17 +38,17 @@
  * rotator" of Hamlib.
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>   /* Standard input/output definitions */
 #include <string.h>  /* String function definitions */
 
-#include <hamlib/rig.h>
-#include <hamlib/rotator.h>
+#include "hamlib/rig.h"
+#include "hamlib/rotator.h"
 
 #include "token.h"
 
-static int rot_has_ext_token(ROT *rot, token_t token)
+static int rot_has_ext_token(ROT *rot, hamlib_token_t token)
 {
     const int *ext_tokens = rot->caps->ext_tokens;
     int i;
@@ -87,7 +87,7 @@ static int rot_has_ext_token(ROT *rot, token_t token)
  * value** which means an abnormal end.
  *
  * \retval RIG_OK All extension functions elements successfully processed.
- * \retval RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
+ * \retval -RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
  */
 int HAMLIB_API rot_ext_func_foreach(ROT *rot,
                                     int (*cfunc)(ROT *,
@@ -143,7 +143,7 @@ int HAMLIB_API rot_ext_func_foreach(ROT *rot,
  * **negative value** which means an abnormal end.
  *
  * \retval RIG_OK All extension levels elements successfully processed.
- * \retval RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
+ * \retval -RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
  */
 int HAMLIB_API rot_ext_level_foreach(ROT *rot,
                                      int (*cfunc)(ROT *,
@@ -199,7 +199,7 @@ int HAMLIB_API rot_ext_level_foreach(ROT *rot,
  * **negative value** which means an abnormal end.
  *
  * \retval RIG_OK All extension parameters elements successfully processed.
- * \retval RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
+ * \retval -RIG_EINVAL \a rot or \a cfunc is NULL or inconsistent.
  */
 int HAMLIB_API rot_ext_parm_foreach(ROT *rot,
                                     int (*cfunc)(ROT *,
@@ -312,7 +312,8 @@ const struct confparams *HAMLIB_API rot_ext_lookup(ROT *rot, const char *name)
  * \return A pointer to the containing #confparams structure member or NULL if
  * nothing found or if \a rot is NULL or inconsistent.
  */
-const struct confparams *HAMLIB_API rot_ext_lookup_tok(ROT *rot, token_t token)
+const struct confparams *HAMLIB_API rot_ext_lookup_tok(ROT *rot,
+        hamlib_token_t token)
 {
     const struct confparams *cfp;
 
@@ -361,11 +362,11 @@ const struct confparams *HAMLIB_API rot_ext_lookup_tok(ROT *rot, token_t token)
  * \note As this function calls rot_ext_lookup(), it can be considered a
  * higher level API.
  *
- * \return The token ID or RIG_CONF_END if there is a lookup failure.
+ * \return The token ID or #RIG_CONF_END if there is a lookup failure.
  *
  * \sa rot_ext_lookup()
  */
-token_t HAMLIB_API rot_ext_token_lookup(ROT *rot, const char *name)
+hamlib_token_t HAMLIB_API rot_ext_token_lookup(ROT *rot, const char *name)
 {
     const struct confparams *cfp;
 

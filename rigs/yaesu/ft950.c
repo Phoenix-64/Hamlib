@@ -77,7 +77,7 @@ int ft950_ext_tokens[] =
 /*
  * FT-950 rig capabilities
  */
-const struct rig_caps ft950_caps =
+struct rig_caps ft950_caps =
 {
     RIG_MODEL(RIG_MODEL_FT950),
     .model_name =         "FT-950",
@@ -107,16 +107,23 @@ const struct rig_caps ft950_caps =
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran =
     {
+#define NO_LVL_CWPITCH
+#define NO_LVL_KEYSPD
+#define NO_LVL_NOTCHF
+#define NO_LVL_RFPOWER
 #include "level_gran_yaesu.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_NOTCHF
+#undef NO_LVL_RFPOWER
         [LVL_CWPITCH] = { .min = { .i = 300 }, .max = { .i = 1050 }, .step = { .i = 50 } },
         [LVL_KEYSPD] = { .min = { .i = 4 }, .max = { .i = 60 }, .step = { .i = 1 } },
         [LVL_NOTCHF] = { .min = { .i = 1 }, .max = { .i = 3000 }, .step = { .i = 10 } },
-        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
+        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BANDUNUSED,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -140,8 +147,8 @@ const struct rig_caps ft950_caps =
         { 100, 117, RIG_MTYPE_EDGE, NEWCAT_MEM_CAP },    /* two by two */
         { 125, 128, RIG_MTYPE_BAND, NEWCAT_MEM_CAP },    /* 60M Channels U51-U54 or US1-US4, if available */
         { 130, 130, RIG_MTYPE_BAND, NEWCAT_MEM_CAP },    /* 60M Channel U55 or US5, if available */
-        { 131, 131, RIG_MTYPE_BAND, NEWCAT_MEM_CAP },    /* EU5, 5167.5 KHz Alaska Emergency Freq, if available */
-
+        { 131, 131, RIG_MTYPE_BAND, NEWCAT_MEM_CAP },    /* EU5, 5167.5 kHz Alaska Emergency Freq, if available */
+        {   1,  5, RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 

@@ -20,12 +20,12 @@
  */
 
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "wj.h"
 
 
-/* modes: what about ISB(Idependant Sideband)? */
+/* modes: what about ISB(Independent Sideband)? */
 #define WJ8888_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_AMS)
 
 #define WJ8888_FUNC (RIG_FUNC_NONE)
@@ -49,14 +49,14 @@
  *
  * TODO: BFO
  */
-const struct rig_caps wj8888_caps =
+struct rig_caps wj8888_caps =
 {
     RIG_MODEL(RIG_MODEL_WJ8888),
     .model_name = "WJ-8888",
     .mfg_name =  "Watkins-Johnson",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

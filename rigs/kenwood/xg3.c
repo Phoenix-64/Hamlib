@@ -27,8 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
-#include "serial.h"
+#include "hamlib/rig.h"
+#include "iofunc.h"
 #include "kenwood.h"
 #include "elecraft.h"
 
@@ -75,22 +75,22 @@ static struct kenwood_priv_caps xg3_priv_caps =
 
 
 /* XG3 specific rig_caps API function declarations */
-int xg3_init(RIG *rig);
-int xg3_open(RIG *rig);
-int xg3_set_vfo(RIG *rig, vfo_t vfo);
-int xg3_get_vfo(RIG *rig, vfo_t *vfo);
-int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq);
-int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq);
-int xg3_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt);
-int xg3_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt);
-int xg3_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
-int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
-int xg3_set_powerstat(RIG *rig, powerstat_t status);
-int xg3_get_powerstat(RIG *rig, powerstat_t *status);
-int xg3_set_mem(RIG *rig, vfo_t vfo, int ch);
-int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch);
-int xg3_set_parm(RIG *rig, setting_t parm, value_t val);
-int xg3_get_parm(RIG *rig, setting_t parm, value_t *val);
+static int xg3_init(RIG *rig);
+static int xg3_open(RIG *rig);
+static int xg3_set_vfo(RIG *rig, vfo_t vfo);
+static int xg3_get_vfo(RIG *rig, vfo_t *vfo);
+static int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq);
+static int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq);
+static int xg3_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt);
+static int xg3_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt);
+static int xg3_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
+static int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
+static int xg3_set_powerstat(RIG *rig, powerstat_t status);
+static int xg3_get_powerstat(RIG *rig, powerstat_t *status);
+static int xg3_set_mem(RIG *rig, vfo_t vfo, int ch);
+static int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch);
+static int xg3_set_parm(RIG *rig, setting_t parm, value_t val);
+static int xg3_get_parm(RIG *rig, setting_t parm, value_t *val);
 
 
 /*
@@ -100,7 +100,7 @@ int xg3_get_parm(RIG *rig, setting_t parm, value_t *val);
  * Part of info comes from http://www.elecraft.com/K2_Manual_Download_Page.htm#K2
  * look for KIO2 Programmer's Reference PDF
  */
-const struct rig_caps xg3_caps =
+struct rig_caps xg3_caps =
 {
     RIG_MODEL(RIG_MODEL_XG3),
     .model_name = "XG3",
@@ -183,7 +183,7 @@ const struct rig_caps xg3_caps =
 /*
  * xg3_init()
  */
-int xg3_init(RIG *rig)
+static int xg3_init(RIG *rig)
 {
     struct kenwood_priv_data *priv;
     int i;
@@ -197,12 +197,12 @@ int xg3_init(RIG *rig)
         return -RIG_ENOMEM;
     }
 
-    rig->state.priv = (void *)priv;
-    rig->state.rigport.type.rig = RIG_PORT_SERIAL;
+    STATE(rig)->priv = (void *)priv;
+    RIGPORT(rig)->type.rig = RIG_PORT_SERIAL;
 // Tried set_trn to turn transceiver on/off but turning it on isn't enabled in hamlib for some reason
 // So we use PTT instead
-//  rig->state.transceive = RIG_TRN_RIG; // this allows xg3_set_trn to be called
-    rig->state.current_vfo = RIG_VFO_A;
+//  STATE(rig)->transceive = RIG_TRN_RIG; // this allows xg3_set_trn to be called
+    STATE(rig)->current_vfo = RIG_VFO_A;
 //    priv->last_vfo = RIG_VFO_A;
 //    priv->ptt = RIG_PTT_ON;
 //    priv->powerstat = RIG_POWER_ON;
@@ -225,7 +225,7 @@ int xg3_init(RIG *rig)
 /*
  * xg3_open()
  */
-int xg3_open(RIG *rig)
+static int xg3_open(RIG *rig)
 {
     int err;
     ptt_t ptt;
@@ -245,7 +245,7 @@ int xg3_open(RIG *rig)
 }
 
 
-int xg3_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+static int xg3_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char levelbuf[16];
 
@@ -275,12 +275,12 @@ int xg3_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 /*
  * kenwood_get_level
  */
-int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
+static int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     char cmdbuf[32], replybuf[32];
     int retval;
     size_t replysize = sizeof(replybuf);
-    struct rig_state *rs = &rig->state;
+    struct hamlib_port *rp = RIGPORT(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -288,7 +288,7 @@ int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     {
     case RIG_LEVEL_RFPOWER:
         SNPRINTF(cmdbuf, sizeof(cmdbuf), "L;");
-        retval = write_block(&rs->rigport, (unsigned char *) cmdbuf, strlen(cmdbuf));
+        retval = write_block(rp, (unsigned char *) cmdbuf, strlen(cmdbuf));
 
         if (retval != RIG_OK)
         {
@@ -297,7 +297,7 @@ int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             return retval;
         }
 
-        retval = read_string(&rs->rigport, (unsigned char *) replybuf, replysize,
+        retval = read_string(rp, (unsigned char *) replybuf, replysize,
                              ";", 1, 0, 1);
 
         if (retval < 0)
@@ -343,7 +343,7 @@ int xg3_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 /*
  * xg3_get_vfo
  */
-int xg3_get_vfo(RIG *rig, vfo_t *vfo)
+static int xg3_get_vfo(RIG *rig, vfo_t *vfo)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -352,14 +352,14 @@ int xg3_get_vfo(RIG *rig, vfo_t *vfo)
         return -RIG_EINVAL;
     }
 
-    *vfo = rig->state.current_vfo;      // VFOA or MEM
+    *vfo = STATE(rig)->current_vfo;      // VFOA or MEM
     return RIG_OK;
 }
 
 /*
  * xg3_set_vfo
  */
-int xg3_set_vfo(RIG *rig, vfo_t vfo)
+static int xg3_set_vfo(RIG *rig, vfo_t vfo)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -372,14 +372,14 @@ int xg3_set_vfo(RIG *rig, vfo_t vfo)
 
     // We don't actually set the vfo on the XG3
     // But we need this so we can set frequencies on the band buttons
-    rig->state.current_vfo = vfo;
+    STATE(rig)->current_vfo = vfo;
     return RIG_OK;
 }
 
 /*
  * xg3_set_freq
  */
-int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
+static int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     int err;
     vfo_t tvfo;
@@ -388,7 +388,7 @@ int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     tvfo = (vfo == RIG_VFO_CURR ||
-            vfo == RIG_VFO_VFO) ? rig->state.current_vfo : vfo;
+            vfo == RIG_VFO_VFO) ? STATE(rig)->current_vfo : vfo;
 
     switch (tvfo)
     {
@@ -422,9 +422,9 @@ int xg3_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 /*
  * xg3_get_freq
  */
-int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
+static int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct rig_state *rs;
+    struct hamlib_port *rp;
     char freqbuf[50];
     int freqsize = sizeof(freqbuf);
     char cmdbuf[16];
@@ -440,8 +440,8 @@ int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
     }
 
     tvfo = (vfo == RIG_VFO_CURR ||
-            vfo == RIG_VFO_VFO) ? rig->state.current_vfo : vfo;
-    rs = &rig->state;
+            vfo == RIG_VFO_VFO) ? STATE(rig)->current_vfo : vfo;
+    rp = RIGPORT(rig);
 
     switch (tvfo)
     {
@@ -467,7 +467,7 @@ int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
         SNPRINTF(cmdbuf, sizeof(cmdbuf), "F;");
     }
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmdbuf, strlen(cmdbuf));
+    retval = write_block(rp, (unsigned char *) cmdbuf, strlen(cmdbuf));
 
     if (retval != RIG_OK)
     {
@@ -475,7 +475,7 @@ int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
         return retval;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) freqbuf, freqsize,
+    retval = read_string(rp, (unsigned char *) freqbuf, freqsize,
                          ";", 1, 0, 1);
 
     if (retval < 0)
@@ -494,7 +494,7 @@ int xg3_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 /*
  * xg3_set_powerstat
  */
-int xg3_set_powerstat(RIG *rig, powerstat_t status)
+static int xg3_set_powerstat(RIG *rig, powerstat_t status)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -514,7 +514,7 @@ int xg3_set_powerstat(RIG *rig, powerstat_t status)
 /*
  * xg3_get_powerstat
  */
-int xg3_get_powerstat(RIG *rig, powerstat_t *status)
+static int xg3_get_powerstat(RIG *rig, powerstat_t *status)
 {
     const char *cmd = "G";      // any command to test will do
     char buf[6];
@@ -540,7 +540,7 @@ int xg3_get_powerstat(RIG *rig, powerstat_t *status)
 /*
  * xg3_set_mem
  */
-int xg3_set_mem(RIG *rig, vfo_t vfo, int ch)
+static int xg3_set_mem(RIG *rig, vfo_t vfo, int ch)
 {
     char cmdbuf[32];
     int retval;
@@ -569,12 +569,12 @@ int xg3_set_mem(RIG *rig, vfo_t vfo, int ch)
 /*
  * xg3_get_mem
  */
-int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch)
+static int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch)
 {
     char cmdbuf[32];
     char reply[32];
     int retval;
-    struct rig_state *rs = &rig->state;
+    struct hamlib_port *rp = RIGPORT(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -586,7 +586,7 @@ int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch)
         return retval;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) reply, sizeof(reply),
+    retval = read_string(rp, (unsigned char *) reply, sizeof(reply),
                          ";", 1, 0, 1);
 
     if (retval < 0)
@@ -602,7 +602,7 @@ int xg3_get_mem(RIG *rig, vfo_t vfo, int *ch)
 /*
  * xg3_set_ptt
  */
-int xg3_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
+static int xg3_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {
     int retval;
 
@@ -622,7 +622,7 @@ int xg3_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 /*
  * kenwood_get_ptt
  */
-int xg3_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
+static int xg3_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 {
     char pttbuf[6];
     int retval;
@@ -650,7 +650,7 @@ int xg3_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 /*
  * xg3_set_parm
  */
-int xg3_set_parm(RIG *rig, setting_t parm, value_t val)
+static int xg3_set_parm(RIG *rig, setting_t parm, value_t val)
 {
     int ival;
     char cmdbuf[16];
@@ -679,7 +679,7 @@ int xg3_set_parm(RIG *rig, setting_t parm, value_t val)
 /*
  * xg3_get_parm
  */
-int xg3_get_parm(RIG *rig, setting_t parm, value_t *val)
+static int xg3_get_parm(RIG *rig, setting_t parm, value_t *val)
 {
     int ival;
     char replybuf[6];

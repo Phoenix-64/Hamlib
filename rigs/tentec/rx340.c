@@ -23,7 +23,7 @@
 #include <string.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "num_stdio.h"
 
 
@@ -77,14 +77,14 @@ static const char *rx340_get_info(RIG *rig);
  * TODO: from/to memory, scan, get_level, ..
  * supposes non-multidrop
  */
-const struct rig_caps rx340_caps =
+struct rig_caps rx340_caps =
 {
     RIG_MODEL(RIG_MODEL_RX340),
     .model_name = "RX-340",
     .mfg_name =  "Ten-Tec",
     .version =  "20160409.0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,
@@ -187,20 +187,18 @@ const struct rig_caps rx340_caps =
 /*
  * rx340_transaction
  * read exactly data_len bytes
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, STATE(rig)!= NULL, data!=NULL, data_len!=NULL
  * Otherwise, you'll get a nice seg fault. You've been warned!
  */
 static int rx340_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
                              int *data_len)
 {
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
 
-    rs = &rig->state;
+    rig_flush(rp);
 
-    rig_flush(&rs->rigport);
-
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -213,7 +211,7 @@ static int rx340_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
         return RIG_OK;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ, EOM, 1, 0, 1);
+    retval = read_string(rp, (unsigned char *) data, BUFSZ, EOM, 1, 0, 1);
 
     if (retval < 0)
     {
@@ -249,7 +247,7 @@ int rx340_init(RIG *rig)
      * set arbitrary initial status
      */
 
-    rig->state.priv = (rig_ptr_t)priv;
+    STATE(rig)->priv = (rig_ptr_t)priv;
 
     return RIG_OK;
 }
@@ -260,12 +258,12 @@ int rx340_init(RIG *rig)
  */
 int rx340_cleanup(RIG *rig)
 {
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -273,19 +271,17 @@ int rx340_cleanup(RIG *rig)
 
 int rx340_open(RIG *rig)
 {
-    struct rig_state *rs = &rig->state;
 
 #define REMOTE_CMD "*R1"EOM
-    return write_block(&rs->rigport, (unsigned char *) REMOTE_CMD,
+    return write_block(RIGPORT(rig), (unsigned char *) REMOTE_CMD,
                        strlen(REMOTE_CMD));
 }
 
 int rx340_close(RIG *rig)
 {
-    struct rig_state *rs = &rig->state;
 
 #define LOCAL_CMD "*R0"EOM
-    return write_block(&rs->rigport, (unsigned char *) LOCAL_CMD,
+    return write_block(RIGPORT(rig), (unsigned char *) LOCAL_CMD,
                        strlen(LOCAL_CMD));
 }
 
@@ -294,13 +290,12 @@ int rx340_close(RIG *rig)
  */
 int rx340_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    struct rig_state *rs = &rig->state;
     int retval;
     char freqbuf[16];
 
     SNPRINTF(freqbuf, sizeof(freqbuf), "F%.6f" EOM, freq / 1e6);
 
-    retval = write_block(&rs->rigport, (unsigned char *) freqbuf, strlen(freqbuf));
+    retval = write_block(RIGPORT(rig), (unsigned char *) freqbuf, strlen(freqbuf));
 
     return retval;
 }
@@ -330,6 +325,7 @@ int rx340_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
         return -RIG_EPROTO;
     }
 
+    // cppcheck-suppress uninitvar
     *freq = f * 1e6;
 
     return RIG_OK;
@@ -341,7 +337,6 @@ int rx340_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
  */
 int rx340_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    struct rig_state *rs = &rig->state;
     char dmode;
     int retval;
     char mdbuf[32];
@@ -390,7 +385,7 @@ int rx340_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         SNPRINTF(mdbuf, sizeof(mdbuf),  "D%c" EOM, dmode);
     }
 
-    retval = write_block(&rs->rigport, (unsigned char *) mdbuf, strlen(mdbuf));
+    retval = write_block(RIGPORT(rig), (unsigned char *) mdbuf, strlen(mdbuf));
 
     return retval;
 }
@@ -449,6 +444,7 @@ int rx340_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
         return -RIG_EPROTO;
     }
 
+    // cppcheck-suppress uninitvar
     *width = f * 1e3;
 
     return RIG_OK;
@@ -462,7 +458,6 @@ int rx340_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  */
 int rx340_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
-    struct rig_state *rs = &rig->state;
     int retval = RIG_OK;
     char cmdbuf[32];
 
@@ -510,7 +505,7 @@ int rx340_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         return -RIG_EINVAL;
     }
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmdbuf, strlen(cmdbuf));
+    retval = write_block(RIGPORT(rig), (unsigned char *) cmdbuf, strlen(cmdbuf));
     return retval;
 }
 

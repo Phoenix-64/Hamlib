@@ -3,7 +3,7 @@
  * Very simple test program to check locator conversion against some other --SF
  * This is mainly to test longlat2locator and locator2longlat functions.
  *
- * Takes at least two arguments, which is a locator and desired locater
+ * Takes at least two arguments, which is a locator and desired locator
  * precision in pairs, e.g. EM19ov is three pairs.  precision is limited
  * to >= 1 or <= 6.  If two locators are given, then the qrb is also
  * calculated.
@@ -14,8 +14,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <hamlib/rig.h>
-#include <hamlib/rotator.h>
+#include "hamlib/rig.h"
+#include "hamlib/rotator.h"
 
 
 int main(int argc, char *argv[])
@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
     printf("  GPS lon:\t%f\t%c%d %.3f'\n", lon1, sign, deg, mmm);
 
     /* hamlib function to convert deg, decimal min to decimal degrees */
-    lon1 = dmmm2dec(deg, mmm, nesw, 0.0);
+    lon1 = dmmm2dec(deg, mmm, nesw);
     printf("  Recoded GPS:\t%f\n", lon1);
 
     /* hamlib function to convert decimal degrees to deg, min, sec */
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
     printf("  GPS lat:\t%f\t%c%d %.3f'\n", lat1, sign, deg, mmm);
 
     /* hamlib function to convert deg, decimal min to decimal degrees */
-    lat1 = dmmm2dec(deg, mmm, nesw, 0.0);
+    lat1 = dmmm2dec(deg, mmm, nesw);
     printf("  Recoded GPS:\t%f\n", lat1);
 
     /* hamlib function to convert decimal degrees to maidenhead */
@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
     printf("  GPS lon:\t%f\t%c%d %.3f'\n", lon2, sign, deg, mmm);
 
     /* hamlib function to convert deg, decimal min to decimal degrees */
-    lon2 = dmmm2dec(deg, mmm, nesw, 0.0);
+    lon2 = dmmm2dec(deg, mmm, nesw);
     printf("  Recoded GPS:\t%f\n", lon2);
 
     /* hamlib function to convert decimal degrees to deg, min, sec */
@@ -264,7 +264,7 @@ int main(int argc, char *argv[])
     printf("  GPS lat:\t%f\t%c%d %.3f'\n", lat2, sign, deg, mmm);
 
     /* hamlib function to convert deg, decimal min to decimal degrees */
-    lat2 = dmmm2dec(deg, mmm, nesw, 0.0);
+    lat2 = dmmm2dec(deg, mmm, nesw);
     printf("  Recoded GPS:\t%f\n", lat2);
 
     /* hamlib function to convert decimal degrees to maidenhead */

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "rft.h"
 
 
@@ -45,14 +45,14 @@
  *   http://www.premium-rx.org/ekd500.htm
  */
 
-const struct rig_caps ekd500_caps =
+struct rig_caps ekd500_caps =
 {
     RIG_MODEL(RIG_MODEL_EKD500),
     .model_name = "EKD-500",
     .mfg_name =  "RFT",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

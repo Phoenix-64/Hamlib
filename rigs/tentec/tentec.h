@@ -31,7 +31,7 @@
 #ifndef _TENTEC_H
 #define _TENTEC_H 1
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 // The include order will determine which BACKEND_VER is used
 // tentec2.h may also be included and the last include is the BACKEND_VER used
@@ -70,17 +70,17 @@ int tentec_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
 int tentec_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
 const char* tentec_get_info(RIG *rig);
 
-extern const struct rig_caps rx320_caps;
-extern const struct rig_caps rx340_caps;
-extern const struct rig_caps rx350_caps;
-extern const struct rig_caps tt516_caps;
-extern const struct rig_caps tt538_caps;
-extern const struct rig_caps tt585_caps;
-extern const struct rig_caps tt588_caps;
-extern const struct rig_caps tt550_caps;
-extern const struct rig_caps tt565_caps;
-extern const struct rig_caps tt599_caps;
-extern const struct rig_caps rx331_caps;
+extern struct rig_caps rx320_caps;
+extern struct rig_caps rx340_caps;
+extern struct rig_caps rx350_caps;
+extern struct rig_caps tt516_caps;
+extern struct rig_caps tt538_caps;
+extern struct rig_caps tt585_caps;
+extern struct rig_caps tt588_caps;
+extern struct rig_caps tt550_caps;
+extern struct rig_caps tt565_caps;
+extern struct rig_caps tt599_caps;
+extern struct rig_caps rx331_caps;
 
 
 #endif /* _TENTEC_H */

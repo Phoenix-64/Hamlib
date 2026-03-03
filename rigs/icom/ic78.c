@@ -62,14 +62,14 @@ static const struct icom_priv_caps ic78_priv_caps =
     ic706_ts_sc_list
 };
 
-const struct rig_caps ic78_caps =
+struct rig_caps ic78_caps =
 {
     RIG_MODEL(RIG_MODEL_IC78),
     .model_name = "IC-78",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,
@@ -93,7 +93,6 @@ const struct rig_caps ic78_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
     },
     .parm_gran =  {},
     .preamp =   { 10, 20, RIG_DBLST_END, },

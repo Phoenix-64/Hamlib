@@ -35,7 +35,7 @@
 //    HAMLIB INCLUDES
 // ---------------------------------------------------------------------------
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "token.h"
 
 // ---------------------------------------------------------------------------
@@ -580,8 +580,8 @@ int adat_reset(RIG *, reset_t);
 int adat_open(RIG *);
 int adat_close(RIG *);
 
-int adat_set_conf(RIG *, token_t, const char *val);
-int adat_get_conf(RIG *, token_t, char *val);
+int adat_set_conf(RIG *, hamlib_token_t, const char *val);
+int adat_get_conf(RIG *, hamlib_token_t, char *val);
 
 int adat_set_freq(RIG *, vfo_t, freq_t);
 int adat_get_freq(RIG *, vfo_t, freq_t *);
@@ -610,7 +610,7 @@ int adat_power2mW(RIG *, unsigned int *, float, freq_t, rmode_t);
 
 int adat_get_powerstat(RIG *, powerstat_t *);
 
-extern const struct rig_caps adt_200a_caps;
+extern struct rig_caps adt_200a_caps;
 
 // ---------------------------------------------------------------------------
 //    END OF FILE

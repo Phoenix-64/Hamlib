@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 
 #include "icom.h"
@@ -51,7 +51,7 @@ static struct icom_priv_caps icr7000_priv_caps =
 /*
  * ICR7000 rigs capabilities.
  */
-const struct rig_caps icr7000_caps =
+struct rig_caps icr7000_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR7000),
     .model_name = "IC-R7000",
@@ -174,14 +174,14 @@ static struct icom_priv_caps icr7100_priv_caps =
 /*
  * ICR7100A rig capabilities.
  */
-const struct rig_caps icr7100_caps =
+struct rig_caps icr7100_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR7100),
     .model_name = "IC-R7100",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

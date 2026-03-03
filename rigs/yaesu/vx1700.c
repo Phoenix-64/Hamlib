@@ -33,7 +33,7 @@
 #include <string.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "yaesu.h"
 #include "vx1700.h"
@@ -207,7 +207,7 @@ struct vx1700_priv_data
         .width   = 1,   \
 }
 
-const struct rig_caps vx1700_caps =
+struct rig_caps vx1700_caps =
 {
     RIG_MODEL(RIG_MODEL_VX1700),
     .model_name =  "VX-1700",
@@ -336,7 +336,7 @@ static int vx1700_do_transaction(RIG *rig,
                                  const unsigned char cmd[YAESU_CMD_LENGTH],
                                  unsigned char *retbuf, size_t retbuf_len)
 {
-    struct rig_state    *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     unsigned char   default_retbuf[1];
     int         retval;
 
@@ -346,15 +346,14 @@ static int vx1700_do_transaction(RIG *rig,
         retbuf_len = sizeof(default_retbuf);
     }
 
-    rs = &rig->state;
     memset(retbuf, 0, retbuf_len);
 
-    rig_flush(&rs->rigport);
-    retval = write_block(&rs->rigport, cmd, YAESU_CMD_LENGTH);
+    rig_flush(rp);
+    retval = write_block(rp, cmd, YAESU_CMD_LENGTH);
 
     if (retval != RIG_OK) { return retval; }
 
-    retval = read_block(&rs->rigport, retbuf, retbuf_len);
+    retval = read_block(rp, retbuf, retbuf_len);
 
     if (retval != retbuf_len)
     {
@@ -709,11 +708,11 @@ static int vx1700_init(RIG *rig)
 
     rig_debug(RIG_DEBUG_TRACE, "%s\n", __func__);
 
-    rig->state.priv = calloc(1, sizeof(struct vx1700_priv_data));
+    STATE(rig)->priv = calloc(1, sizeof(struct vx1700_priv_data));
 
-    if (rig->state.priv == NULL) { return -RIG_ENOMEM; }
+    if (STATE(rig)->priv == NULL) { return -RIG_ENOMEM; }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     priv->ch = 1;
     return RIG_OK;
@@ -721,8 +720,8 @@ static int vx1700_init(RIG *rig)
 
 static int vx1700_open(RIG *rig)
 {
-    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)rig->state.priv;
-    struct rig_state        *state = &rig->state;
+    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)STATE(rig)->priv;
+    struct rig_state        *state = STATE(rig);
     int             ret;
 
     rig_debug(RIG_DEBUG_TRACE, "%s\n", __func__);
@@ -744,9 +743,9 @@ static int vx1700_cleanup(RIG *rig)
 {
     rig_debug(RIG_DEBUG_TRACE, "%s\n", __func__);
 
-    if (rig->state.priv != NULL) { free(rig->state.priv); }
+    if (STATE(rig)->priv != NULL) { free(STATE(rig)->priv); }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
     return RIG_OK;
 }
 
@@ -759,7 +758,8 @@ static const char *vx1700_get_info(RIG *rig)
 
 static int vx1700_set_vfo(RIG *rig, vfo_t vfo)
 {
-    const struct vx1700_priv_data *priv = (struct vx1700_priv_data *)rig->state.priv;
+    const struct vx1700_priv_data *priv = (struct vx1700_priv_data *)
+                                          STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s, vfo=%s\n", __func__, rig_strvfo(vfo));
 
@@ -812,7 +812,7 @@ static int vx1700_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
     rig_debug(RIG_DEBUG_TRACE, "%s: freq=%f\n", __func__, tx_freq);
     int err = rig_set_split_vfo(rig, RIG_VFO_A, RIG_SPLIT_ON, RIG_VFO_B);
 
-    if (err != RIG_OK) { RETURNFUNC(err); }
+    if (err != RIG_OK) { return err; }
 
     return vx1700_do_freq_cmd(rig, VX1700_NATIVE_TX_FREQ_SET, tx_freq);
 }
@@ -943,7 +943,7 @@ static int vx1700_set_ptt_gps_jack(ptt_t ptt)
      * FIXME
      *
      * We are using GPIO to manage PTT pin in GPS/Data jack.
-     * This highly binded to our specific device, so it makes
+     * This highly bound to our specific device, so it makes
      * no sense to put our code here.
      * On regular PC this should be managed in another way,
      * probably via DTR/RTS.
@@ -1125,8 +1125,8 @@ static int vx1700_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 static int vx1700_set_mem(RIG *rig, vfo_t vfo, int ch)
 {
-    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)rig->state.priv;
-    const struct rig_state *state = &rig->state;
+    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)STATE(rig)->priv;
+    const struct rig_state *state = STATE(rig);
 
     if (! vx1700_channel_is_ok(ch)) { return -RIG_EINVAL; }
 
@@ -1148,8 +1148,8 @@ static int vx1700_set_mem(RIG *rig, vfo_t vfo, int ch)
 
 static int vx1700_get_mem(RIG *rig, vfo_t vfo, int *ch)
 {
-    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)rig->state.priv;
-    const struct rig_state        *state = &rig->state;
+    struct vx1700_priv_data *priv = (struct vx1700_priv_data *)STATE(rig)->priv;
+    const struct rig_state        *state = STATE(rig);
     unsigned char       channel = 0;
 
     if (vfo == RIG_VFO_CURR) { vfo = state->current_vfo; }
@@ -1178,7 +1178,8 @@ static int vx1700_get_mem(RIG *rig, vfo_t vfo, int *ch)
 
 static int vx1700_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 {
-    const struct vx1700_priv_data *priv = (struct vx1700_priv_data *)rig->state.priv;
+    const struct vx1700_priv_data *priv = (struct vx1700_priv_data *)
+                                          STATE(rig)->priv;
 
     (void) rig;
     (void) vfo;

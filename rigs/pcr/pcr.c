@@ -55,7 +55,7 @@
 #define MD_P25  '8' /* PCR-2500 Only */
 
 
-/* define 2.8kHz, 6kHz, 15kHz, 50kHz, and 230kHz */
+/* define 2.8 kHz, 6 kHz, 15 kHz, 50 kHz, and 230 kHz */
 #define FLT_2_8kHz  '0'
 #define FLT_6kHz    '1'
 #define FLT_15kHz   '2'
@@ -163,7 +163,8 @@ pcr_read_block(RIG *rig, char *rxbuffer, size_t count)
 {
     int read = 0, tries = 4;
 
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
+    hamlib_port_t *rp = RIGPORT(rig);
     const struct pcr_priv_caps *caps = pcr_caps(rig);
     struct pcr_priv_data *priv = (struct pcr_priv_data *) rs->priv;
 
@@ -172,7 +173,7 @@ pcr_read_block(RIG *rig, char *rxbuffer, size_t count)
     /* already in sync? */
     if (priv->sync && !caps->always_sync)
     {
-        return read_block(&rs->rigport, (unsigned char *) rxbuffer, count);
+        return read_block(rp, (unsigned char *) rxbuffer, count);
     }
 
     /* read first char */
@@ -181,7 +182,7 @@ pcr_read_block(RIG *rig, char *rxbuffer, size_t count)
         char *p = &rxbuffer[0];
 
         /* read first char */
-        int err = read_block(&rs->rigport, (unsigned char *) p, 1);
+        int err = read_block(rp, (unsigned char *) p, 1);
 
         if (err < 0)
         {
@@ -204,7 +205,7 @@ pcr_read_block(RIG *rig, char *rxbuffer, size_t count)
         count--;
         p++;
 
-        err = read_block(&rs->rigport, (unsigned char *) p, count);
+        err = read_block(rp, (unsigned char *) p, count);
 
         if (err < 0)
         {
@@ -234,7 +235,7 @@ pcr_read_block(RIG *rig, char *rxbuffer, size_t count)
 static int
 pcr_parse_answer(RIG *rig, char *buf, int len)
 {
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
     struct pcr_priv_data *priv = (struct pcr_priv_data *) rs->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: len = %d\n", __func__, len);
@@ -341,7 +342,7 @@ static int
 pcr_send(RIG *rig, const char *cmd)
 {
     int err;
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
     struct pcr_priv_data *priv = (struct pcr_priv_data *) rs->priv;
 
     int len = strlen(cmd);
@@ -358,7 +359,7 @@ pcr_send(RIG *rig, const char *cmd)
 
     rs->transaction_active = 1;
 
-    err = write_block(&rs->rigport, (unsigned char *) priv->cmd_buf, len + 1);
+    err = write_block(RIGPORT(rig), (unsigned char *) priv->cmd_buf, len + 1);
 
     rs->transaction_active = 0;
 
@@ -370,7 +371,7 @@ static int
 pcr_transaction(RIG *rig, const char *cmd)
 {
     int err;
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
     struct pcr_priv_caps *caps = pcr_caps(rig);
     struct pcr_priv_data *priv = (struct pcr_priv_data *) rs->priv;
 
@@ -379,7 +380,7 @@ pcr_transaction(RIG *rig, const char *cmd)
 
     if (!priv->auto_update)
     {
-        rig_flush(&rs->rigport);
+        rig_flush(RIGPORT(rig));
     }
 
     pcr_send(rig, cmd);
@@ -461,8 +462,8 @@ pcr_set_comm_speed(RIG *rig, int rate)
         return err;
     }
 
-    rig->state.rigport.parm.serial.rate = rate;
-    serial_setup(&rig->state.rigport);
+    RIGPORT(rig)->parm.serial.rate = rate;
+    serial_setup(RIGPORT(rig));
 
     /* check if the pcr is still alive */
     return pcr_check_ok(rig);
@@ -480,16 +481,16 @@ pcr_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct pcr_priv_data *) calloc(1,
-                      sizeof(struct pcr_priv_data));
+    STATE(rig)->priv = (struct pcr_priv_data *) calloc(1,
+                       sizeof(struct pcr_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     memset(priv, 0x00, sizeof(struct pcr_priv_data));
 
@@ -531,9 +532,9 @@ pcr_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    free(rig->state.priv);
+    free(STATE(rig)->priv);
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -548,7 +549,8 @@ pcr_cleanup(RIG *rig)
 int
 pcr_open(RIG *rig)
 {
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
+    hamlib_port_t *rp = RIGPORT(rig);
     struct pcr_priv_data *priv = (struct pcr_priv_data *) rs->priv;
 
     int err;
@@ -569,14 +571,14 @@ pcr_open(RIG *rig)
         startup_serial_rate = 9600;
     }
 
-    wanted_serial_rate = rs->rigport.parm.serial.rate;
-    rs->rigport.parm.serial.rate = startup_serial_rate;
+    wanted_serial_rate = rp->parm.serial.rate;
+    rp->parm.serial.rate = startup_serial_rate;
 
-    serial_setup(&rs->rigport);
+    serial_setup(rp);
 
     /* let the pcr settle and flush any remaining data*/
     hl_usleep(100 * 1000);
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
     /* try powering on twice, sometimes the pcr answers H100 (off) */
     pcr_send(rig, "H101");
@@ -585,9 +587,9 @@ pcr_open(RIG *rig)
     pcr_send(rig, "H101");
     hl_usleep(100 * 250);
 
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
-    /* return RIG_ERJCTED if power is off */
+    /* return -RIG_ERJCTED if power is off */
     err = pcr_transaction(rig, "H1?");
 
     if (err != RIG_OK)
@@ -631,7 +633,7 @@ pcr_open(RIG *rig)
         return err;
     }
 
-    if ((rig->state.vfo_list & RIG_VFO_SUB) == RIG_VFO_SUB)
+    if ((STATE(rig)->vfo_list & RIG_VFO_SUB) == RIG_VFO_SUB)
     {
         err = pcr_set_squelch(rig, RIG_VFO_SUB, priv->sub_rcvr.squelch);
 
@@ -673,7 +675,7 @@ pcr_open(RIG *rig)
 int
 pcr_close(RIG *rig)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     /* when the pcr turns itself off sometimes we receive
      * a malformed answer, so don't check for it.
      */
@@ -690,7 +692,7 @@ pcr_close(RIG *rig)
 int
 pcr_set_vfo(RIG *rig, vfo_t vfo)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo = %s\n",
               __func__, rig_strvfo(vfo));
@@ -713,7 +715,7 @@ pcr_set_vfo(RIG *rig, vfo_t vfo)
 int
 pcr_get_vfo(RIG *rig, vfo_t *vfo)
 {
-    const struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    const struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     *vfo = priv->current_vfo;
     return RIG_OK;
@@ -724,7 +726,7 @@ pcr_get_vfo(RIG *rig, vfo_t *vfo)
  * Assumes rig!=NULL
  *
  * K0GMMMKKKHHHmmff00
- * GMMMKKKHHH is frequency GHz.MHz.KHz.Hz
+ * GMMMKKKHHH is frequency GHz.MHz.kHz.Hz
  * mm is the mode setting
  *  00 = LSB
  *  01 = USB
@@ -734,11 +736,11 @@ pcr_get_vfo(RIG *rig, vfo_t *vfo)
  *  05 = NFM
  *  06 = WFM
  * ff is the filter setting
- *  00 = 2.8 Khz (CW USB LSB AM)
- *  01 = 6.0 Khz (CW USB LSB AM NFM)
- *  02 = 15  Khz (AM NFM)
- *  03 = 50  Khz (AM NFM WFM)
- *  04 = 230 Khz (WFM)
+ *  00 = 2.8 kHz (CW USB LSB AM)
+ *  01 = 6.0 kHz (CW USB LSB AM NFM)
+ *  02 = 15  kHz (AM NFM)
+ *  03 = 50  kHz (AM NFM WFM)
+ *  04 = 230 kHz (WFM)
  *
  */
 
@@ -753,7 +755,7 @@ pcr_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo = %s, freq = %.0f\n",
               __func__, rig_strvfo(vfo), freq);
 
-    priv = (struct pcr_priv_data *) rig->state.priv;
+    priv = (struct pcr_priv_data *) STATE(rig)->priv;
     rcvr = is_sub_rcvr(rig, vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     SNPRINTF((char *) buf, sizeof(buf), "K%c%010" PRIll "0%c0%c00",
@@ -781,9 +783,9 @@ pcr_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 int
 pcr_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     *freq = rcvr->last_freq;
 
@@ -798,7 +800,7 @@ pcr_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 int
 pcr_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -939,7 +941,7 @@ pcr_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
     struct pcr_priv_data *priv;
     struct pcr_rcvr *rcvr;
 
-    priv = (struct pcr_priv_data *) rig->state.priv;
+    priv = (struct pcr_priv_data *) STATE(rig)->priv;
     rcvr = is_sub_rcvr(rig, vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s, last_mode = %c, last_filter = %c\n",
@@ -1018,7 +1020,7 @@ pcr_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 const char *
 pcr_get_info(RIG *rig)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     char *country = NULL;
 
@@ -1167,9 +1169,9 @@ int
 pcr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
 //  rig_debug(RIG_DEBUG_TRACE, "%s: level = %d\n", __func__, level);
 
@@ -1194,7 +1196,7 @@ pcr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             }
         }
 
-        val->i = rig_raw2val(rcvr->raw_level, &rig->state.str_cal);
+        val->i = rig_raw2val(rcvr->raw_level, &STATE(rig)->str_cal);
         /*      rig_debug(RIG_DEBUG_TRACE, "%s, raw = %d, converted = %d\n",
                          __func__, rcvr->raw_level, val->i);
         */
@@ -1233,7 +1235,7 @@ pcr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 /*
  * pcr_set_func
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * This is missing a way to call the set DSP noise reducer, as we don't have a func to call it
  * based on the flags in rig.h -> see also missing a flag for setting the BFO.
@@ -1241,9 +1243,9 @@ pcr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 int
 pcr_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: status = %d, func = %s\n", __func__,
               status, rig_strfunc(func));
@@ -1340,7 +1342,7 @@ pcr_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 
 /*
  * pcr_get_func
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * This will need similar variables/flags as get_level. The PCR doesn't offer much in the way of
  *  confirmation of current settings (according to the docs).
@@ -1354,7 +1356,7 @@ pcr_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 
 
 int
-pcr_set_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t val)
+pcr_set_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token, value_t val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s: tok = %s\n", __func__, rig_strlevel(token));
 
@@ -1399,7 +1401,7 @@ pcr_check_ok(RIG *rig)
 static int
 is_sub_rcvr(RIG *rig, vfo_t vfo)
 {
-    const struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    const struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     return vfo == RIG_VFO_SUB ||
            (vfo == RIG_VFO_CURR && priv->current_vfo == RIG_VFO_SUB);
@@ -1440,7 +1442,7 @@ static int
 pcr_set_volume(RIG *rig, vfo_t vfo, float level)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1459,7 +1461,7 @@ pcr_set_volume(RIG *rig, vfo_t vfo, float level)
 
 /*
  * pcr_set_squelch
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Format is J41xx - where xx is 00 to FF in hex, and specifies 255 squelch levels
  *
@@ -1479,7 +1481,7 @@ static int
 pcr_set_squelch(RIG *rig, vfo_t vfo, float level)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1499,7 +1501,7 @@ pcr_set_squelch(RIG *rig, vfo_t vfo, float level)
 
 /*
  * pcr_set_if_shift
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the IF shift  of the rig to the level specified in the level integer.
  *  IF-SHIFT position (in 256 stages, 80 = centre):
@@ -1515,7 +1517,7 @@ int
 pcr_set_if_shift(RIG *rig, vfo_t vfo, int level)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1534,7 +1536,7 @@ pcr_set_if_shift(RIG *rig, vfo_t vfo, int level)
 
 /*
  * pcr_set_agc
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the AGC on or off based on the level specified in the level integer.
  *  00 = off, 01 (non zero) is on
@@ -1546,7 +1548,7 @@ int
 pcr_set_agc(RIG *rig, vfo_t vfo, int status)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1565,7 +1567,7 @@ pcr_set_agc(RIG *rig, vfo_t vfo, int status)
 
 /*
  * pcr_set_afc(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the Tracking Filter on or off based on the status argument.
  *  00 = on, 01 (non zero) is off
@@ -1582,7 +1584,7 @@ pcr_set_afc(RIG *rig, vfo_t vfo, int status)
 
 /*
  * pcr_set_nb(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the noise blanker on or off based on the level specified in the level integer.
  *  00 = off, 01 (non zero) is on
@@ -1627,7 +1629,7 @@ pcr_set_diversity(RIG *rig, vfo_t vfo, int status)
 
 /*
  * pcr_set_attenuator(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the attenuator on or off based on the level specified in the level integer.
  *  00 = off, 01 (non zero) is on
@@ -1641,7 +1643,7 @@ int
 pcr_set_attenuator(RIG *rig, vfo_t vfo, int status)
 {
     int err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1660,7 +1662,7 @@ pcr_set_attenuator(RIG *rig, vfo_t vfo, int status)
 
 /*
  * pcr_set_bfo_shift
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the BFO of the rig to the level specified in the level integer.
  *  BFO-SHIFT position (in 256 stages, 80 = centre):
@@ -1682,7 +1684,7 @@ pcr_set_bfo_shift(RIG *rig, vfo_t vfo, int level)
 
 /*
  * pcr_set_dsp(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the DSP to UT106 (01) or off (non 01)
  *
@@ -1702,7 +1704,7 @@ pcr_set_dsp(RIG *rig, vfo_t vfo, int level)
 
 /*
  * pcr_set_dsp_state(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the DSP on or off (> 0 = on, 0 = off)
  *
@@ -1723,7 +1725,7 @@ pcr_set_dsp_state(RIG *rig, vfo_t vfo, int level)
 
 /*
  * pcr_set_dsp_noise_reducer(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the DSP noise reducer on or off (0x01 = on, 0x00 = off)
  *  the level of NR set by values 0x01 to 0x10 (1 to 16 inclusive)
@@ -1746,7 +1748,7 @@ pcr_set_dsp_noise_reducer(RIG *rig, vfo_t vfo, int level)
 
 /*
  * pcr_set_dsp_auto_notch(RIG *rig, vfo_t vfo, int level);
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *
  * Sets the auto notch on or off (1 = on, 0 = off)
  */
@@ -1775,9 +1777,9 @@ pcr_set_vsc(RIG *rig, vfo_t vfo, int status)  // J50xx
 
 int pcr_get_ctcss_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     *tone = rcvr->last_ctcss_sql;
     return RIG_OK;
@@ -1786,7 +1788,7 @@ int pcr_get_ctcss_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 int pcr_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
 {
     int i, err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1825,9 +1827,9 @@ int pcr_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
 
 int pcr_get_dcs_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     *tone = rcvr->last_dcs_sql;
     return RIG_OK;
@@ -1836,7 +1838,7 @@ int pcr_get_dcs_sql(RIG *rig, vfo_t vfo, tone_t *tone)
 int pcr_set_dcs_sql(RIG *rig, vfo_t vfo, tone_t tone)
 {
     int i, err;
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
                                         vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
@@ -1875,7 +1877,7 @@ int pcr_set_dcs_sql(RIG *rig, vfo_t vfo, tone_t tone)
 
 int pcr_set_trn(RIG *rig, int trn)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: trn = %d\n", __func__, trn);
 
@@ -1913,7 +1915,7 @@ int pcr_decode_event(RIG *rig)
 
 int pcr_set_powerstat(RIG *rig, powerstat_t status)
 {
-    const struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    const struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
 
     if (status == priv->power)
     {
@@ -1934,10 +1936,10 @@ int pcr_set_powerstat(RIG *rig, powerstat_t status)
 
 int pcr_get_powerstat(RIG *rig, powerstat_t *status)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     int err;
 
-    /* return RIG_ERJCTED if power is off */
+    /* return -RIG_ERJCTED if power is off */
     err = pcr_transaction(rig, "H1?");
 
     if (err != RIG_OK && err != -RIG_ERJCTED)
@@ -1954,9 +1956,9 @@ int pcr_get_powerstat(RIG *rig, powerstat_t *status)
 
 int pcr_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 {
-    struct pcr_priv_data *priv = (struct pcr_priv_data *) rig->state.priv;
+    struct pcr_priv_data *priv = (struct pcr_priv_data *) STATE(rig)->priv;
     const struct pcr_rcvr *rcvr = is_sub_rcvr(rig,
-                                        vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
+                                  vfo) ? &priv->sub_rcvr : &priv->main_rcvr;
 
     if (priv->auto_update == 0)
     {

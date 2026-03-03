@@ -120,7 +120,7 @@ const struct confparams ftdx101d_ext_levels[] =
         RIG_CONF_NUMERIC,
         { .n = { .min = 1, .max = 11, .step = 1 } },
     },
-        {
+    {
         TOK_MAXPOWER_HF,
         "MAXPOWER_HF",
         "Maxpower HF",
@@ -168,12 +168,12 @@ int ftdx101d_ext_tokens[] =
     TOK_BACKEND_NONE
 };
 
-const struct rig_caps ftdx101d_caps =
+struct rig_caps ftdx101d_caps =
 {
     RIG_MODEL(RIG_MODEL_FTDX101D),
     .model_name =         "FTDX-101D",
     .mfg_name =           "Yaesu",
-    .version =            NEWCAT_VER ".21",
+    .version =            NEWCAT_VER ".22",
     .copyright =          "LGPL",
     .status =             RIG_STATUS_STABLE,
     .rig_type =           RIG_TYPE_TRANSCEIVER,
@@ -198,17 +198,29 @@ const struct rig_caps ftdx101d_caps =
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran =
     {
+#define NO_LVL_MICGAIN
+#define NO_LVL_SQL
+#define NO_LVL_MONITOR_GAIN
+#define NO_LVL_RFPOWER
+#define NO_LVL_USB_AF
+#define NO_LVL_USB_AF_INPUT
 #include "level_gran_yaesu.h"
-        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_SQL] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_USB_AF] = { .min = { .f = .0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_USB_AF_INPUT] = { .min = { .f = .0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
+#undef NO_LVL_MICGAIN
+#undef NO_LVL_SQL
+#undef NO_LVL_MONITOR_GAIN
+#undef NO_LVL_RFPOWER
+#undef NO_LVL_USB_AF
+#undef NO_LVL_USB_AF_INPUT
+        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_SQL] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_USB_AF] = { .min = { .f = .0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_USB_AF_INPUT] = { .min = { .f = .0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BAND60M,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN,BANDMW,BANDUNUSED,BANDUNUSED,BANDUNUSED,BANDUNUSED,BAND4M"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -226,12 +238,15 @@ const struct rig_caps ftdx101d_caps =
     .bank_qty =           0,
     .chan_desc_sz =       0,
     .rfpower_meter_cal =  FTDX101D_RFPOWER_METER_WATTS_CAL,
+    .alc_cal =            FTDX101D_ALC_METER_CAL,
     .str_cal =            FTDX101D_STR_CAL,
     .swr_cal =            FTDX101D_SWR_CAL,
     .chan_list =          {
         {   1,  99, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP },
         {   100,  117, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP }, // P1L-P9U PMS channels
-        {   501,  510, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP }, // 5xx 5MHz band
+        {   501,  510, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP }, // 5xx 5 MHz band
+        {   1,      5, RIG_MTYPE_VOICE },
+        {   1,    5,   RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 
@@ -360,6 +375,7 @@ const struct rig_caps ftdx101d_caps =
     .set_clock =          newcat_set_clock,
     .get_clock =          newcat_get_clock,
     .scan =               newcat_scan,
+    .send_voice_mem =     newcat_send_voice_mem,
     .morse_qsize =        50,
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };

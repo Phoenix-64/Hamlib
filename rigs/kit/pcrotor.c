@@ -54,7 +54,7 @@ static int
 pcrotor_stop(ROT *rot)
 {
     /* CW=0, CCW=0, Power-up=0 */
-    return setDirection(&rot->state.rotport, 0);
+    return setDirection(ROTPORT(rot), 0);
 }
 
 static int
@@ -83,7 +83,7 @@ pcrotor_move(ROT *rot, int direction, int speed)
         return -RIG_EINVAL;
     }
 
-    return setDirection(&rot->state.rotport, outputvalue);
+    return setDirection(ROTPORT(rot), outputvalue);
 }
 
 
@@ -91,7 +91,7 @@ pcrotor_move(ROT *rot, int direction, int speed)
 /*
  * PcRotor rotator capabilities.
  *
- * Control Interface schematics from, courtersy of Bob Hillard WA6UFQ:
+ * Control Interface schematics from, courtesy of Bob Hillard WA6UFQ:
  *   http://www.dxzone.com/cgi-bin/dir/jump2.cgi?ID=11173
  *
  * DB25-7=Data-5= Power up/Sleep
@@ -111,7 +111,7 @@ const struct rot_caps pcrotor_caps =
     .mfg_name =       "WA6UFQ",
     .version =        "20081013.0",
     .copyright =      "LGPL",
-    .status =         RIG_STATUS_BETA,
+    .status =         RIG_STATUS_STABLE,
     .rot_type =       ROT_TYPE_OTHER,
     .port_type =      RIG_PORT_PARALLEL,
     .write_delay =  0,

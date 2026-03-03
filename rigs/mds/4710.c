@@ -1,13 +1,13 @@
 #include "mds.h"
 
-const struct rig_caps mds_4710_caps =
+struct rig_caps mds_4710_caps =
 {
     RIG_MODEL(RIG_MODEL_MDS4710),
     .model_name =       "4710",
     .mfg_name =         "MDS",
     .version =          "20221114.0",
     .copyright =        "LGPL",
-    .status =           RIG_STATUS_ALPHA,
+    .status =           RIG_STATUS_BETA,
     .rig_type =         RIG_TYPE_TRANSCEIVER,
     .ptt_type =         RIG_PTT_RIG,
     .dcd_type =         RIG_DCD_NONE,

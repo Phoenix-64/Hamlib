@@ -17,6 +17,7 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 /**
  * \addtogroup rig_internal
@@ -28,10 +29,9 @@
  * \brief Miscellaneous utility routines
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
-#include <stdarg.h>
 #include <stdio.h>   /* Standard input/output definitions */
 #include <string.h>  /* String function definitions */
 
@@ -45,11 +45,13 @@
 
 #include <math.h>
 
-#include <hamlib/rig.h>
-#include <hamlib/rotator.h>
-#include <hamlib/amplifier.h>
+#include "hamlib/rig.h"
+#include "hamlib/rig_state.h"
+#include "hamlib/rotator.h"
+#include "hamlib/amplifier.h"
 
 #include "misc.h"
+#include "cache.h"
 #include "serial.h"
 #include "network.h"
 #include "sprintflst.h"
@@ -339,7 +341,7 @@ double morse_code_dot_to_millis(int wpm)
 
 /**
  * \brief Convert duration of tenths of morse code dots to milliseconds at the given speed.
- * \param tenths_of_dots number of 1/10ths of dots
+ * \param dot10ths number of 1/10ths of dots
  * \param wpm morse code speed in words per minute
  * \return int duration in milliseconds
  *
@@ -382,7 +384,7 @@ int millis_to_dot10ths(int millis, int wpm)
 int HAMLIB_API sprintf_freq(char *str, int str_len, freq_t freq)
 {
     double f;
-    char *hz;
+    const char *hz;
     int decplaces = 10;
     int retval;
 
@@ -498,7 +500,14 @@ static const struct
     { RIG_MODE_IQ, "IQ"},
     { RIG_MODE_ISBUSB, "ISBUSB"},
     { RIG_MODE_ISBLSB, "ISBLSB"},
-    { RIG_MODE_NONE, "None" }, // so we can reutnr None when NONE is requested
+// AB4MW last six rig modes added for Icom IC-F8101 data modes
+    { RIG_MODE_LSBD1, "LSBD1"},
+    { RIG_MODE_LSBD2, "LSBD2"},
+    { RIG_MODE_LSBD3, "LSBD3"},
+    { RIG_MODE_USBD1, "USBD1"},
+    { RIG_MODE_USBD2, "USBD2"},
+    { RIG_MODE_USBD3, "USBD3"},
+    { RIG_MODE_NONE, "None" }, // so we can return None when NONE is requested
     { -1, "" }, // need to end list
 };
 
@@ -734,12 +743,14 @@ static const struct
     { RIG_FUNC_DIVERSITY, "DIVERSITY"},
     { RIG_FUNC_CSQL, "CSQL" },
     { RIG_FUNC_SCEN, "SCEN" },
+    { RIG_FUNC_SLICE, "SLICE" },
     { RIG_FUNC_TRANSCEIVE, "TRANSCEIVE" },
     { RIG_FUNC_SPECTRUM, "SPECTRUM" },
     { RIG_FUNC_SPECTRUM_HOLD, "SPECTRUM_HOLD" },
     { RIG_FUNC_SEND_MORSE, "SEND_MORSE" },
     { RIG_FUNC_SEND_VOICE_MEM, "SEND_VOICE_MEM" },
     { RIG_FUNC_OVF_STATUS, "OVF_STATUS" },
+    { RIG_FUNC_SYNC, "SYNC" },
     { RIG_FUNC_NONE, "" },
 };
 
@@ -747,35 +758,35 @@ static const struct
 {
     setting_t bandselect;
     const char *str;
-    double start,stop;
+    double start, stop;
 } rig_bandselect_str[] =
 {
     { RIG_BANDSELECT_2200M, "BAND2200M", 135700, 137799 },
-    { RIG_BANDSELECT_600M,  "BAND600M" , 472000, 478999},
-    { RIG_BANDSELECT_160M,  "BAND160M" , 1800000, 1899999},
-    { RIG_BANDSELECT_80M,   "BAND80M" , 3400000, 4099999},
-    { RIG_BANDSELECT_60M,   "BAND60M" , 5250000, 5449999},
-    { RIG_BANDSELECT_40M,   "BAND40M" , 6900000, 7499999},
-    { RIG_BANDSELECT_30M,   "BAND30M" , 9900000, 10499999},
-    { RIG_BANDSELECT_20M,   "BAND20M" , 13900000, 14499999},
-    { RIG_BANDSELECT_17M,   "BAND17M" , 17900000, 18499999},
-    { RIG_BANDSELECT_15M,   "BAND15M" , 20900000, 21499999},
-    { RIG_BANDSELECT_12M,   "BAND10M" , 24400000, 25099999},
-    { RIG_BANDSELECT_10M,   "BAND10M" , 28000000, 29999999},
-    { RIG_BANDSELECT_6M,    "BAND6M"  , 50000000, 53999999},
-    { RIG_BANDSELECT_WFM,   "BANDWFM" , 74800000, 107999999},
-    { RIG_BANDSELECT_MW,    "BANDMW" , 530000000, 1700999999},
-    { RIG_BANDSELECT_AIR,   "BANDAIR" , 108000000, 136999999},
-    { RIG_BANDSELECT_2M,    "BAND2M" , 144000000, 145999999},
-    { RIG_BANDSELECT_1_25M, "BAND1_25M" , 219000000, 224999999},
-    { RIG_BANDSELECT_70CM,  "BAND70CM" , 420000000, 449999999},
-    { RIG_BANDSELECT_33CM,  "BAND33CM" , 902000000, 927999999},
-    { RIG_BANDSELECT_23CM,  "BAND23CM" , 1240000000, 1324999999},
-    { RIG_BANDSELECT_13CM,  "BAND13CM" , 2300000000, 2449999999},
-    { RIG_BANDSELECT_9CM,  "BAND9CM" , 3300000000, 3474999999},
-    { RIG_BANDSELECT_5CM,  "BAND5CM" , 5650000000, 5924999999},
+    { RIG_BANDSELECT_600M,  "BAND600M", 472000, 478999},
+    { RIG_BANDSELECT_160M,  "BAND160M", 1800000, 1899999},
+    { RIG_BANDSELECT_80M,   "BAND80M", 3400000, 4099999},
+    { RIG_BANDSELECT_60M,   "BAND60M", 5250000, 5449999},
+    { RIG_BANDSELECT_40M,   "BAND40M", 6900000, 7499999},
+    { RIG_BANDSELECT_30M,   "BAND30M", 9900000, 10499999},
+    { RIG_BANDSELECT_20M,   "BAND20M", 13900000, 14499999},
+    { RIG_BANDSELECT_17M,   "BAND17M", 17900000, 18499999},
+    { RIG_BANDSELECT_15M,   "BAND15M", 20900000, 21499999},
+    { RIG_BANDSELECT_12M,   "BAND12M", 24400000, 25099999},
+    { RIG_BANDSELECT_10M,   "BAND10M", 28000000, 29999999},
+    { RIG_BANDSELECT_6M,    "BAND6M", 50000000, 53999999},
+    { RIG_BANDSELECT_WFM,   "BANDWFM", 74800000, 107999999},
+    { RIG_BANDSELECT_MW,    "BANDMW", 530000000, 1700999999},
+    { RIG_BANDSELECT_AIR,   "BANDAIR", 108000000, 136999999},
+    { RIG_BANDSELECT_2M,    "BAND2M", 144000000, 145999999},
+    { RIG_BANDSELECT_1_25M, "BAND1_25M", 219000000, 224999999},
+    { RIG_BANDSELECT_70CM,  "BAND70CM", 420000000, 449999999},
+    { RIG_BANDSELECT_33CM,  "BAND33CM", 902000000, 927999999},
+    { RIG_BANDSELECT_23CM,  "BAND23CM", 1240000000, 1324999999},
+    { RIG_BANDSELECT_13CM,  "BAND13CM", 2300000000, 2449999999},
+    { RIG_BANDSELECT_9CM,  "BAND9CM", 3300000000, 3474999999},
+    { RIG_BANDSELECT_5CM,  "BAND5CM", 5650000000, 5924999999},
     { RIG_BANDSELECT_3CM,  "BAND3CM", 10000000000, 10499999999 },
-    { RIG_BANDSELECT_GEN,   "BANDGEN" , 0, 1000000000000},
+    { RIG_BANDSELECT_GEN,   "BANDGEN", 0, 1000000000000},
     { 0, NULL, 0, 0 }
 };
 
@@ -790,6 +801,17 @@ static const struct
 };
 
 
+static const struct
+{
+    setting_t func;
+    const char *str;
+} amp_func_str[] =
+{
+    { AMP_FUNC_TUNER, "TUNER" },
+    { AMP_FUNC_NONE, "" },
+};
+
+
 /**
  * utility function to convert index to bit value
  *
@@ -797,6 +819,33 @@ static const struct
 uint64_t rig_idx2setting(int i)
 {
     return ((uint64_t)1) << i;
+}
+
+/**
+ * \brief convert and integer expressed 2^n to n
+ * \param v The integer to convert to
+ *
+ *  Converts an integer value expressed by 2^n to the value of n.
+ *
+ * \return the index such that 2^n is the value, otherwise -1
+ * if the index was not found.
+ */
+int HAMLIB_API rig_bit2idx(uint64_t v)
+{
+    int i;
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    for (i = 0; i < 64; i++)
+    {
+        if (v & rig_idx2setting(i))
+        {
+            rig_debug(RIG_DEBUG_VERBOSE, "%s: idx=%d\n", __func__, i);
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 /**
@@ -837,7 +886,7 @@ setting_t HAMLIB_API rig_parse_band(const char *s)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    for (i = 0 ; rig_bandselect_str[i].str[0] != '\0'; i++)
+    for (i = 0 ; rig_bandselect_str[i].str != NULL; i++)
     {
         if (!strcmp(s, rig_bandselect_str[i].str))
         {
@@ -872,6 +921,31 @@ setting_t HAMLIB_API rot_parse_func(const char *s)
     }
 
     return ROT_FUNC_NONE;
+}
+
+
+/**
+ * \brief Convert alpha string to enum AMP_FUNC_...
+ * \param s input alpha string
+ * \return AMP_FUNC_...
+ *
+ * \sa amp_func_e()
+ */
+setting_t HAMLIB_API amp_parse_func(const char *s)
+{
+    int i;
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    for (i = 0 ; amp_func_str[i].str[0] != '\0'; i++)
+    {
+        if (!strcmp(s, amp_func_str[i].str))
+        {
+            return amp_func_str[i].func;
+        }
+    }
+
+    return AMP_FUNC_NONE;
 }
 
 
@@ -930,6 +1004,37 @@ const char *HAMLIB_API rot_strfunc(setting_t func)
         if (func == rot_func_str[i].func)
         {
             return rot_func_str[i].str;
+        }
+    }
+
+    return "";
+}
+
+
+/**
+ * \brief Convert enum AMP_FUNC_... to alpha string
+ * \param func AMP_FUNC_...
+ * \return alpha string
+ *
+ * \sa amp_func_e()
+ */
+const char *HAMLIB_API amp_strfunc(setting_t func)
+{
+    int i;
+
+    // too verbose to keep on unless debugging this in particular
+    //rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    if (func == AMP_FUNC_NONE)
+    {
+        return "";
+    }
+
+    for (i = 0; amp_func_str[i].str[0] != '\0'; i++)
+    {
+        if (func == amp_func_str[i].func)
+        {
+            return amp_func_str[i].str;
         }
     }
 
@@ -1023,15 +1128,23 @@ static const struct
     { AMP_LEVEL_PWR_REFLECTED, "PWRREFLECTED" },
     { AMP_LEVEL_PWR_PEAK, "PWRPEAK" },
     { AMP_LEVEL_FAULT, "FAULT" },
+    { AMP_LEVEL_PWR, "PWR" },
+    { AMP_LEVEL_WARNING, "WARNING" },
+    { AMP_LEVEL_SWR_TUNER, "SWR_TUNER" },
+    { AMP_LEVEL_VD_METER, "VD_METER" },
+    { AMP_LEVEL_ID_METER, "ID_METER" },
+    { AMP_LEVEL_TEMP_METER, "TEMP_METER" },
     { AMP_LEVEL_NONE, "" },
 };
 
-/*
- * \brief check input to set_level
- * \param rig Pointer to rig data
+/**
+ * \brief Check the input to rig_set_level
+ * \ingroup lib_internal
+ *
+ * \param rig The rig handle
  * \param level RIG_LEVEL_* trying to set
  * \param val Raw input from the caller
- * \param gran If not NULL, set to location of level_gran data
+ * \param[out] gran If not NULL, set to location of level_gran data
  *
  * \return RIG_OK if value is in range for this level, -RIG_EINVAL if not
  */
@@ -1272,8 +1385,12 @@ static const struct
     { RIG_PARM_BAT, "BAT" },
     { RIG_PARM_KEYLIGHT, "KEYLIGHT"},
     { RIG_PARM_SCREENSAVER, "SCREENSAVER"},
+    { RIG_PARM_AFIF, "AFIF"},
     { RIG_PARM_BANDSELECT, "BANDSELECT"},
     { RIG_PARM_KEYERTYPE, "KEYERTYPE"},
+    { RIG_PARM_AFIF_LAN, "AFIF_LAN"},
+    { RIG_PARM_AFIF_WLAN, "AFIF_WLAN"},
+    { RIG_PARM_AFIF_ACC, "AFIF_ACC"},
     { RIG_PARM_NONE, "" },
 };
 
@@ -1285,6 +1402,18 @@ static const struct
 } rot_parm_str[] =
 {
     { ROT_PARM_NONE, "" },
+};
+
+
+static const struct
+{
+    setting_t parm;
+    const char *str;
+} amp_parm_str[] =
+{
+    { AMP_PARM_BACKLIGHT, "BACKLIGHT" },
+    { AMP_PARM_BEEP, "BEEP" },
+    { AMP_PARM_NONE, "" },
 };
 
 
@@ -1339,6 +1468,31 @@ setting_t HAMLIB_API rot_parse_parm(const char *s)
 
 
 /**
+ * \brief Convert alpha string to AMP_PARM_...
+ * \param s input alpha string
+ * \return AMP_PARM_...
+ *
+ * \sa amp_parm_e()
+ */
+setting_t HAMLIB_API amp_parse_parm(const char *s)
+{
+    int i;
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    for (i = 0 ; amp_parm_str[i].str[0] != '\0'; i++)
+    {
+        if (!strcmp(s, amp_parm_str[i].str))
+        {
+            return amp_parm_str[i].parm;
+        }
+    }
+
+    return AMP_PARM_NONE;
+}
+
+
+/**
  * \brief Convert enum RIG_PARM_... to alpha string
  * \param parm RIG_PARM_...
  * \return alpha string
@@ -1349,7 +1503,7 @@ const char *HAMLIB_API rig_strparm(setting_t parm)
 {
     int i;
 
-    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+//    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     if (parm == RIG_PARM_NONE)
     {
@@ -1397,6 +1551,37 @@ const char *HAMLIB_API rot_strparm(setting_t parm)
     return "";
 }
 
+
+/**
+ * \brief Convert enum AMP_PARM_... to alpha string
+ * \param parm AMP_PARM_...
+ * \return alpha string
+ *
+ * \sa amp_parm_e()
+ */
+const char *HAMLIB_API amp_strparm(setting_t parm)
+{
+    int i;
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    if (parm == AMP_PARM_NONE)
+    {
+        return "";
+    }
+
+    for (i = 0; amp_parm_str[i].str[0] != '\0'; i++)
+    {
+        if (parm == amp_parm_str[i].parm)
+        {
+            return amp_parm_str[i].str;
+        }
+    }
+
+    return "";
+}
+
+
 static const struct
 {
     enum agc_level_e level;
@@ -1443,7 +1628,7 @@ const char *HAMLIB_API rig_stragclevel(enum agc_level_e level)
 
 /**
  * \brief Convert a enum agc_level_e to value
- * \param integer...
+ * \param agcLevel level to convert
  * \return agc_level_e value
  */
 value_t rig_valueagclevel(enum agc_level_e agcLevel)
@@ -1463,7 +1648,7 @@ value_t rig_valueagclevel(enum agc_level_e agcLevel)
 
 /**
  * \brief Convert a value to agc_level_e -- constrains the range
- * \param integer...
+ * \param agcValue value to convert
  * \return agc_level_e
  */
 enum agc_level_e rig_levelagcvalue(int agcValue)
@@ -1494,7 +1679,7 @@ enum agc_level_e rig_levelagcvalue(int agcValue)
 
 /**
  * \brief Convert AGC string... to agc_level_e
- * \param mode AGC string...
+ * \param agcString AGC string to convert
  * \return agc_level_e
  */
 enum agc_level_e rig_levelagcstr(const char *agcString)
@@ -1724,6 +1909,9 @@ static const struct
     { RIG_MTYPE_SAT, "SAT" },
     { RIG_MTYPE_BAND, "BAND" },
     { RIG_MTYPE_PRIO, "PRIO" },
+    { RIG_MTYPE_VOICE, "VOICE" },
+    { RIG_MTYPE_MORSE, "MORSE" },
+    { RIG_MTYPE_SPLIT, "SPLIT" },
     { RIG_MTYPE_NONE, "" },
 };
 
@@ -1950,7 +2138,6 @@ double HAMLIB_API elapsed_ms(struct timespec *start, int option)
         //rig_debug(RIG_DEBUG_TRACE, "%s: after gettime, start = %ld,%ld\n", __func__,
         //          (long)start->tv_sec, (long)start->tv_nsec);
         return 999 * 1000; // so we can tell the difference in debug where we came from
-        break;
 
     case HAMLIB_ELAPSED_INVALIDATE:
         clock_gettime(CLOCK_REALTIME, start);
@@ -1959,8 +2146,9 @@ double HAMLIB_API elapsed_ms(struct timespec *start, int option)
         break;
     }
 
-    elapsed_msec = ((stop.tv_sec - start->tv_sec) + (stop.tv_nsec / 1e9 -
-                    start->tv_nsec / 1e9)) * 1e3;
+    // Casts used to make sure the add is done as double
+    elapsed_msec = (double)((stop.tv_sec - start->tv_sec) * 1000) + // sec -> ms
+                   (double)(stop.tv_nsec - start->tv_nsec) / 1e6;   // ns  -> ms
 
     //rig_debug(RIG_DEBUG_TRACE, "%s: elapsed_msecs=%.0f\n", __func__, elapsed_msec);
 
@@ -1969,22 +2157,6 @@ double HAMLIB_API elapsed_ms(struct timespec *start, int option)
     return elapsed_msec;
 }
 //! @endcond
-
-
-int HAMLIB_API rig_get_cache_timeout_ms(RIG *rig, hamlib_cache_t selection)
-{
-    rig_debug(RIG_DEBUG_TRACE, "%s: called selection=%d\n", __func__, selection);
-    return rig->state.cache.timeout_ms;
-}
-
-int HAMLIB_API rig_set_cache_timeout_ms(RIG *rig, hamlib_cache_t selection,
-                                        int ms)
-{
-    rig_debug(RIG_DEBUG_TRACE, "%s: called selection=%d, ms=%d\n", __func__,
-              selection, ms);
-    rig->state.cache.timeout_ms = ms;
-    return RIG_OK;
-}
 
 static char *funcname = "Unknown";
 static int linenum = 0;
@@ -2004,21 +2176,50 @@ vfo_t HAMLIB_API vfo_fixup2a(RIG *rig, vfo_t vfo, split_t split,
 // We need to add some exceptions to this like the ID-5100
 vfo_t HAMLIB_API vfo_fixup(RIG *rig, vfo_t vfo, split_t split)
 {
+    struct rig_state *rs = STATE(rig);
+    vfo_t currvfo = rs->current_vfo;
+
     rig_debug(RIG_DEBUG_TRACE, "%s:(from %s:%d) vfo=%s, vfo_curr=%s, split=%d\n",
               __func__, funcname, linenum,
-              rig_strvfo(vfo), rig_strvfo(rig->state.current_vfo), split);
+              rig_strvfo(vfo), rig_strvfo(currvfo), split);
 
     if (rig->caps->rig_model == RIG_MODEL_ID5100
-        || rig->caps->rig_model == RIG_MODEL_IC9700)
+            || rig->caps->rig_model == RIG_MODEL_IC9700)
     {
         // dualwatch on ID5100 is TX=Main, RX=Sub
-        struct icom_priv_data *icom_priv = (struct icom_priv_data *)rig->caps->priv;
-        if (rig->caps->rig_model == RIG_MODEL_ID5100 && icom_priv->dual_watch)
+        if (rig->caps->rig_model == RIG_MODEL_ID5100 && rs->dual_watch)
         {
-            if (vfo == RIG_VFO_TX) return RIG_VFO_MAIN;
+            if (vfo == RIG_VFO_TX || vfo == RIG_VFO_MAIN) { return RIG_VFO_MAIN; }
+
             return RIG_VFO_SUB;
         }
+
         return vfo; // no change to requested vfo
+    }
+    else if (RIG_IS_IC9700)
+    {
+        if (vfo == RIG_VFO_A && (currvfo == RIG_VFO_MAIN || currvfo == RIG_VFO_MAIN_A))
+        {
+            vfo = RIG_VFO_MAIN_A;
+
+            // only have Main/Sub when in satmode
+            if (CACHE(rig)->satmode) { vfo = RIG_VFO_MAIN; }
+        }
+        else if (vfo == RIG_VFO_B && (currvfo == RIG_VFO_MAIN
+                                      || currvfo == RIG_VFO_MAIN_A))
+        {
+            vfo = RIG_VFO_MAIN_B;
+        }
+        else if (vfo == RIG_VFO_A && (currvfo == RIG_VFO_SUB
+                                      || currvfo == RIG_VFO_SUB_A || currvfo == RIG_VFO_SUB_B))
+        {
+            vfo = RIG_VFO_SUB_A;
+        }
+        else if (vfo == RIG_VFO_B && (currvfo == RIG_VFO_SUB
+                                      || currvfo == RIG_VFO_SUB_A || currvfo == RIG_VFO_SUB_B))
+        {
+            vfo = RIG_VFO_SUB_B;
+        }
     }
 
     if (vfo == RIG_VFO_NONE) { vfo = RIG_VFO_A; }
@@ -2031,7 +2232,7 @@ vfo_t HAMLIB_API vfo_fixup(RIG *rig, vfo_t vfo, split_t split)
 
     if (vfo == RIG_VFO_OTHER)
     {
-        switch (rig->state.current_vfo)
+        switch (rs->current_vfo)
         {
         case RIG_VFO_A:
             return RIG_VFO_B;
@@ -2055,43 +2256,20 @@ vfo_t HAMLIB_API vfo_fixup(RIG *rig, vfo_t vfo, split_t split)
 
     if (vfo == RIG_VFO_RX)
     {
-        vfo = rig->state.rx_vfo;
+        vfo = rs->rx_vfo;
     }
     else if (vfo == RIG_VFO_A || vfo == RIG_VFO_MAIN)
     {
         vfo = RIG_VFO_A; // default to mapping VFO_MAIN to VFO_A
 
         if (VFO_HAS_MAIN_SUB_ONLY) { vfo = RIG_VFO_MAIN; }
-
-        //in this case we don't change it as either VFOA/B or Main/Sub makes a difference
-        //ID5100 for example has to turn on dual watch mode for Main/Sub
-        //if (VFO_HAS_MAIN_SUB_A_B_ONLY) { vfo = RIG_VFO_MAIN; }
     }
     else if (vfo == RIG_VFO_TX)
     {
-#if 0
-        int retval;
-        split_t split = 0;
-        // get split if we can -- it will default to off otherwise
-        // maybe split/satmode/vfo/freq/mode can be cached for rigs
-        // that don't have read capability or get_vfo like Icom?
-        // Icom's lack of get_vfo is problematic in this respect
-        // If we cache vfo or others than twiddling the rig may cause problems
-        retval = rig_get_split(rig, vfo, &split);
-
-        if (retval != RIG_OK)
-        {
-            split = rig->state.cache.split;
-        }
-
-#endif
-
-        int satmode = rig->state.cache.satmode;
+        int satmode = CACHE(rig)->satmode;
 
         rig_debug(RIG_DEBUG_VERBOSE, "%s(%d): split=%d, vfo==%s tx_vfo=%s\n", __func__,
-                  __LINE__, split, rig_strvfo(vfo), rig_strvfo(rig->state.tx_vfo));
-
-        //if (vfo == RIG_VFO_TX) { vfo = rig->state.tx_vfo; RETURNFUNC(RIG_OK); }
+                  __LINE__, split, rig_strvfo(vfo), rig_strvfo(rs->tx_vfo));
 
         if (VFO_HAS_MAIN_SUB_ONLY && !split && !satmode && vfo != RIG_VFO_B) { vfo = RIG_VFO_MAIN; }
 
@@ -2112,11 +2290,9 @@ vfo_t HAMLIB_API vfo_fixup(RIG *rig, vfo_t vfo, split_t split)
         vfo = RIG_VFO_B;  // default to VFO_B
 
         if (VFO_HAS_MAIN_SUB_ONLY) { vfo = RIG_VFO_SUB; }
-
-        //if (VFO_HAS_MAIN_SUB_A_B_ONLY) { vfo = RIG_VFO_SUB; }
-
-        rig_debug(RIG_DEBUG_TRACE, "%s: final vfo=%s\n", __func__, rig_strvfo(vfo));
     }
+
+    rig_debug(RIG_DEBUG_TRACE, "%s: final vfo=%s\n", __func__, rig_strvfo(vfo));
 
     return vfo;
 }
@@ -2132,14 +2308,14 @@ int HAMLIB_API parse_hoststr(char *hoststr, int hoststr_len, char host[256],
 
     // Exclude any names that aren't a host:port format
     // Handle device names 1st
-    if (strstr(hoststr, "/dev")) { return -1; }
+    if (strstr(hoststr, "/dev")) { return -RIG_EINVAL; }
 
-    if (strstr(hoststr, "/")) { return -1; } // probably a path so not a hoststr
+    if (strstr(hoststr, "/")) { return -RIG_EINVAL; } // probably a path so not a hoststr
 
-    if (strncasecmp(hoststr, "com", 3) == 0) { return -1; }
+    if (strncasecmp(hoststr, "com", 3) == 0) { return -RIG_EINVAL; }
 
     // escaped COM port like \\.\COM3 or \.\COM3
-    if (strstr(hoststr, "\\.\\")) { return -1; }
+    if (strstr(hoststr, "\\.\\")) { return -RIG_EINVAL; }
 
     // Now let's try and parse a host:port thing
     // bracketed IPV6 with optional port
@@ -2234,9 +2410,9 @@ int HAMLIB_API parse_hoststr(char *hoststr, int hoststr_len, char host[256],
 
     if (n >= 1 && strlen(dummy) == 0) { return RIG_OK; }
 
-    printf("Unhandled host=%s\n", hoststr);
+    rig_debug(RIG_DEBUG_BUG, "%s: Unhandled host=%s\n", __func__, hoststr);
 
-    return -1;
+    return -RIG_EINVAL;
 }
 
 
@@ -2344,9 +2520,123 @@ const char *HAMLIB_API rot_strstatus(rot_status_t status)
     return "";
 }
 
+
+static const struct
+{
+    amp_status_t status;
+    const char *str;
+} amp_status_str[] =
+{
+    { AMP_STATUS_PTT, "PTT" },
+    { AMP_STATUS_FAULT_SWR, "FAULT_SWR" },
+    { AMP_STATUS_FAULT_INPUT_POWER, "FAULT_INPUT_POWER" },
+    { AMP_STATUS_FAULT_TEMPERATURE, "FAULT_TEMPERATURE" },
+    { AMP_STATUS_FAULT_PWR_FWD,          "FAULT_PWR_FWD" },
+    { AMP_STATUS_FAULT_PWR_REFLECTED,    "FAULT_PWR_REFLECTED" },
+    { AMP_STATUS_FAULT_VOLTAGE,          "FAULT_VOLTAGE" },
+    { AMP_STATUS_FAULT_FREQUENCY,        "FAULT_FREQUENCY" },
+    { AMP_STATUS_FAULT_TUNER_NO_MATCH,   "FAULT_TUNER_NO_MATCH" },
+    { AMP_STATUS_FAULT_OTHER,            "FAULT_OTHER" },
+    { AMP_STATUS_WARNING_SWR_HIGH,       "WARNING_SWR_HIGH" },
+    { AMP_STATUS_WARNING_POWER_LIMIT,    "WARNING_POWER_LIMIT" },
+    { AMP_STATUS_WARNING_TEMPERATURE,    "WARNING_TEMPERATURE" },
+    { AMP_STATUS_WARNING_FREQUENCY,      "WARNING_FREQUENCY" },
+    { AMP_STATUS_WARNING_TUNER_NO_INPUT, "WARNING_TUNER_NO_INPUT" },
+    { AMP_STATUS_WARNING_OTHER,          "WARNING_OTHER" },
+    { 0xffffff,                          "" },
+};
+
+
+/**
+ * \brief Convert enum AMP_STATUS_... to a string
+ * \param status AMP_STATUS_...
+ * \return the corresponding string value
+ */
+const char *HAMLIB_API amp_strstatus(amp_status_t status)
+{
+    int i;
+
+    for (i = 0 ; amp_status_str[i].str[0] != '\0'; i++)
+    {
+        if (status == amp_status_str[i].status)
+        {
+            return amp_status_str[i].str;
+        }
+    }
+
+    return "";
+}
+
+
+static const struct
+{
+    amp_op_t amp_op;
+    const char *str;
+} amp_op_str[] =
+{
+    { AMP_OP_TUNE, "TUNE" },
+    { AMP_OP_BAND_UP, "BAND_UP" },
+    { AMP_OP_BAND_DOWN, "BAND_DOWN" },
+    { AMP_OP_L_NH_UP, "L_NH_UP" },
+    { AMP_OP_L_NH_DOWN, "L_NH_DOWN" },
+    { AMP_OP_C_PF_UP, "C_PF_UP" },
+    { AMP_OP_C_PF_DOWN, "C_PF_DOWN" },
+    { AMP_OP_NONE, "" },
+};
+
+
+/**
+ * \brief Convert alpha string to enum AMP_OP_...
+ * \param s alpha string
+ * \return AMP_OP_...
+ *
+ * \sa amp_op_t()
+ */
+amp_op_t HAMLIB_API amp_parse_amp_op(const char *s)
+{
+    int i;
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+
+    for (i = 0 ; amp_op_str[i].str[0] != '\0'; i++)
+    {
+        if (!strcmp(s, amp_op_str[i].str))
+        {
+            return amp_op_str[i].amp_op;
+        }
+    }
+
+    return AMP_OP_NONE;
+}
+
+
+/**
+ * \brief Convert enum AMP_OP_... to alpha string
+ * \param op AMP_OP_...
+ * \return alpha string
+ *
+ * \sa amp_op_t()
+ */
+const char *HAMLIB_API amp_strampop(amp_op_t op)
+{
+    int i;
+
+    for (i = 0; amp_op_str[i].str[0] != '\0'; i++)
+    {
+        if (op == amp_op_str[i].amp_op)
+        {
+            return amp_op_str[i].str;
+        }
+    }
+
+    return "";
+}
+
+
 /**
  * \brief Get pointer to rig function instead of using rig->caps
- * \param RIG* and rig_function_e
+ * \param rig_model
+ * \param rig_function
  * \return the corresponding function pointer
  */
 void *HAMLIB_API rig_get_function_ptr(rig_model_t rig_model,
@@ -2356,7 +2646,8 @@ void *HAMLIB_API rig_get_function_ptr(rig_model_t rig_model,
 
     if (caps == NULL)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: caps == null for model %d??\n", __func__, rig_model);
+        rig_debug(RIG_DEBUG_ERR, "%s: caps == null for model %d??\n", __func__,
+                  rig_model);
         return NULL;
     }
 
@@ -2637,11 +2928,12 @@ void *HAMLIB_API rig_get_function_ptr(rig_model_t rig_model,
 /**
  * \brief Get integer/long instead of using rig->caps
  *  watch out for integer values that may be negative -- if needed must change hamlib
- * \param RIG* and rig_caps_int_e
+ * \param rig_model
+ * \param rig_caps
  * \return the corresponding long value -- -RIG_EINVAL is the only error possible
  */
 uint64_t HAMLIB_API rig_get_caps_int(rig_model_t rig_model,
-                                      enum rig_caps_int_e rig_caps)
+                                     enum rig_caps_int_e rig_caps)
 {
     const struct rig_caps *caps = rig_get_caps(rig_model);
 #if 0
@@ -2676,7 +2968,6 @@ uint64_t HAMLIB_API rig_get_caps_int(rig_model_t rig_model,
         return caps->port_type;
 
     case RIG_CAPS_HAS_GET_LEVEL:
-        rig_debug(RIG_DEBUG_TRACE, "%s(%d): return %08"PRIll"\n", __func__, __LINE__, caps->has_get_level);
         return caps->has_get_level;
 
     default:
@@ -2731,7 +3022,7 @@ static const struct
     { RIG_COMM_STATUS_OK, "OK" },
     { RIG_COMM_STATUS_CONNECTING, "CONNECTING" },
     { RIG_COMM_STATUS_DISCONNECTED, "DISCONNECTED" },
-    { RIG_COMM_STATUS_TERMINATED, "TERMINATIED" },
+    { RIG_COMM_STATUS_TERMINATED, "TERMINATED" },
     { RIG_COMM_STATUS_WARNING, "WARNING" },
     { RIG_COMM_STATUS_ERROR, "ERROR" },
     { 0xffffffff, "" },
@@ -2739,7 +3030,7 @@ static const struct
 
 /**
  * \brief Convert enum RIG_COMM_STATUS... to alpha string
- * \param vfo RIG_COMM_STATUS_...
+ * \param status RIG_COMM_STATUS_...
  * \return alpha string
  */
 const char *HAMLIB_API rig_strcommstatus(rig_comm_status_t status)
@@ -2764,7 +3055,7 @@ void errmsg(int err, char *s, const char *func, const char *file, int line)
               rigerror(err));
 }
 
-uint32_t CRC32_function(uint8_t *buf, uint32_t len)
+uint32_t CRC32_function(const uint8_t *buf, uint32_t len)
 {
 
     uint32_t crc;
@@ -2809,6 +3100,28 @@ static struct tm *gmtime_r(const time_t *t, struct tm *r)
 #endif // gmtime_r
 #endif // _WIN32
 
+/**
+ * \brief Get a string of stars for indenting messages
+ * \ingroup lib_internal
+ *
+ * \param len number of stars (sounds kinda like a rating)
+ * \return pointer to an appropriate string
+ */
+const char *hl_stars(int len)
+{
+#define MAX_STARS 128
+    static const char s[MAX_STARS + 1] =
+        "****************************************************************"
+        "****************************************************************";
+
+    if (len < 0 || len > MAX_STARS)
+    {
+        len = 0;
+    }
+
+    return &s[MAX_STARS - len];
+}
+
 //! @cond Doxygen_Suppress
 char *date_strget(char *buf, int buflen, int localtime)
 {
@@ -2816,15 +3129,20 @@ char *date_strget(char *buf, int buflen, int localtime)
     struct tm *mytm;
     time_t t;
     struct timeval tv;
-    struct tm result = { 0,0,0,0,0,0,0,0,0};
+    struct tm result = { 0, 0, 0, 0, 0, 0, 0, 0, 0};
     int mytimezone;
 
+    // 2038 failure here for 32-bit time_t
     t = time(NULL);
 
     if (localtime)
     {
         mytm = localtime_r(&t, &result);
+#if defined(_WIN32)
         mytimezone = timezone;
+#else
+        mytimezone = - (int)result.tm_gmtoff; // does not compile on mingw
+#endif
     }
     else
     {
@@ -2844,61 +3162,61 @@ char *date_strget(char *buf, int buflen, int localtime)
 
 char *rig_date_strget(char *buf, int buflen, int localtime)
 {
-    return date_strget(buf,buflen,localtime);
-}
-
-const char *spaces()
-{
-    static char *s = "                     ";
-    return s;
+    return date_strget(buf, buflen, localtime);
 }
 
 // if which==0 rig_band_select str will be returned
-// if which!=0 the rig_parm_gran band str will be returne
-const char* rig_get_band_str(RIG *rig, hamlib_band_t band, int which)
+// if which!=0 the rig_parm_gran band str will be returned
+const char *rig_get_band_str(RIG *rig, hamlib_band_t band, int which)
 {
     int i;
 
     if (which == 0)
     {
-    for (i = 0; rig_bandselect_str[i].str[0] != '\0'; i++)
-    {
-        if (rig_bandselect_str[i].bandselect == band)
+        for (i = 0; rig_bandselect_str[i].str != NULL; i++)
         {
-            return rig_bandselect_str[i].str;
+            if (rig_bandselect_str[i].bandselect == band)
+            {
+                return rig_bandselect_str[i].str;
+            }
         }
-    }
     }
     else
     {
         char bandlist[512];
-        
-        rig_sprintf_parm_gran(bandlist, sizeof(bandlist)-1, RIG_PARM_BANDSELECT, rig->caps->parm_gran);
+
+        rig_sprintf_parm_gran(bandlist, sizeof(bandlist) - 1, RIG_PARM_BANDSELECT,
+                              rig->caps->parm_gran);
         rig_debug(RIG_DEBUG_VERBOSE, "%s: bandlist=%s\n", __func__, bandlist);
         int n = 0;
-        char *p = strchr(bandlist,'(')+1;
-        char *token;
+        char *p = strchr(bandlist, '(') + 1;
+        const char *token;
+
         if (p == NULL)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__, bandlist);
+            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__,
+                      bandlist);
             return 0;
         }
-        while((token = strtok_r(p, ",", &p)))
+
+        while ((token = strtok_r(p, ",", &p)))
         {
-            if (n == band) 
+            if (n == band)
             {
-                for (i = 0; rig_bandselect_str[i].str[0] != '\0'; i++)
+                for (i = 0; rig_bandselect_str[i].str != NULL; i++)
                 {
-                    if (strcmp(rig_bandselect_str[i].str,token)==0)
+                    if (strcmp(rig_bandselect_str[i].str, token) == 0)
                     {
                         return rig_bandselect_str[i].str;
                     }
                 }
             }
+
             n++;
         }
 
     }
+
     return "BANDGEN";
 }
 // If freq==0 looks up using the band index (which is the rig's band reference index)
@@ -2911,30 +3229,37 @@ hamlib_band_t rig_get_band(RIG *rig, freq_t freq, int band)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    if (freq == 0) 
+    if (freq == 0)
     {
         char bandlist[512];
-        
-        rig_sprintf_parm_gran(bandlist, sizeof(bandlist)-1, RIG_PARM_BANDSELECT, rig->caps->parm_gran);
+
+        rig_sprintf_parm_gran(bandlist, sizeof(bandlist) - 1, RIG_PARM_BANDSELECT,
+                              rig->caps->parm_gran);
         rig_debug(RIG_DEBUG_VERBOSE, "%s: bandlist=%s\n", __func__, bandlist);
         // e.g. BANDSELECT(BAND160M,BAND80M,BANDUNUSED,BAND40M)
-        char *p = strchr(bandlist,'(')+1;
-        char *token;
+        char *p = strchr(bandlist, '(') + 1;
+        const char *token;
+
         if (p == NULL)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__, bandlist);
+            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__,
+                      bandlist);
             return 0;
         }
+
         int n = 0;
-        while((token = strtok_r(p, ",", &p)))
+
+        while ((token = strtok_r(p, ",", &p)))
         {
-            if (n == band) return rig_bandselect_str[n].bandselect;
+            if (n == band) { return rig_bandselect_str[n].bandselect; }
+
             n++;
         }
 
-        return RIG_BANDSELECT_UNUSED;
+        return RIG_BAND_UNUSED;
     }
-    for (i = 0 ; rig_bandselect_str[i].str[0] != '\0'; i++)
+
+    for (i = 0 ; rig_bandselect_str[i].str != NULL; i++)
     {
         if (freq >= rig_bandselect_str[i].start && freq <= rig_bandselect_str[i].stop)
         {
@@ -2942,7 +3267,7 @@ hamlib_band_t rig_get_band(RIG *rig, freq_t freq, int band)
         }
     }
 
-    return RIG_BANDSELECT_GEN;
+    return RIG_BAND_UNUSED;
 }
 
 // Gets the rig's band index from the hamlib_band_t
@@ -2950,29 +3275,51 @@ int rig_get_band_rig(RIG *rig, freq_t freq, const char *band)
 {
     char bandlist[512];
     int i;
-        
+
+    if (freq == 0 && band == NULL)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s: bad combo of freq==0 && band==NULL\n", __func__);
+        return RIG_BAND_GEN;
+    }
+
     if (freq == 0)
     {
-        rig_sprintf_parm_gran(bandlist, sizeof(bandlist)-1, RIG_PARM_BANDSELECT, rig->caps->parm_gran);
+        bandlist[0] = 0;
+        rig_sprintf_parm_gran(bandlist, sizeof(bandlist) - 1, RIG_PARM_BANDSELECT,
+                              rig->caps->parm_gran);
         rig_debug(RIG_DEBUG_VERBOSE, "%s: bandlist=%s\n", __func__, bandlist);
+
         // e.g. BANDSELECT(BAND160M,BAND80M,BANDUNUSED,BAND40M)
-        char *p = strchr(bandlist,'(')+1;
-        char *token;
+        if (strlen(bandlist) == 0)
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: rig does not have bandlist\n", __func__);
+            return RIG_BAND_GEN;
+        }
+
+        char *p = strchr(bandlist, '(') + 1;
+        const char *token;
+
         if (p == NULL)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__, bandlist);
+            rig_debug(RIG_DEBUG_ERR, "%s: unable to find open paren in '%s'\n", __func__,
+                      bandlist);
             return 0;
         }
+
         int n = 0;
-        while((token = strtok_r(p, ",", &p)))
+
+        while ((token = strtok_r(p, ",", &p)))
         {
-            if (strcmp(token,band)==0) return n;
+            if (strcmp(token, band) == 0) { return n; }
+
             n++;
         }
+
         rig_debug(RIG_DEBUG_ERR, "%s: unknown band %s\n", __func__, band);
         return 0;
     }
-    for (i = 0 ; rig_bandselect_str[i].str[0] != '\0'; i++)
+
+    for (i = 0 ; rig_bandselect_str[i].str != NULL; i++)
     {
         if (freq >= rig_bandselect_str[i].start && freq <= rig_bandselect_str[i].stop)
         {
@@ -2981,10 +3328,138 @@ int rig_get_band_rig(RIG *rig, freq_t freq, const char *band)
             return rig_get_band_rig(rig, 0.0, rig_bandselect_str[i].str);
         }
     }
-    rig_debug(RIG_DEBUG_ERR, "%s: unable to find band=%s, freq=%f\n", __func__, band, freq);
+
+    rig_debug(RIG_DEBUG_ERR, "%s: unable to find band=%s, freq=%f\n", __func__,
+              band, freq);
     return 0; // just give a value for now of the 1st band -- this should be an error
 }
 
+// Returns RIG_OK if 2038 time routines pass tests
+int rig_test_2038(RIG *rig)
+{
+
+#if defined(_TIME_BITS)
+#if defined(__GLIBC_MINOR__) && defined(__TIMESIZE)
+    rig_debug(RIG_DEBUG_TRACE,
+              "%s: enter _TIME_BITS=%d, __TIMESIZE=%d testing enabled for GLIBC %d.%d\n",
+              __func__, _TIME_BITS, __TIMESIZE, __GLIBC__, __GLIBC_MINOR__);
+#else
+    rig_debug(RIG_DEBUG_TRACE,
+              "%s: enter _TIME_BITS=64 testing enabled for unknown libc\n", __func__);
+#endif
+#else
+    rig_debug(RIG_DEBUG_TRACE, "%s: enter _TIME_BITS=64 testing not enabled\n",
+              __func__);
+#endif
+#if defined(__MSVCRT_VERSION__)
+    rig_debug(RIG_DEBUG_TRACE, "%s: __MSVCRT_VERSION__=0x%04x\n", __func__,
+              __MSVCRT_VERSION__);
+#endif
+
+    int failed = 0;
+    char *stime = NULL;
+#if defined(__MSVCRT_VERSION__)
+    __time64_t const x = (__time64_t)0xF0000000;
+    char s[64];
+    struct tm mytm;
+    int timeerr = _localtime64_s(&mytm, &x);
+
+    if (timeerr)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s: _localtime64_s: %s\n", __func__, strerror(errno));
+    }
+
+    strftime(s, sizeof(s), "%a %b %d %H:%M:%S %Y\n", &mytm);
+    rig_debug(RIG_DEBUG_VERBOSE, "%s: MSVCRT 2038 test = 0x%08llx:%s", __func__, x,
+              s);
+
+    if (strlen(s) == 0) { failed = 1; }
+    else if (strstr(s, "2097")) { return RIG_OK; }
+
+#else
+
+    if (sizeof(time_t) == 4)
+    {
+        rig_debug(RIG_DEBUG_TRACE, "%s: time_t is 4 bytes, 2038 test failed\n",
+                  __func__);
+        return 1;
+    }
+
+    time_t x = (time_t)0xF0000000;
+    stime = ctime(&x);
+
+    if (stime == NULL) { failed = 1; }
+
+#if 0 // this fails on 32-bit RigPi -- time_t 32-bit maybe?
+    else rig_debug(RIG_DEBUG_VERBOSE, "%s: time_t 2038 test = 0x%08lx:%s", __func__,
+                       x,
+                       s == NULL ? "NULL" : s);
+
+#endif
+
+#endif
+
+    if (failed)
+    {
+        rig_debug(RIG_DEBUG_TRACE, "%s: ctime is null, 2038 test failed\n", __func__);
+        return 1;
+    }
+
+    if (stime != NULL && strstr(stime, "2097")) { return RIG_OK; }
+
+#if defined(__MSVCRT_VERSION__)
+    _ctime64_s(s, sizeof(s), &x);
+
+    if (strstr(s, "2097")) { return RIG_OK; }
+
+#else
+    char *s = ctime(&x);
+
+    if (s != NULL && strstr(s, "2097")) { return RIG_OK; }
+
+#endif
+
+
+    return 1;
+}
+
+
 //! @endcond
 
+/**
+ * Add item to be sent to device after it is opened
+ * (currently only used by rotators)
+ **/
+int queue_deferred_config(deferred_config_header_t *head, hamlib_token_t token,
+                          const char *val)
+{
+    deferred_config_item_t *item;
+
+    if (!(item = malloc(sizeof(deferred_config_item_t))))
+    {
+        return -RIG_ENOMEM;
+    }
+
+    if (!(item->value = strdup(val)))
+    {
+        free(item);
+        return -RIG_ENOMEM;
+    }
+
+    item->token = token;
+    item->nextt = NULL;
+
+    if (!head->firstt)
+    {
+        head->firstt = item;
+    }
+    else
+    {
+        head->lastt->nextt = item;
+    }
+
+    head->lastt = item;
+
+    return RIG_OK;
+}
 /** @} */

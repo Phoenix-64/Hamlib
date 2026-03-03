@@ -36,7 +36,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "tentec2.h"
 #include "tentec.h"
 #include "bandplan.h"
@@ -123,12 +123,12 @@ static int tt538_set_func(RIG *rig, vfo_t vfo, setting_t func, int status);
  * Protocol is documented at
  *      http://www.rfsquared.com/
  */
-const struct rig_caps tt538_caps =
+struct rig_caps tt538_caps =
 {
     RIG_MODEL(RIG_MODEL_TT538),
     .model_name = "TT-538 Jupiter",
     .mfg_name =  "Ten-Tec",
-    .version =  "20221205.0",
+    .version =  "20240913.0",
     .copyright =  "LGPL",
     .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
@@ -257,7 +257,7 @@ static int tt538_transaction(RIG *rig, const char *cmd, int cmd_len,
 
     retval = tentec_transaction(rig, cmd, cmd_len, data, data_len);
 
-    if (retval == RIG_OK)
+    if (data == NULL || data_len > 0)
     {
         return retval;
     }
@@ -291,16 +291,16 @@ int tt538_init(RIG *rig)
 {
     struct tt538_priv_data *priv;
 
-    rig->state.priv = (struct tt538_priv_data *) calloc(1, sizeof(
-                          struct tt538_priv_data));
+    STATE(rig)->priv = (struct tt538_priv_data *) calloc(1, sizeof(
+                           struct tt538_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     memset(priv, 0, sizeof(struct tt538_priv_data));
 
@@ -315,7 +315,7 @@ int tt538_init(RIG *rig)
 
 static char which_vfo(const RIG *rig, vfo_t vfo)
 {
-    const struct tt538_priv_data *priv = (struct tt538_priv_data *)rig->state.priv;
+    const struct tt538_priv_data *priv = (struct tt538_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -340,7 +340,8 @@ static char which_vfo(const RIG *rig, vfo_t vfo)
 int tt538_get_vfo(RIG *rig, vfo_t *vfo)
 {
 
-    const struct tt538_priv_data *priv = (struct tt538_priv_data *) rig->state.priv;
+    const struct tt538_priv_data *priv = (struct tt538_priv_data *) STATE(
+            rig)->priv;
     *vfo = priv->vfo_curr;
     return RIG_OK;
 }
@@ -351,7 +352,7 @@ int tt538_get_vfo(RIG *rig, vfo_t *vfo)
  */
 int tt538_set_vfo(RIG *rig, vfo_t vfo)
 {
-    struct tt538_priv_data *priv = (struct tt538_priv_data *)rig->state.priv;
+    struct tt538_priv_data *priv = (struct tt538_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -436,7 +437,7 @@ int tt538_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 /*
  * tt538_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  * assumes priv->mode in AM,CW,LSB or USB.
  */
 
@@ -444,6 +445,9 @@ int tt538_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     unsigned char bytes[4];
     unsigned char cmdbuf[16];
+    int retval = -RIG_EINTERNAL;
+    int retry = STATE(rig)->retry;
+    freq_t freqchk = 0;
 
     /* Freq is 4 bytes long, MSB sent first. */
     bytes[3] = ((unsigned int) freq >> 24) & 0xff;
@@ -451,12 +455,24 @@ int tt538_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     bytes[1] = ((unsigned int) freq >>  8) & 0xff;
     bytes[0] = ((unsigned int) freq) & 0xff;
 
-    SNPRINTF((char *) cmdbuf, sizeof(cmdbuf), "*%c%c%c%c%c" EOM,
-             which_vfo(rig, vfo),
-             bytes[3], bytes[2], bytes[1], bytes[0]);
+    do
+    {
+        SNPRINTF((char *) cmdbuf, sizeof(cmdbuf), "*%c%c%c%c%c" EOM,
+                 which_vfo(rig, vfo),
+                 bytes[3], bytes[2], bytes[1], bytes[0]);
 
-    return tt538_transaction(rig, (char *) cmdbuf, 6,  NULL,
-                             NULL);
+        retval = tt538_transaction(rig, (char *) cmdbuf, 6,  NULL,
+                                   NULL);
+
+        if (retval != RIG_OK) { continue; }
+
+        retval = tt538_get_freq(rig, vfo, &freqchk);
+
+        if (retval != RIG_OK) { return retval; }
+    }
+    while (freq != freqchk && --retry >= 0);
+
+    return retval;
 }
 
 /*
@@ -634,7 +650,8 @@ int tt538_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     unsigned char cmdbuf[32], respbuf[32], ttmode;
     int resp_len, retval;
 
-    const struct tt538_priv_data *priv = (struct tt538_priv_data *) rig->state.priv;
+    const struct tt538_priv_data *priv = (struct tt538_priv_data *) STATE(
+            rig)->priv;
 
     /* Query mode for both VFOs. */
     SNPRINTF((char *) cmdbuf, sizeof(cmdbuf), "?M" EOM);

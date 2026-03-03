@@ -25,7 +25,8 @@
 #include <string.h>
 
 #include "hamlib/rotator.h"
-#include "serial.h"
+#include "hamlib/port.h"
+#include "iofunc.h"
 #include "register.h"
 #include "num_stdio.h"
 
@@ -50,7 +51,7 @@ struct prosistel_rot_priv_caps
  * cmdstr - Command to be sent to the rig.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed, but answer will still be read.
- * data_len - in: Size of buffer. It is the caller's responsibily to provide
+ * data_len - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -62,20 +63,18 @@ struct prosistel_rot_priv_caps
 static int prosistel_transaction(ROT *rot, const char *cmdstr,
                                  char *data, size_t data_len)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int retval;
     int retry_read = 0;
     char replybuf[BUFSZ];
 
-    rs = &rot->state;
-
 transaction_write:
 
-    rig_flush(&rs->rotport);
+    rig_flush(rotp);
 
     if (cmdstr)
     {
-        retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+        retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
         if (retval != RIG_OK)
         {
@@ -95,12 +94,12 @@ transaction_write:
     }
 
     // Remember to check for STXA,G,R or STXA,?,XXX,R 10 bytes
-    retval = read_string(&rs->rotport, (unsigned char *) data, 20, CR, strlen(CR),
+    retval = read_string(rotp, (unsigned char *) data, 20, CR, strlen(CR),
                          0, 1);
 
     if (retval < 0)
     {
-        if (retry_read++ < rot->state.rotport.retry)
+        if (retry_read++ < rotp->retry)
         {
             goto transaction_write;
         }

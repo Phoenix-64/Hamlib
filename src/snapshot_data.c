@@ -1,9 +1,11 @@
-#include <sys/types.h>
 #define _XOPEN_SOURCE 700
 #include <unistd.h>
-#include <hamlib/config.h>
-#include <hamlib/rig.h>
+#include "hamlib/config.h"
+#include "hamlib/rig.h"
+#include "hamlib/port.h"
+#include "hamlib/rig_state.h"
 #include "misc.h"
+#include "cache.h"
 #include "snapshot_data.h"
 #include "hamlibdatetime.h"
 #include "sprintflst.h"
@@ -19,15 +21,18 @@ static int snapshot_serialize_rig(cJSON *rig_node, RIG *rig)
 {
     cJSON *node;
     char buf[1024];
+    struct rig_cache *cachep = CACHE(rig);
+    struct rig_state *rs = STATE(rig);
 
     cJSON *id_node = cJSON_CreateObject();
     cJSON_AddStringToObject(id_node, "model", rig->caps->model_name);
-    cJSON_AddStringToObject(id_node, "endpoint", rig->state.rigport.pathname);
+    cJSON_AddStringToObject(id_node, "endpoint", RIGPORT(rig)->pathname);
     cJSON_AddStringToObject(id_node, "process", snapshot_data_pid);
-    cJSON_AddStringToObject(id_node, "deviceId", rig->state.device_id);
+    cJSON_AddStringToObject(id_node, "deviceId", rs->device_id);
     cJSON_AddItemToObject(rig_node, "id", id_node);
 
-    node = cJSON_AddStringToObject(rig_node, "status", rig_strcommstatus(rig->state.comm_status));
+    node = cJSON_AddStringToObject(rig_node, "status",
+                                   rig_strcommstatus(rs->comm_status));
 
     if (node == NULL)
     {
@@ -50,7 +55,7 @@ static int snapshot_serialize_rig(cJSON *rig_node, RIG *rig)
     }
 
     node = cJSON_AddBoolToObject(rig_node, "split",
-                                 rig->state.cache.split == RIG_SPLIT_ON ? 1 : 0);
+                                 cachep->split == RIG_SPLIT_ON ? 1 : 0);
 
     if (node == NULL)
     {
@@ -58,7 +63,7 @@ static int snapshot_serialize_rig(cJSON *rig_node, RIG *rig)
     }
 
     node = cJSON_AddStringToObject(rig_node, "splitVfo",
-                                   rig_strvfo(rig->state.cache.split_vfo));
+                                   rig_strvfo(cachep->split_vfo));
 
     if (node == NULL)
     {
@@ -66,25 +71,28 @@ static int snapshot_serialize_rig(cJSON *rig_node, RIG *rig)
     }
 
     node = cJSON_AddBoolToObject(rig_node, "satMode",
-                                 rig->state.cache.satmode ? 1 : 0);
+                                 cachep->satmode ? 1 : 0);
 
     if (node == NULL)
     {
         goto error;
     }
 
-    rig_sprintf_mode(buf, sizeof(buf), rig->state.mode_list);
+    rig_sprintf_mode(buf, sizeof(buf), rs->mode_list);
     char *p;
     cJSON *modes_array = cJSON_CreateArray();
-    for(p=strtok(buf," ");p;p=strtok(NULL, " "))
+
+    for (p = strtok(buf, " "); p; p = strtok(NULL, " "))
     {
-        if (strlen(buf)>0) {
+        if (strlen(buf) > 0)
+        {
             cJSON *tmp = cJSON_CreateString(p);
             cJSON_AddItemToArray(modes_array, tmp);
         }
     }
+
     cJSON_AddItemToObject(rig_node, "modes", modes_array);
-    
+
     return RIG_OK;
 
 error:
@@ -107,6 +115,8 @@ static int snapshot_serialize_vfo(cJSON *vfo_node, RIG *rig, vfo_t vfo)
     int result;
     int is_rx, is_tx;
     cJSON *node;
+    struct rig_cache *cachep = CACHE(rig);
+    struct rig_state *rs = STATE(rig);
 
     // TODO: This data should match rig_get_info command response
 
@@ -144,14 +154,14 @@ static int snapshot_serialize_vfo(cJSON *vfo_node, RIG *rig, vfo_t vfo)
         }
     }
 
-    split = rig->state.cache.split;
-    split_vfo = rig->state.cache.split_vfo;
+    split = cachep->split;
+    split_vfo = cachep->split_vfo;
 
-    is_rx = (split == RIG_SPLIT_OFF && vfo == rig->state.current_vfo)
+    is_rx = (split == RIG_SPLIT_OFF && vfo == rs->current_vfo)
             || (split == RIG_SPLIT_ON && vfo != split_vfo);
-    is_tx = (split == RIG_SPLIT_OFF && vfo == rig->state.current_vfo)
+    is_tx = (split == RIG_SPLIT_OFF && vfo == rs->current_vfo)
             || (split == RIG_SPLIT_ON && vfo == split_vfo);
-    ptt = rig->state.cache.ptt && is_tx;
+    ptt = cachep->ptt && is_tx;
 
     if (is_tx)
     {
@@ -330,6 +340,7 @@ int snapshot_serialize(size_t buffer_length, char *buffer, RIG *rig,
     char buf[256];
     int result;
     int i;
+    struct rig_state *rs = STATE(rig);
 
     root_node = cJSON_CreateObject();
 
@@ -354,12 +365,13 @@ int snapshot_serialize(size_t buffer_length, char *buffer, RIG *rig,
     }
 
     node = cJSON_AddNumberToObject(root_node, "seq",
-                                   rig->state.snapshot_packet_sequence_number);
+                                   rs->snapshot_packet_sequence_number);
 
     if (node == NULL)
     {
         goto error;
     }
+
     date_strget(buf, sizeof(buf), 0);
     node = cJSON_AddStringToObject(root_node, "time", buf);
 
@@ -403,7 +415,8 @@ int snapshot_serialize(size_t buffer_length, char *buffer, RIG *rig,
 
     for (i = 0; i < HAMLIB_MAX_VFOS; i++)
     {
-        vfo_t vfo = rig->state.vfo_list & RIG_VFO_N(i);
+        vfo_t vfo = rs->vfo_list & RIG_VFO_N(i);
+
         if (!vfo)
         {
             continue;
@@ -456,7 +469,7 @@ int snapshot_serialize(size_t buffer_length, char *buffer, RIG *rig,
         RETURNFUNC2(-RIG_EINVAL);
     }
 
-    rig->state.snapshot_packet_sequence_number++;
+    rs->snapshot_packet_sequence_number++;
 
     return RIG_OK;
 

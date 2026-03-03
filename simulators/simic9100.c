@@ -1,32 +1,18 @@
 // simicom will show the pts port to use for rigctl on Unix
 // using virtual serial ports on Windows is to be developed yet
 // Needs a lot of improvement to work on all Icoms
-// gcc -g -Wall -o simicom simicom.c -lhamlib
-// On mingw in the hamlib src directory
-// gcc -static -I../include -g -Wall -o simicom simicom.c -L../../build/src/.libs -lhamlib -lwsock32 -lws2_32
 #define _XOPEN_SOURCE 700
 // since we are POSIX here we need this
-#if 0
-struct ip_mreq
-{
-    int dummy;
-};
-#endif
-#include <hamlib/rig.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/time.h>
-#include "../src/misc.h"
-#include <termios.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <sys/types.h>
-#include "sim.h"
 
-#define BUFSIZE 256
+#include "hamlib/rig.h"
+#include "sim.h"
+#include "misc.h"
+
 //#define X25
 
 int civ_731_mode = 0;
@@ -49,13 +35,7 @@ int satmode = 0;
 int agc_time = 1;
 int ovf_status = 0;
 int powerstat = 1;
-
-void dumphex(const unsigned char *buf, int n)
-{
-    for (int i = 0; i < n; ++i) { printf("%02x ", buf[i]); }
-
-    printf("\n");
-}
+int subband = 1;
 
 int
 frameGet(int fd, unsigned char *buf)
@@ -63,8 +43,6 @@ frameGet(int fd, unsigned char *buf)
     int i = 0;
     memset(buf, 0, BUFSIZE);
     unsigned char c;
-
-again:
 
     while (read(fd, &c, 1) > 0)
     {
@@ -89,11 +67,11 @@ again:
             }
 
             i = 0;
-            goto again;
+            continue;
         }
     }
 
-    printf("Error??? c=x%02x\n", c);
+    printf("Error %s\n", strerror(errno));
 
     return 0;
 }
@@ -101,6 +79,12 @@ again:
 void frameParse(int fd, unsigned char *frame, int len)
 {
     double freq;
+
+    if (len == 0)
+    {
+        printf("%s: len==0\n", __func__);
+        return;
+    }
 
     dumphex(frame, len);
 
@@ -110,6 +94,9 @@ void frameParse(int fd, unsigned char *frame, int len)
         dumphex(frame, len);
         return;
     }
+    int tmp = frame[2];
+    frame[2] = frame[3];
+    frame[3] = tmp;
 
     switch (frame[4])
     {
@@ -192,6 +179,8 @@ void frameParse(int fd, unsigned char *frame, int len)
 
         frame[4] = 0xfb;
         frame[5] = 0xfd;
+printf("+++++++++++++++ SETTING VFO +++++++++++++++++\n");
+        dump_hex(frame, 6);
         WRITE(fd, frame, 6);
         break;
 
@@ -315,6 +304,11 @@ void frameParse(int fd, unsigned char *frame, int len)
                 WRITE(fd, frame, 8);
             }
 
+            break;
+        case 0x59:
+                frame[6] = subband;
+                frame[7] = 0xfd;
+                WRITE(fd, frame, 8);
             break;
         }
 
@@ -511,46 +505,9 @@ void frameParse(int fd, unsigned char *frame, int len)
 
     default: printf("cmd 0x%02x unknown\n", frame[4]);
     }
+
 // don't care about the rig type yet
 }
-
-#if defined(WIN32) || defined(_WIN32)
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd;
-    fd = open(comport, O_RDWR);
-
-    if (fd < 0)
-    {
-        perror(comport);
-    }
-
-    return fd;
-}
-
-#else
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd = posix_openpt(O_RDWR);
-    char *name = ptsname(fd);
-
-    if (name == NULL)
-    {
-        perror("pstname");
-        return -1;
-    }
-
-    printf("name=%s\n", name);
-
-    if (fd == -1 || grantpt(fd) == -1 || unlockpt(fd) == -1)
-    {
-        perror("posix_openpt");
-        return -1;
-    }
-
-    return fd;
-}
-#endif
 
 void rigStatus()
 {
@@ -568,7 +525,7 @@ void rigStatus()
 
 int main(int argc, char **argv)
 {
-    unsigned char buf[256];
+    unsigned char buf[BUFSIZE];
     int fd = openPort(argv[1]);
 
     printf("%s: %s\n", argv[0], rig_version());

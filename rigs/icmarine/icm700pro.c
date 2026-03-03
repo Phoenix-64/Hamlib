@@ -49,14 +49,14 @@ static const struct icmarine_priv_caps icm700pro_priv_caps =
     .default_remote_id = 2,
 };
 
-const struct rig_caps icm700pro_caps =
+struct rig_caps icm700pro_caps =
 {
     RIG_MODEL(RIG_MODEL_IC_M700PRO),
     .model_name = "IC-M700PRO",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =   RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_RIG,

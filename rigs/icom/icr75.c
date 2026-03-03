@@ -103,7 +103,7 @@ static struct icom_priv_caps icr75_priv_caps =
     .ant_count = 2
 };
 
-const struct rig_caps icr75_caps =
+struct rig_caps icr75_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR75),
     .model_name = "IC-R75",
@@ -133,12 +133,16 @@ const struct rig_caps icr75_caps =
     .has_set_parm =  RIG_PARM_SET(ICR75_PARM_ALL),
     .level_gran =
     {
+#define NO_LVL_PBT_IN
+#define NO_LVL_PBT_OUT
+#define NO_LVL_CWPITCH
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
         [LVL_PBT_IN] = { .min = { .f = -1280 }, .max = { .f = +1280 }, .step = { .f = 15 } },
         [LVL_PBT_OUT] = { .min = { .f = -1280 }, .max = { .f = +1280 }, .step = { .f = 15 } },
         [LVL_CWPITCH] = { .min = { .i = 300 }, .max = { .i = 900 }, .step = { .i = 10 } },
-        [LVL_NR] = { .min = { .f = 0.0 }, .max = { .f = 1.0 }, .step = { .f = 0.066666667 } },
+#undef NO_LVL_PBT_IN
+#undef NO_LVL_PBT_OUT
+#undef NO_LVL_CWPITCH
     },
     .parm_gran =  {
         [PARM_APO] = { .min = { .i = 1 }, .max = { .i = 1439} },
@@ -241,7 +245,7 @@ const struct rig_caps icr75_caps =
     .scan =  icom_scan,
     .set_ts =  icom_set_ts,
     .set_powerstat = icom_set_powerstat,
-    .get_powerstat = icom_get_powerstat,
+    //.get_powerstat = icom_get_powerstat,
 
     .set_channel = icr75_set_channel,
     .get_channel = icr75_get_channel,
@@ -252,7 +256,7 @@ const struct rig_caps icr75_caps =
 
 /*
  * icr75_set_channel
- * Assumes rig!=NULL, rig->state.priv!=NULL, chan!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, chan!=NULL
  * TODO: still a WIP --SF
  */
 int icr75_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
@@ -265,7 +269,7 @@ int icr75_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
     signed char icmode_ext;
     int err;
 
-    rs = &rig->state;
+    rs = STATE(rig);
     priv = (struct icom_priv_data *)rs->priv;
 
     to_bcd_be(chanbuf, chan->channel_num, 4);
@@ -321,7 +325,7 @@ int icr75_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
 
 /*
  * icr75_get_channel
- * Assumes rig!=NULL, rig->state.priv!=NULL, chan!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, chan!=NULL
  * TODO: still a WIP --SF
  */
 int icr75_get_channel(RIG *rig, vfo_t vfo, channel_t *chan, int read_only)
@@ -331,7 +335,7 @@ int icr75_get_channel(RIG *rig, vfo_t vfo, channel_t *chan, int read_only)
     unsigned char chanbuf[24];
     int chan_len, freq_len, retval;
 
-    rs = &rig->state;
+    rs = STATE(rig);
     priv = (struct icom_priv_data *)rs->priv;
 
     to_bcd_be(chanbuf, chan->channel_num, 4);

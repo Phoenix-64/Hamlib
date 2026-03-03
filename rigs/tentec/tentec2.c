@@ -55,7 +55,6 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
 
 #include "tentec.h"
 #include "tentec2.h"
@@ -78,7 +77,7 @@
 
 /*
  * tentec_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  * assumes priv->mode in AM,CW,LSB or USB.
  */
 int tentec2_set_freq(RIG *rig, vfo_t vfo, freq_t freq)

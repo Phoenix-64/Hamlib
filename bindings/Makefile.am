@@ -9,7 +9,7 @@ AM_CPPFLAGS = @AM_CPPFLAGS@ -I$(top_srcdir)/include -I$(top_srcdir)/bindings  \
 AM_CFLAGS = @AM_CPPFLAGS@ -fno-strict-aliasing
 AM_CXXFLAGS = -O2
 
-SWGFILES = hamlib.swg ignore.swg rig.swg rotator.swg amplifier.swg
+SWGFILES = hamlib.swg ignore.swg rig.swg rotator.swg amplifier.swg macros.swg
 
 SWGDEP = \
 	$(top_srcdir)/include/hamlib/rig.h \
@@ -21,7 +21,17 @@ SWGDEP = \
 	$(SWGFILES)
 
 EXTRA_DIST = $(SWGFILES) \
-	Makefile.PL perltest.pl tcltest.tcl.in pytest.py py3test.py \
+	Makefile.PL perltest.pl tcltest.tcl.in \
+	python/conftest.py \
+	python/generate_tests.py \
+	python/test_Hamlib_Amp_class.py \
+	python/test_Hamlib_Rig_class.py \
+	python/test_Hamlib_Rot_class.py \
+	python/test_Hamlib_class.py \
+	python/test_amp.py \
+	python/test_rig.py \
+	python/test_rot.py \
+	python/test_startup.py \
 	luatest.lua README.python
 
 exampledir = $(docdir)/examples
@@ -30,6 +40,8 @@ example_DATA =
 BUILT_SOURCES =
 MOSTLYCLEANFILES =
 
+$(top_builddir)/src/libhamlib.la:
+	$(MAKE) -C $(top_builddir)/src/ libhamlib.la
 
 if ENABLE_PERL
 ##########################################
@@ -39,7 +51,7 @@ BUILT_SOURCES += hamlibperl_wrap.c
 MOSTLYCLEANFILES += hamlibperl_wrap.c Hamlib.pm Hamlib.bs Hamlib-pl.mk.old
 example_DATA += perltest.pl
 
-hamlibperl_wrap.c: hamlib.swg $(SWIGDEP) ignore.swg
+hamlibperl_wrap.c: $(SWIGDEP)
 	$(AM_V_GEN)$(SWIG) -perl5 -shadow $(AM_CPPFLAGS) -I$(top_srcdir)/bindings \
 		-o $@ $$(test -f hamlib.swg || echo '$(srcdir)/')hamlib.swg
 
@@ -93,16 +105,6 @@ pyexec_ltlib = _Hamlib.la
 MOSTLYCLEANFILES += hamlibpy_wrap.c Hamlib.py *.pyc
 BUILT_SOURCES += hamlibpy_wrap.c Hamlib.py
 
-# Set by AM_CONDITIONAL in configure.ac
-if PYVER_3
-pytest = py3test.py
-else !PYVER_3
-pytest = pytest.py
-endif
-# PYVER_3
-
-example_DATA += $(pytest)
-
 nodist_pyexec_PYTHON = Hamlib.py
 nodist__Hamlib_la_SOURCES = hamlibpy_wrap.c
 
@@ -113,19 +115,28 @@ _Hamlib_la_LTLIBRARIES = $(pyexec_ltlib)
 
 all-py: $(pyexec_ltlib)
 
-check-py: all-py
+check-py: all-py pytest-${enable_pytest}
+
+generate-pytests: all-py
 	$(AM_V_at)PYTHONPATH=$(builddir):$(builddir)/.libs \
-		$(PYTHON) $(srcdir)/$(pytest) \
-		|| echo "Python test failed" 1>&2
+		$(PYTHON) "$(srcdir)/python/generate_tests.py" "$(srcdir)/python/"
+
+pytest-yes:
+	$(AM_V_at)PYTHONPATH=$(builddir):$(builddir)/.libs \
+		$(PYTEST) --capture=no $(srcdir)/
+
+pytest-no:
+	@echo "Skipping pytest run"
 
 Hamlib.py: hamlibpy_wrap.c
 
-hamlibpy_wrap.c: hamlib.swg $(SWGDEP)
+hamlibpy_wrap.c: $(SWGDEP)
 	$(AM_V_GEN)$(SWIG) -python $(AM_CPPFLAGS) $(PYTHON_CPPFLAGS) -I$(top_srcdir)/bindings \
 		-o $@ $$(test -f hamlib.swg || echo '$(srcdir)/')hamlib.swg
 
 install-py:
 clean-py:
+	$(AM_V_at)rm -rf $(builddir)/__pycache__
 distclean-py:
 uninstall-py:
 
@@ -165,12 +176,12 @@ hamlibtcl_la_LTLIBRARIES = $(tcl_ltlib)
 pkgIndex.tcl: Makefile
 	$(AM_V_at)echo 'package ifneeded hamlib $(PKG_VER) [list load [file join $$dir $(DLL)] Hamlib]' > pkgIndex.tcl
 
-hamlibtcl_wrap.c: hamlib.swg $(SWGDEP)
+hamlibtcl_wrap.c: $(SWGDEP)
 	$(AM_V_GEN)$(SWIG) -tcl -pkgversion $(PKG_VER) $(AM_CPPFLAGS) \
 		-I$(top_srcdir)/bindings \
 		-o $@ $$(test -f hamlib.swg || echo '$(srcdir)/')hamlib.swg
 
-do_subst = sed -e 's,[@]tcldir[@],$(tcldir),g'
+do_subst = sed -e 's,[@]tcldir[@],$(tcldir),g' -e 's,[@]builddir[@],$(builddir),g'
 
 tcltest.tcl: tcltest.tcl.in Makefile
 	$(AM_V_GEN)$(do_subst) < $(srcdir)/tcltest.tcl.in > tcltest.tcl
@@ -179,8 +190,7 @@ all-tcl: pkgIndex.tcl $(tcl_ltlib) tcltest.tcl
 
 check-tcl: all-tcl
 	$(AM_V_at)cp $(builddir)/pkgIndex.tcl $(builddir)/.libs
-	$(AM_V_at)TCLLIBPATH=$(builddir)/.libs tclsh $(builddir)/tcltest.tcl \
-		|| echo "Tcl test failed" 1>&2
+	$(AM_V_at)TCLLIBPATH=$(builddir)/.libs tclsh $(builddir)/tcltest.tcl
 	$(AM_V_at)rm -f $(builddir)/.libs/pkgIndex.tcl
 
 install-tcl:
@@ -213,12 +223,11 @@ Hamliblua_la_LTLIBRARIES = $(luaexec_ltlib)
 all-lua: $(luaexec_ltlib)
 
 check-lua: all-lua
-	$(AM_V_at)LUA_CPATH="$(abs_builddir)/.libs/?.so" $(LUA) $(srcdir)/luatest.lua \
-		|| echo "Lua test failed" 1>&2
+	$(AM_V_at)LUA_CPATH="$(abs_builddir)/.libs/?.so" $(LUA) $(srcdir)/luatest.lua
 
 Hamlib.lua: hamliblua_wrap.c
 
-hamliblua_wrap.c: hamlib.swg $(SWGDEP)
+hamliblua_wrap.c: $(SWGDEP)
 	$(AM_V_GEN)$(SWIG) -lua $(AM_CPPFLAGS) -I$(top_srcdir)/bindings \
 		-o $@ $$(test -f hamlib.swg || echo '$(srcdir)/')hamlib.swg
 

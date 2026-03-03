@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 #define TS790_ALL_MODES (RIG_MODE_CW|RIG_MODE_CWR|RIG_MODE_SSB|RIG_MODE_FM)
@@ -53,6 +53,7 @@
 static struct kenwood_priv_caps  ts790_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,
 };
 
 /*
@@ -63,7 +64,7 @@ static struct kenwood_priv_caps  ts790_priv_caps  =
  *
  * part of infos comes from http://www.kenwood.net/
  */
-const struct rig_caps ts790_caps =
+struct rig_caps ts790_caps =
 {
     RIG_MODEL(RIG_MODEL_TS790),
     .model_name = "TS-790",

@@ -18,15 +18,17 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 #include "token.h"
 #include "misc.h"
+#include "cache.h"
 #include "iofunc.h"
 #include "cal.h"
 
@@ -38,9 +40,14 @@
     RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
     RIG_LEVEL_METER|RIG_LEVEL_SWR|RIG_LEVEL_COMP_METER|RIG_LEVEL_ALC|RIG_LEVEL_RFPOWER_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
 
+
 #define TS2000_LEVEL_SET (RIG_LEVEL_RFPOWER|RIG_LEVEL_AF|RIG_LEVEL_RF|RIG_LEVEL_SQL|RIG_LEVEL_AGC|RIG_LEVEL_MICGAIN|RIG_LEVEL_KEYSPD|RIG_LEVEL_CWPITCH| \
     RIG_LEVEL_MONITOR_GAIN|RIG_LEVEL_NB|RIG_LEVEL_NR|RIG_LEVEL_PREAMP|RIG_LEVEL_COMP|RIG_LEVEL_ATT|RIG_LEVEL_VOXDELAY|RIG_LEVEL_VOXGAIN|RIG_LEVEL_BKIN_DLYMS| \
     RIG_LEVEL_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
+
+#define SDRCONSOLE_LEVEL_GET (|RIG_LEVEL_AGC|RIG_LEVEL_STRENGTH|RIG_LEVEL_METER|RIG_LEVEL_SLOPE_HIGH|RIG_LEVEL_SLOPE_LOW)
+#define SDRCONSOLE_LEVEL_SET (RIG_LEVEL_NONE)
+
 
 #define TS2000_FUNC_ALL (RIG_FUNC_NB|RIG_FUNC_COMP|RIG_FUNC_VOX|RIG_FUNC_NR|RIG_FUNC_NR|RIG_FUNC_BC|RIG_FUNC_BC2|RIG_FUNC_RIT|RIG_FUNC_XIT| \
     RIG_FUNC_TUNER|RIG_FUNC_MON|RIG_FUNC_FBKIN|RIG_FUNC_LOCK|RIG_FUNC_TONE|RIG_FUNC_TSQL|RIG_FUNC_ANF)
@@ -232,6 +239,7 @@ static struct kenwood_priv_caps  ts2000_priv_caps  =
     .filter_width = ts2000_filter_width,
     .slope_filter_high = ts2000_slope_filter_high,
     .slope_filter_low = ts2000_slope_filter_low,
+    .tone_table_base = 1,
 };
 
 /* memory capabilities */
@@ -259,7 +267,7 @@ static struct kenwood_priv_caps  ts2000_priv_caps  =
  * Function definitions below
  */
 
-int ts2000_init(RIG *rig)
+static int ts2000_init(RIG *rig)
 {
     struct kenwood_priv_data *priv;
     int retval;
@@ -270,10 +278,10 @@ int ts2000_init(RIG *rig)
 
     if (retval != RIG_OK)
     {
-        return retval;
+        RETURNFUNC(retval);
     }
 
-    priv = (struct kenwood_priv_data *) rig->state.priv;
+    priv = (struct kenwood_priv_data *) STATE(rig)->priv;
 
     priv->ag_format = 3;
     priv->micgain_min = 0;
@@ -326,12 +334,12 @@ static int ts2000_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     {
     case RIG_FUNC_MON:
         SNPRINTF(buf, sizeof(buf), "ML00%c", (status == 0) ? '0' : '1');
-        RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
+        RETURNFUNC2(kenwood_transaction(rig, buf, NULL, 0));
 
     case RIG_FUNC_LOCK:
         SNPRINTF(buf, sizeof(buf), "LK%c%c", (status == 0) ? '0' : '1',
                  (status == 0) ? '0' : '1');
-        RETURNFUNC(kenwood_transaction(rig, buf, NULL, 0));
+        RETURNFUNC2(kenwood_transaction(rig, buf, NULL, 0));
 
     default:
         return kenwood_set_func(rig, vfo, func, status);
@@ -375,7 +383,7 @@ static int ts2000_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
         break;
 
     default:
-        return kenwood_get_func(rig, vfo, func, status);
+        RETURNFUNC(kenwood_get_func(rig, vfo, func, status));
     }
 
     RETURNFUNC(RIG_OK);
@@ -460,7 +468,7 @@ static int ts2000_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_PREAMP:
         if (val.i != 12 && val.i != 0)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "PA%c", (val.i == 12) ? '1' : '0');
@@ -469,7 +477,7 @@ static int ts2000_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_ATT:
         if (val.i != 12 && val.i != 0)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "RA%02d", (val.i == 12) ? 1 : 0);
@@ -491,7 +499,7 @@ static int ts2000_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
             break;
 
         default:
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
         SNPRINTF(levelbuf, sizeof(levelbuf), "RM%d", kenwood_val);
@@ -500,10 +508,10 @@ static int ts2000_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     case RIG_LEVEL_CWPITCH:
         if (val.i > 1000 || val.i < 400)
         {
-            RETURNFUNC(-RIG_EINVAL);
+            RETURNFUNC2(-RIG_EINVAL);
         }
 
-        RETURNFUNC(ts2000_set_ex_menu(rig, 31, 2, (val.i - 400) / 50));
+        RETURNFUNC2(ts2000_set_ex_menu(rig, 31, 2, (val.i - 400) / 50));
 
     default:
         return kenwood_set_level(rig, vfo, level, val);
@@ -519,7 +527,7 @@ static int ts2000_read_meter(RIG *rig, int expected_meter, int *value)
 {
     int retval;
     char cmdbuf[8];
-    struct rig_state *rs = &rig->state;
+    struct hamlib_port *rp = RIGPORT(rig);
     char ackbuf[32];
     int expected_len = 8;
     int read_meter;
@@ -529,7 +537,7 @@ static int ts2000_read_meter(RIG *rig, int expected_meter, int *value)
 
     SNPRINTF(cmdbuf, sizeof(cmdbuf), "RM;");
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmdbuf, strlen(cmdbuf));
+    retval = write_block(rp, (unsigned char *) cmdbuf, strlen(cmdbuf));
 
     rig_debug(RIG_DEBUG_TRACE, "%s: write_block retval=%d\n", __func__, retval);
 
@@ -540,7 +548,7 @@ static int ts2000_read_meter(RIG *rig, int expected_meter, int *value)
 
     // TS-2000 returns values for a single meter at the same time, for example: RM10000;
 
-    retval = read_string(&rs->rigport, (unsigned char *) ackbuf, expected_len + 1,
+    retval = read_string(rp, (unsigned char *) ackbuf, expected_len + 1,
                          NULL, 0, 0, 1);
 
     rig_debug(RIG_DEBUG_TRACE, "%s: read_string retval=%d\n", __func__, retval);
@@ -595,30 +603,30 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     switch (level)
     {
     case RIG_LEVEL_AF:
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
 
     case RIG_LEVEL_RF:
         retval = kenwood_transaction(rig, "RG", ackbuf, sizeof(ackbuf));
 
         if (RIG_OK != retval)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (5 != ack_len)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (1 != sscanf(&ackbuf[2], "%d", &levelint))
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         val->f = levelint / (float) 255;
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_SQL:
         SNPRINTF(cmdbuf, sizeof(cmdbuf), "SQ%c", vfo_num);
@@ -627,23 +635,23 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (retval != RIG_OK)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (ack_len != ack_len_expected)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (sscanf(&ackbuf[ack_len_expected - 3], "%d", &levelint) != 1)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         val->f = (float) levelint / 255.f;
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_AGC:
         retval = kenwood_transaction(rig, "GT", ackbuf, sizeof(ackbuf));
@@ -651,19 +659,19 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (RIG_OK != retval)
         {
-            return retval;
+            RETURNFUNC(retval);
         }
 
         ack_len = strlen(ackbuf);
 
         if (ack_len != ack_len_expected)
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (1 != sscanf(&ackbuf[ack_len_expected - 3], "%d", &levelint))
         {
-            return -RIG_EPROTO;
+            RETURNFUNC(-RIG_EPROTO);
         }
 
         if (levelint == 0)
@@ -687,16 +695,16 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             val->i = RIG_AGC_SLOW;
         }
 
-        return RIG_OK;
+        RETURNFUNC(RIG_OK);
 
     case RIG_LEVEL_STRENGTH:
-        if (rig->state.cache.ptt != RIG_PTT_OFF)
+        if (CACHE(rig)->ptt != RIG_PTT_OFF)
         {
             val->i = -9 * 6;
             break;
         }
 
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
 
     case RIG_LEVEL_MONITOR_GAIN:
     {
@@ -866,7 +874,7 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             break;
 
         default:
-            return -RIG_ENAVAIL;
+            RETURNFUNC(-RIG_ENAVAIL);
         }
 
         break;
@@ -877,7 +885,7 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         int raw_value;
         char read_vfo_num;
 
-        if (rig->state.cache.ptt == RIG_PTT_OFF)
+        if (CACHE(rig)->ptt == RIG_PTT_OFF)
         {
             val->f = 0;
             break;
@@ -921,7 +929,7 @@ static int ts2000_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     }
 
     default:
-        return kenwood_get_level(rig, vfo, level, val);
+        RETURNFUNC(kenwood_get_level(rig, vfo, level, val));
     }
 
     RETURNFUNC(RIG_OK);
@@ -1002,7 +1010,7 @@ static int ts2000_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
 {
     int retval;
     char buf[7];
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -1026,7 +1034,8 @@ static int ts2000_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
     RETURNFUNC(RIG_OK);
 }
 
-static int ts2000_set_ext_func(RIG *rig, vfo_t vfo, token_t token, int status)
+static int ts2000_set_ext_func(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                               int status)
 {
     char cmdbuf[20];
     int retval;
@@ -1052,7 +1061,8 @@ static int ts2000_set_ext_func(RIG *rig, vfo_t vfo, token_t token, int status)
     RETURNFUNC(retval);
 }
 
-static int ts2000_get_ext_func(RIG *rig, vfo_t vfo, token_t token, int *status)
+static int ts2000_get_ext_func(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                               int *status)
 {
     int retval;
 
@@ -1085,7 +1095,8 @@ static int ts2000_get_ext_func(RIG *rig, vfo_t vfo, token_t token, int *status)
     RETURNFUNC(retval);
 }
 
-static int ts2000_set_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t val)
+static int ts2000_set_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
+                                value_t val)
 {
     int retval;
 
@@ -1145,7 +1156,7 @@ static int ts2000_set_ext_level(RIG *rig, vfo_t vfo, token_t token, value_t val)
     RETURNFUNC(retval);
 }
 
-static int ts2000_get_ext_level(RIG *rig, vfo_t vfo, token_t token,
+static int ts2000_get_ext_level(RIG *rig, vfo_t vfo, hamlib_token_t token,
                                 value_t *val)
 {
     int retval;
@@ -1671,7 +1682,7 @@ int ts2000_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
 /*
  * TS-2000 rig capabilities
  */
-const struct rig_caps ts2000_caps =
+struct rig_caps ts2000_caps =
 {
     RIG_MODEL(RIG_MODEL_TS2000),
     .model_name = "TS-2000",
@@ -1702,8 +1713,19 @@ const struct rig_caps ts2000_caps =
     .has_set_parm =  RIG_PARM_NONE,
     .level_gran =
     {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
 #include "level_gran_kenwood.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -1730,6 +1752,8 @@ const struct rig_caps ts2000_caps =
 
     .chan_list =  {
         { 0, 299, RIG_MTYPE_MEM, TS2000_MEM_CAP  },
+        { 1,   3, RIG_MTYPE_MORSE },
+        { 1,   3, RIG_MTYPE_VOICE }, // Only if DRU-3A installed
         RIG_CHAN_END,
     },
 
@@ -1907,6 +1931,265 @@ const struct rig_caps ts2000_caps =
     .set_trn =  kenwood_set_trn,
     .get_trn =  kenwood_get_trn,
     .set_powerstat =  kenwood_set_powerstat,
+    .get_powerstat =  kenwood_get_powerstat,
+    .get_info =  kenwood_get_info,
+    .reset =  kenwood_reset,
+
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+/*
+ * SDRConsole TS-2000 rig capabilities
+ * SDRConsole does not use hardware flow control for example
+ */
+struct rig_caps sdrconsole_caps =
+{
+    RIG_MODEL(RIG_MODEL_SDRCONSOLE),
+    .model_name = "SDRConsole",
+    .mfg_name =  "SDR Radio",
+    .version =  BACKEND_VER ".3",
+    .copyright =  "LGPL",
+    .status =  RIG_STATUS_STABLE,
+    .rig_type =  RIG_TYPE_TRANSCEIVER,
+    .ptt_type =  RIG_PTT_RIG,
+    .dcd_type =  RIG_DCD_RIG,
+    .port_type =  RIG_PORT_SERIAL,
+    .serial_rate_min =  1200,
+    .serial_rate_max =  115200,
+    .serial_data_bits =  8,
+    .serial_stop_bits =  1,
+    .serial_parity =  RIG_PARITY_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .write_delay =  0,
+    .post_write_delay =  0, /* ms */
+    .timeout =  200,
+    .retry =  3,
+
+    .has_get_func =  TS2000_FUNC_ALL,
+    .has_set_func =  TS2000_FUNC_ALL,
+    .has_get_level =  TS2000_LEVEL_GET,
+    .has_set_level =  TS2000_LEVEL_SET,
+    .has_get_parm =  RIG_PARM_NONE,
+    .has_set_parm =  RIG_PARM_NONE,
+    .level_gran =
+    {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
+#define NO_LVL_SLOPE_LOW
+#define NO_LVL_SLOPE_HIGH
+#include "level_gran_kenwood.h"
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
+#undef NO_LVL_SLOPE_LOW
+#undef NO_LVL_SLOPE_HIGH
+        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
+        [LVL_KEYSPD] = {.min = {.i = 10}, .max = {.i = 60}, .step = {.i = 1}},
+        [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
+        [LVL_BKIN_DLYMS] = {.min = {.i = 0}, .max = {.i = 1000}, .step = {.i = 50}},
+        [LVL_SLOPE_LOW] = {.min = {.i = 0}, .max = {.i = 1000}, .step = {.i = 10}},
+        [LVL_SLOPE_HIGH] = {.min = {.i = 0}, .max = {.i = 5000}, .step = {.i = 10}},
+    },
+    .parm_gran =  {},
+    .vfo_ops =  TS2000_VFO_OPS,
+    .scan_ops =  TS2000_SCAN_OP,
+    .ctcss_list =  ts2000_ctcss_list,
+    .dcs_list =  ts2000_dcs_list,
+    .preamp =   { 12, RIG_DBLST_END, },
+    .attenuator =   { 12, RIG_DBLST_END, },
+    .max_rit =  kHz(20),
+    .max_xit =  kHz(20),
+    .max_ifshift =  kHz(1),
+    .targetable_vfo =  RIG_TARGETABLE_FREQ,
+    .transceive =  RIG_TRN_RIG,
+    .agc_level_count = 5,
+    .agc_levels = { RIG_AGC_OFF, RIG_AGC_SLOW, RIG_AGC_MEDIUM, RIG_AGC_FAST, RIG_AGC_SUPERFAST },
+    .bank_qty =   0,
+    .chan_desc_sz =  7,
+
+    .chan_list =  {
+        { 0, 299, RIG_MTYPE_MEM, TS2000_MEM_CAP  },
+        { 1,   3, RIG_MTYPE_MORSE },
+        //{ 1,   3, RIG_MTYPE_VOICE }, // ??? Standard or optional ???
+        RIG_CHAN_END,
+    },
+
+    .rx_range_list1 =  {
+        {kHz(300), MHz(60), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(144), MHz(146), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO},
+        {MHz(430), MHz(440), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO},
+        {MHz(144), MHz(146), TS2000_ALL_MODES, -1, -1, TS2000_SUBVFO},
+        {MHz(430), MHz(440), TS2000_ALL_MODES, -1, -1, TS2000_SUBVFO},
+        RIG_FRNG_END,
+    }, /* rx range */
+    .tx_range_list1 =  {
+        {kHz(1830), kHz(1850), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(1830), kHz(1850), TS2000_AM_TX_MODES, 2000, 25000, TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(3500), kHz(3800), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(3500), kHz(3800), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(7), kHz(7100), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(7), kHz(7100), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(10.1), MHz(10.15), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(10.1), MHz(10.15), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(14), kHz(14350), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(14), kHz(14350), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(18068), kHz(18168), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(18068), kHz(18168), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(21), kHz(21450), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(21), kHz(21450), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(24890), kHz(24990), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(24890), kHz(24990), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(28), kHz(29700), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(28), kHz(29700), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(50), MHz(50.2), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(50), MHz(50.2), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(144), MHz(146), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO},
+        {MHz(144), MHz(146), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO},
+        {MHz(430), MHz(440), TS2000_OTHER_TX_MODES, W(5), W(50), TS2000_MAINVFO},
+        {MHz(430), MHz(440), TS2000_AM_TX_MODES, W(5), W(12.5), TS2000_MAINVFO},
+        RIG_FRNG_END,
+    }, /* tx range */
+
+    .rx_range_list2 =  {
+        {kHz(300), MHz(60), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(142), MHz(152), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO},
+        {MHz(420), MHz(450), TS2000_ALL_MODES, -1, -1, TS2000_MAINVFO},
+        {MHz(118), MHz(174), TS2000_ALL_MODES, -1, -1, TS2000_SUBVFO},
+        {MHz(220), MHz(512), TS2000_ALL_MODES, -1, -1, TS2000_SUBVFO},
+        RIG_FRNG_END,
+    }, /* rx range */
+    .tx_range_list2 =  {
+        {kHz(1800), MHz(2), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(1800), MHz(2), TS2000_AM_TX_MODES, 2000, 25000, TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(3500), MHz(4), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(3500), MHz(4), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(7), kHz(7300), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(7), kHz(7300), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(10.1), MHz(10.15), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(10.1), MHz(10.15), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(14), kHz(14350), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(14), kHz(14350), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(18068), kHz(18168), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(18068), kHz(18168), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(21), kHz(21450), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(21), kHz(21450), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(24890), kHz(24990), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {kHz(24890), kHz(24990), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(28), kHz(29700), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(28), kHz(29700), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(50), MHz(54), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(50), MHz(54), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO, TS2000_ANTS},
+        {MHz(144), MHz(148), TS2000_OTHER_TX_MODES, W(5), W(100), TS2000_MAINVFO},
+        {MHz(144), MHz(148), TS2000_AM_TX_MODES, W(5), W(25), TS2000_MAINVFO},
+        {MHz(430), MHz(450), TS2000_OTHER_TX_MODES, W(5), W(50), TS2000_MAINVFO},
+        {MHz(430), MHz(450), TS2000_AM_TX_MODES, W(5), W(12.5), TS2000_MAINVFO},
+        RIG_FRNG_END,
+    }, /* tx range */
+
+    .tuning_steps =  {
+        {RIG_MODE_SSB | RIG_MODE_CW | RIG_MODE_RTTY, 1},
+        {TS2000_ALL_MODES, 10},
+        {TS2000_ALL_MODES, 100},
+        {TS2000_ALL_MODES, kHz(1)},
+        {TS2000_ALL_MODES, kHz(2.5)},
+        {TS2000_ALL_MODES, kHz(5)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(6.25)},
+        {TS2000_ALL_MODES, kHz(10)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(12.5)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(12.5)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(15)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(20)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(25)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(30)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(50)},
+        {RIG_MODE_AM | RIG_MODE_FM, kHz(100)},
+        {TS2000_ALL_MODES, MHz(1)},
+        {TS2000_ALL_MODES, 0}, /* any tuning step */
+        RIG_TS_END,
+    },
+
+    /* mode/filter list, remember: order matters! */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.2)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(200)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(50)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(1000)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(80)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(100)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(150)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(300)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(400)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(600)},
+        {RIG_MODE_CW | RIG_MODE_CWR, Hz(2000)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(1000)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(1500)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(2.4)},
+        {RIG_MODE_FM, kHz(12)},
+        {RIG_MODE_FM, kHz(6)},
+        RIG_FLT_END,
+    },
+
+    .str_cal = TS2000_STR_CAL,
+    .swr_cal = TS2000_SWR_CAL,
+
+    .ext_tokens = ts2000_ext_tokens,
+    .extfuncs = ts2000_ext_funcs,
+    .extlevels = ts2000_ext_levels,
+
+    .priv = (void *)& ts2000_priv_caps,
+
+    .rig_init = ts2000_init,
+    .rig_open = kenwood_open,
+    .rig_close = kenwood_close,
+    .rig_cleanup = kenwood_cleanup,
+    .set_freq =  kenwood_set_freq,
+    .get_freq =  kenwood_get_freq,
+    //.set_rit =  ts2000_set_rit,
+    //.get_rit =  ts2000_get_rit,
+    //.set_xit =  ts2000_set_rit,
+    //.get_xit =  ts2000_get_rit,
+    .set_mode =  kenwood_set_mode,
+    .get_mode =  kenwood_get_mode,
+    .set_vfo =  kenwood_set_vfo,
+    .get_vfo =  kenwood_get_vfo_if,
+    .set_split_vfo = kenwood_set_split_vfo,
+    .get_split_vfo = kenwood_get_split_vfo_if,
+    //.set_ctcss_tone =  kenwood_set_ctcss_tone_tn,
+    //.get_ctcss_tone =  kenwood_get_ctcss_tone,
+    //.set_ctcss_sql =  kenwood_set_ctcss_sql,
+    //.get_ctcss_sql =  kenwood_get_ctcss_sql,
+    .get_ptt =  kenwood_get_ptt,
+    .set_ptt =  kenwood_set_ptt,
+    //.get_dcd =  kenwood_get_dcd,
+    //.set_func =  ts2000_set_func,
+    //.get_func =  ts2000_get_func,
+    .set_level =  ts2000_set_level,
+    .get_level =  ts2000_get_level,
+    //.set_ext_func =  ts2000_set_ext_func,
+    //.get_ext_func =  ts2000_get_ext_func,
+    //.set_ext_level =  ts2000_set_ext_level,
+    //.get_ext_level =  ts2000_get_ext_level,
+    //.set_ant =  kenwood_set_ant,
+    //.get_ant =  kenwood_get_ant,
+    //.send_morse =  kenwood_send_morse,
+    //.wait_morse = rig_wait_morse,
+    //.send_voice_mem = kenwood_send_voice_mem,
+    //.stop_voice_mem = kenwood_stop_voice_mem,
+    //.vfo_op =  kenwood_vfo_op,
+    //.scan =  kenwood_scan,
+    //.set_mem =  kenwood_set_mem,
+    //.get_mem =  kenwood_get_mem,
+    //.get_channel = ts2000_get_channel,
+    //.set_channel = ts2000_set_channel,
+    //.set_trn =  kenwood_set_trn,
+    //.get_trn =  kenwood_get_trn,
+    //.set_powerstat =  kenwood_set_powerstat,
     .get_powerstat =  kenwood_get_powerstat,
     .get_info =  kenwood_get_info,
     .reset =  kenwood_reset,

@@ -1,13 +1,13 @@
 #include "mds.h"
 
-const struct rig_caps mds_9710_caps =
+struct rig_caps mds_9710_caps =
 {
     RIG_MODEL(RIG_MODEL_MDS9710),
     .model_name =       "9710",
     .mfg_name =         "MDS",
     .version =          "20221116.0",
     .copyright =        "LGPL",
-    .status =           RIG_STATUS_ALPHA,
+    .status =           RIG_STATUS_BETA,
     .rig_type =         RIG_TYPE_TRANSCEIVER,
     .ptt_type =         RIG_PTT_RIG,
     .dcd_type =         RIG_DCD_NONE,
@@ -45,17 +45,17 @@ const struct rig_caps mds_9710_caps =
     .rx_range_list1 = {
         {
             .startf = MHz(800), .endf = MHz(880), .modes = MDS_ALL_MODES,
-            .low_power = 0, .high_power = 0, MDS_ALL_MODES, RIG_ANT_1,
+            .low_power = 0, .high_power = 0, MDS_VFOS, RIG_ANT_1,
         },
         {
             .startf = MHz(880), .endf = MHz(960), .modes = MDS_ALL_MODES,
-            .low_power = 0, .high_power = 0, MDS_ALL_MODES, RIG_ANT_1,
+            .low_power = 0, .high_power = 0, MDS_VFOS, RIG_ANT_1,
         },
         RIG_FRNG_END,
     },
     .rx_range_list2 = {RIG_FRNG_END,},
     .tx_range_list1 = {
-        {MHz(380), MHz(530), MDS_ALL_MODES, W(.1), W(5), RIG_VFO_A, RIG_ANT_NONE},
+        {MHz(380), MHz(530), MDS_ALL_MODES, W(.1), W(5), MDS_VFOS, RIG_ANT_NONE},
         RIG_FRNG_END,
     },
 //    .tx_range_list2 = {RIG_FRNG_END,}

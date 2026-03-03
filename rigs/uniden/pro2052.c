@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "uniden.h"
 
 
@@ -53,14 +53,14 @@
  *
  * TODO: check this with manual or web site.
  */
-const struct rig_caps pro2052_caps =
+struct rig_caps pro2052_caps =
 {
     RIG_MODEL(RIG_MODEL_PRO2052),
     .model_name = "PRO-2052",
     .mfg_name =  "Radio Shack",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRUNKSCANNER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

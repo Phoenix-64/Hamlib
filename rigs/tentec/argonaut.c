@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "tentec2.h"
 #include "bandplan.h"
 #include "idx_builtin.h"
@@ -71,7 +71,7 @@
  *      http://www.rfsquared.com/
  *
  */
-const struct rig_caps tt516_caps =
+struct rig_caps tt516_caps =
 {
     RIG_MODEL(RIG_MODEL_TT516),
     .model_name = "TT-516 Argonaut V",

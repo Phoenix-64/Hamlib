@@ -65,8 +65,8 @@ static const struct confparams elektor304_cfg_params[] =
 static int elektor304_init(RIG *rig);
 static int elektor304_cleanup(RIG *rig);
 static int elektor304_set_freq(RIG *rig, vfo_t vfo, freq_t freq);
-static int elektor304_set_conf(RIG *rig, token_t token, const char *val);
-static int elektor304_get_conf(RIG *rig, token_t token, char *val);
+static int elektor304_set_conf(RIG *rig, hamlib_token_t token, const char *val);
+static int elektor304_get_conf(RIG *rig, hamlib_token_t token, char *val);
 
 /*
  * The Elektor DRM Receiver 3/04 COM interface is based on the Visual Basic
@@ -80,7 +80,7 @@ static int elektor304_get_conf(RIG *rig, token_t token, char *val);
  * The receiver is controlled via the TX, RTS and DTR pins of the serial port.
  */
 
-const struct rig_caps elektor304_caps =
+struct rig_caps elektor304_caps =
 {
     RIG_MODEL(RIG_MODEL_ELEKTOR304),
     .model_name = "Elektor 3/04",
@@ -160,16 +160,16 @@ int elektor304_init(RIG *rig)
 {
     struct elektor304_priv_data *priv;
 
-    rig->state.priv = (struct elektor304_priv_data *)calloc(1, sizeof(struct
-                      elektor304_priv_data));
+    STATE(rig)->priv = (struct elektor304_priv_data *)calloc(1, sizeof(struct
+                       elektor304_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     priv->osc_freq = OSCFREQ;
     priv->if_mix_freq = IFMIXFREQ;
@@ -184,25 +184,25 @@ int elektor304_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
 
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
-int elektor304_set_conf(RIG *rig, token_t token, const char *val)
+int elektor304_set_conf(RIG *rig, hamlib_token_t token, const char *val)
 {
     struct elektor304_priv_data *priv;
 
-    priv = (struct elektor304_priv_data *)rig->state.priv;
+    priv = (struct elektor304_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -223,14 +223,14 @@ int elektor304_set_conf(RIG *rig, token_t token, const char *val)
 
 /*
  * assumes rig!=NULL,
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *  and val points to a buffer big enough to hold the conf value.
  */
-int elektor304_get_conf2(RIG *rig, token_t token, char *val, int val_len)
+int elektor304_get_conf2(RIG *rig, hamlib_token_t token, char *val, int val_len)
 {
     struct elektor304_priv_data *priv;
 
-    priv = (struct elektor304_priv_data *)rig->state.priv;
+    priv = (struct elektor304_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -249,7 +249,7 @@ int elektor304_get_conf2(RIG *rig, token_t token, char *val, int val_len)
     return RIG_OK;
 }
 
-int elektor304_get_conf(RIG *rig, token_t token, char *val)
+int elektor304_get_conf(RIG *rig, hamlib_token_t token, char *val)
 {
     return elektor304_get_conf2(rig, token, val, 128);
 }
@@ -342,9 +342,9 @@ int elektor304_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     unsigned fhl, fhh, fll, flh;
 
     struct elektor304_priv_data *priv;
-    hamlib_port_t *port = &rig->state.rigport;
+    hamlib_port_t *port = RIGPORT(rig);
 
-    priv = (struct elektor304_priv_data *)rig->state.priv;
+    priv = (struct elektor304_priv_data *)STATE(rig)->priv;
 
     rig_flush(port);
 

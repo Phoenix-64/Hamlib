@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "bandplan.h"
 #include "kenwood.h"
 
@@ -63,7 +63,8 @@ static rmode_t ts940_mode_table[KENWOOD_MODE_TABLE_MAX] =
 static struct kenwood_priv_caps  ts940_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
-    .mode_table = ts940_mode_table
+    .mode_table = ts940_mode_table,
+    .tone_table_base = 1,
 };
 
 /*
@@ -73,7 +74,7 @@ static struct kenwood_priv_caps  ts940_priv_caps  =
  *
  * TODO: protocol to be check with manual!
  */
-const struct rig_caps ts940_caps =
+struct rig_caps ts940_caps =
 {
     RIG_MODEL(RIG_MODEL_TS940),
     .model_name = "TS-940S",

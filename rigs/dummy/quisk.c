@@ -19,13 +19,13 @@
  *
  */
 
+#include "hamlib/config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>  /* String function definitions */
 #include <unistd.h>  /* UNIX standard function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
 #include "iofunc.h"
 #include "misc.h"
 #include "num_stdio.h"
@@ -50,7 +50,7 @@ struct quisk_priv_data
 int quisk_get_vfo_mode(RIG *rig)
 {
     struct quisk_priv_data *priv;
-    priv = (struct quisk_priv_data *)rig->state.priv;
+    priv = (struct quisk_priv_data *)STATE(rig)->priv;
     return priv->rigctld_vfo_mode;
 }
 #endif
@@ -61,20 +61,21 @@ int quisk_get_vfo_mode(RIG *rig)
 static int quisk_transaction(RIG *rig, char *cmd, int len, char *buf)
 {
     int ret;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called len=%d\n", __func__, len);
 
     /* flush anything in the read buffer before command is sent */
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
-    ret = write_block(&rig->state.rigport, (unsigned char *) cmd, len);
+    ret = write_block(rp, (unsigned char *) cmd, len);
 
     if (ret != RIG_OK)
     {
         return ret;
     }
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1,
                       0, 1);
 
     if (ret < 0)
@@ -108,7 +109,7 @@ static int quisk_vfostr(RIG *rig, char *vfostr, int len, vfo_t vfo)
 
     vfostr[0] = 0;
 
-    priv = (struct quisk_priv_data *)rig->state.priv;
+    priv = (struct quisk_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -121,9 +122,9 @@ static int quisk_vfostr(RIG *rig, char *vfostr, int len, vfo_t vfo)
     else if (vfo == RIG_VFO_RX) { vfo = priv->rx_vfo; }
     else if (vfo == RIG_VFO_TX) { vfo = priv->tx_vfo; }
 
-    rig_debug(RIG_DEBUG_TRACE, "%s: vfo_opt=%d\n", __func__, rig->state.vfo_opt);
+    rig_debug(RIG_DEBUG_TRACE, "%s: vfo_opt=%d\n", __func__, STATE(rig)->vfo_opt);
 
-    if (rig->state.vfo_opt || priv->rigctld_vfo_mode)
+    if (STATE(rig)->vfo_opt || priv->rigctld_vfo_mode)
     {
         rig_debug(RIG_DEBUG_TRACE, "%s: vfo_opt vfo=%u\n", __func__, vfo);
         char *myvfo;
@@ -167,15 +168,15 @@ static int quisk_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct quisk_priv_data *)calloc(1, sizeof(
-                          struct quisk_priv_data));
+    STATE(rig)->priv = (struct quisk_priv_data *)calloc(1, sizeof(
+                           struct quisk_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
     memset(priv, 0, sizeof(struct quisk_priv_data));
 
     rig_debug(RIG_DEBUG_TRACE, "%s version %s\n", __func__, rig->caps->version);
@@ -192,29 +193,32 @@ static int quisk_init(RIG *rig)
 
 static int quisk_cleanup(RIG *rig)
 {
-    if (rig->state.priv) { free(rig->state.priv); }
+    if (STATE(rig)->priv) { free(STATE(rig)->priv); }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
     return RIG_OK;
 }
 
 // these are in netrigctl.c
-extern int parse_array_int(const char *s, const char *delim, int *array, int array_len);
-extern int parse_array_double(const char *s, const char *delim, double *array, int array_len);
+extern int parse_array_int(const char *s, const char *delim, int *array,
+                           int array_len);
+extern int parse_array_double(const char *s, const char *delim, double *array,
+                              int array_len);
 
 static int quisk_open(RIG *rig)
 {
     int ret, i;
-    struct rig_state *rs = &rig->state;
+    struct rig_state *rs = STATE(rig);
     int prot_ver;
     char cmd[CMD_MAX];
     char buf[BUF_MAX];
     struct quisk_priv_data *priv;
+    hamlib_port_t *rp = RIGPORT(rig);
 
 
     ENTERFUNC;
 
-    priv = (struct quisk_priv_data *)rig->state.priv;
+    priv = (struct quisk_priv_data *)rs->priv;
     priv->rx_vfo = RIG_VFO_A;
     priv->tx_vfo = RIG_VFO_A;
 
@@ -235,16 +239,14 @@ static int quisk_open(RIG *rig)
         RETURNFUNC(-RIG_EPROTO);
     }
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
         RETURNFUNC((ret < 0) ? ret : -RIG_EPROTO);
     }
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -255,8 +257,7 @@ static int quisk_open(RIG *rig)
 
     for (i = 0; i < HAMLIB_FRQRANGESIZ; i++)
     {
-        ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                          0, 1);
+        ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
         if (ret <= 0)
         {
@@ -286,8 +287,7 @@ static int quisk_open(RIG *rig)
 
     for (i = 0; i < HAMLIB_FRQRANGESIZ; i++)
     {
-        ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                          0, 1);
+        ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
         if (ret <= 0)
         {
@@ -329,8 +329,7 @@ static int quisk_open(RIG *rig)
 
     for (i = 0; i < HAMLIB_TSLSTSIZ; i++)
     {
-        ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                          0, 1);
+        ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
         if (ret <= 0)
         {
@@ -354,8 +353,7 @@ static int quisk_open(RIG *rig)
 
     for (i = 0; i < HAMLIB_FLTLSTSIZ; i++)
     {
-        ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                          0, 1);
+        ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
         if (ret <= 0)
         {
@@ -382,8 +380,7 @@ static int quisk_open(RIG *rig)
     chan_t chan_list[HAMLIB_CHANLSTSIZ]; /*!< Channel list, zero ended */
 #endif
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -392,8 +389,7 @@ static int quisk_open(RIG *rig)
 
     rig->caps->max_rit = rs->max_rit = atol(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -402,8 +398,7 @@ static int quisk_open(RIG *rig)
 
     rig->caps->max_xit = rs->max_xit = atol(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -412,8 +407,7 @@ static int quisk_open(RIG *rig)
 
     rig->caps->max_ifshift = rs->max_ifshift = atol(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -422,8 +416,7 @@ static int quisk_open(RIG *rig)
 
     rs->announces = atoi(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -450,8 +443,7 @@ static int quisk_open(RIG *rig)
 
     rig->caps->preamp[ret] = rs->preamp[ret] = RIG_DBLST_END;
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -478,8 +470,7 @@ static int quisk_open(RIG *rig)
 
     rig->caps->attenuator[ret] = rs->attenuator[ret] = RIG_DBLST_END;
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -489,8 +480,7 @@ static int quisk_open(RIG *rig)
     rig->caps->has_get_func = rs->has_get_func = strtoll(buf, NULL, 0);
 
     HAMLIB_TRACE;
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -500,8 +490,7 @@ static int quisk_open(RIG *rig)
     rig->caps->has_set_func = rs->has_set_func = strtoll(buf, NULL, 0);
 
     HAMLIB_TRACE;
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -524,8 +513,7 @@ static int quisk_open(RIG *rig)
 #endif
 
     HAMLIB_TRACE;
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -535,8 +523,7 @@ static int quisk_open(RIG *rig)
     rig->caps->has_set_level = rs->has_set_level = strtoll(buf, NULL, 0);
 
     HAMLIB_TRACE;
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -547,13 +534,13 @@ static int quisk_open(RIG *rig)
 
 #if 0
     HAMLIB_TRACE;
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
         RETURNFUNC((ret < 0) ? ret : -RIG_EPROTO);
     }
+
     HAMLIB_TRACE;
 
     rig->caps->has_set_parm = rs->has_set_parm = strtoll(buf, NULL, 0);
@@ -564,6 +551,7 @@ static int quisk_open(RIG *rig)
         rs->mode_list |= rs->rx_range_list[i].modes;
         rs->vfo_list |= rs->rx_range_list[i].vfo;
     }
+
     HAMLIB_TRACE;
 
     for (i = 0; i < HAMLIB_FRQRANGESIZ
@@ -572,6 +560,7 @@ static int quisk_open(RIG *rig)
         rs->mode_list |= rs->tx_range_list[i].modes;
         rs->vfo_list |= rs->tx_range_list[i].vfo;
     }
+
     HAMLIB_TRACE;
 
     if (rs->vfo_list == 0)
@@ -580,10 +569,12 @@ static int quisk_open(RIG *rig)
                   __func__);
         rs->vfo_list = RIG_VFO_A | RIG_VFO_B;
     }
+
     HAMLIB_TRACE;
 #endif
 
     if (prot_ver == 0) { RETURNFUNC(RIG_OK); }
+
     HAMLIB_TRACE;
 
     // otherwise we continue reading protocol 1 fields
@@ -592,8 +583,8 @@ static int quisk_open(RIG *rig)
     do
     {
         char setting[32], value[1024];
-        ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                          0, 1);
+        hamlib_port_t *pttp = PTTPORT(rig);
+        ret = read_string(rp, (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
         strtok(buf, "\r\n"); // chop the EOL
 
         if (ret <= 0)
@@ -616,7 +607,7 @@ static int quisk_open(RIG *rig)
                 ptt_type_t temp = (ptt_type_t)strtol(value, NULL, 0);
                 rig_debug(RIG_DEBUG_VERBOSE, "%s: ptt_type='%s'(%d)\n", __func__, value, temp);
 
-                if (RIG_PTT_RIG_MICDATA == rig->state.pttport.type.ptt
+                if (RIG_PTT_RIG_MICDATA == pttp->type.ptt
                         || temp == RIG_PTT_RIG_MICDATA)
                 {
                     /*
@@ -624,15 +615,15 @@ static int quisk_open(RIG *rig)
                      * if there is any PTT capability and we have not
                      * locally overridden it
                      */
-                    rig->state.pttport.type.ptt = RIG_PTT_RIG_MICDATA;
+                    pttp->type.ptt = RIG_PTT_RIG_MICDATA;
                     rig->caps->ptt_type = RIG_PTT_RIG_MICDATA;
                     rig_debug(RIG_DEBUG_TRACE, "%s: %s set to %d\n", __func__, setting,
-                              rig->state.pttport.type.ptt);
+                              pttp->type.ptt);
                 }
                 else
                 {
                     rig_debug(RIG_DEBUG_VERBOSE, "%s: ptt_type= %d\n", __func__, temp);
-                    rig->state.pttport.type.ptt = temp;
+                    pttp->type.ptt = temp;
                     rig->caps->ptt_type = temp;
                 }
             }
@@ -805,6 +796,7 @@ static int quisk_open(RIG *rig)
             else if (strcmp(setting, "parm_gran") == 0)
             {
                 char *p = strtok(value, ";");
+
                 for (i = 0; p != NULL && i < RIG_SETTING_MAX; ++i)
                 {
                     int level;
@@ -826,6 +818,7 @@ static int quisk_open(RIG *rig)
                         rig->caps->parm_gran[i].max.i = rs->parm_gran[i].max.i = max;
                         rig->caps->parm_gran[i].step.i = rs->parm_gran[i].step.i = step;
                     }
+
                     p = strtok(NULL, ";");
                 }
             }
@@ -857,7 +850,7 @@ static int quisk_open(RIG *rig)
 
 static int quisk_close(RIG *rig)
 {
-    const struct rig_state *rs = &rig->state;
+    const struct rig_state *rs = STATE(rig);
     int ret;
     char buf[BUF_MAX];
 
@@ -946,7 +939,7 @@ static int quisk_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
     CHKSCN1ARG(num_sscanf(buf, "%"SCNfreq, freq));
 
 #if 0 // implement set_freq VFO later if it can be detected
-    ret = read_string(&rig->state.rigport, buf, BUF_MAX, "\n", 1, 0, 1);
+    ret = read_string(RIGPORT(rig), buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -961,7 +954,7 @@ static int quisk_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 
 static int quisk_set_mode(RIG *rig, vfo_t vfo, rmode_t mode,
-                              pbwidth_t width)
+                          pbwidth_t width)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -991,7 +984,7 @@ static int quisk_set_mode(RIG *rig, vfo_t vfo, rmode_t mode,
 
 
 static int quisk_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode,
-                              pbwidth_t *width)
+                          pbwidth_t *width)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1017,7 +1010,7 @@ static int quisk_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode,
 
     *mode = rig_parse_mode(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
+    ret = read_string(RIGPORT(rig), (unsigned char *) buf, BUF_MAX, "\n", 1,
                       0, 1);
 
     if (ret <= 0)
@@ -1042,7 +1035,7 @@ static int quisk_set_vfo(RIG *rig, vfo_t vfo)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    priv = (struct quisk_priv_data *)rig->state.priv;
+    priv = (struct quisk_priv_data *)STATE(rig)->priv;
 
     SNPRINTF(cmd, sizeof(cmd), "V%s %s\n", vfostr, rig_strvfo(vfo));
     rig_debug(RIG_DEBUG_VERBOSE, "%s: cmd='%s'\n", __func__, cmd);
@@ -1054,7 +1047,7 @@ static int quisk_set_vfo(RIG *rig, vfo_t vfo)
     }
 
     priv->vfo_curr = vfo; // remember our vfo
-    rig->state.current_vfo = vfo;
+    STATE(rig)->current_vfo = vfo;
     return ret;
 }
 
@@ -1068,7 +1061,7 @@ static int quisk_get_vfo(RIG *rig, vfo_t *vfo)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    priv = (struct quisk_priv_data *)rig->state.priv;
+    priv = (struct quisk_priv_data *)STATE(rig)->priv;
 
     SNPRINTF(cmd, sizeof(cmd), "v\n");
 
@@ -1105,9 +1098,9 @@ static int quisk_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called vfo=%s, ptt=%d, ptt_type=%d\n",
               __func__,
-              rig_strvfo(vfo), ptt, rig->state.pttport.type.ptt);
+              rig_strvfo(vfo), ptt, PTTPORT(rig)->type.ptt);
 
-    if (rig->state.pttport.type.ptt == RIG_PTT_NONE) { return RIG_OK; }
+    if (PTTPORT(rig)->type.ptt == RIG_PTT_NONE) { return RIG_OK; }
 
     ret = quisk_vfostr(rig, vfostr, sizeof(vfostr), RIG_VFO_A);
 
@@ -1186,7 +1179,7 @@ static int quisk_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 
 
 static int quisk_set_rptr_shift(RIG *rig, vfo_t vfo,
-                                    rptr_shift_t rptr_shift)
+                                rptr_shift_t rptr_shift)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1215,7 +1208,7 @@ static int quisk_set_rptr_shift(RIG *rig, vfo_t vfo,
 
 
 static int quisk_get_rptr_shift(RIG *rig, vfo_t vfo,
-                                    rptr_shift_t *rptr_shift)
+                                rptr_shift_t *rptr_shift)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1581,7 +1574,7 @@ static int quisk_get_split_freq(RIG *rig, vfo_t vfo, freq_t *tx_freq)
 }
 
 static int quisk_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
-                                    pbwidth_t tx_width)
+                                pbwidth_t tx_width)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1610,7 +1603,7 @@ static int quisk_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
 }
 
 static int quisk_get_split_mode(RIG *rig, vfo_t vfo, rmode_t *tx_mode,
-                                    pbwidth_t *tx_width)
+                                pbwidth_t *tx_width)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1636,8 +1629,7 @@ static int quisk_get_split_mode(RIG *rig, vfo_t vfo, rmode_t *tx_mode,
 
     *tx_mode = rig_parse_mode(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(RIGPORT(rig), (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -1650,7 +1642,7 @@ static int quisk_get_split_mode(RIG *rig, vfo_t vfo, rmode_t *tx_mode,
 }
 
 static int quisk_set_split_vfo(RIG *rig, vfo_t vfo, split_t split,
-                                   vfo_t tx_vfo)
+                               vfo_t tx_vfo)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1680,7 +1672,7 @@ static int quisk_set_split_vfo(RIG *rig, vfo_t vfo, split_t split,
 
 
 static int quisk_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
-                                   vfo_t *tx_vfo)
+                               vfo_t *tx_vfo)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1704,8 +1696,7 @@ static int quisk_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
 
     *split = atoi(buf);
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(RIGPORT(rig), (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -1952,7 +1943,7 @@ static int quisk_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 
 
 static int quisk_set_level(RIG *rig, vfo_t vfo, setting_t level,
-                               value_t val)
+                           value_t val)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -1993,7 +1984,7 @@ static int quisk_set_level(RIG *rig, vfo_t vfo, setting_t level,
 
 
 static int quisk_get_level(RIG *rig, vfo_t vfo, setting_t level,
-                               value_t *val)
+                           value_t *val)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -2079,7 +2070,7 @@ static int quisk_get_powerstat(RIG *rig, powerstat_t *status)
         // a return of 1 should indicate there is no powerstat command available
         // so we fake the ON status
         // also a problem with Flex 6xxx and Log4OM not working due to lack of PS command
-        if (ret != RIG_ETIMEOUT)
+        if (ret != -RIG_ETIMEOUT)
         {
             rig_debug(RIG_DEBUG_VERBOSE,
                       "%s: PS command failed (ret=%d) so returning RIG_POWER_ON\n", __func__, ret);
@@ -2208,7 +2199,7 @@ static int quisk_set_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t option)
 
 
 static int quisk_get_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t *option,
-                             ant_t *ant_curr, ant_t *ant_tx, ant_t *ant_rx)
+                         ant_t *ant_curr, ant_t *ant_tx, ant_t *ant_rx)
 {
     int ret;
     char cmd[CMD_MAX];
@@ -2259,8 +2250,7 @@ static int quisk_get_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t *option,
                   ret);
     }
 
-    ret = read_string(&rig->state.rigport, (unsigned char *) buf, BUF_MAX, "\n", 1,
-                      0, 1);
+    ret = read_string(RIGPORT(rig), (unsigned char *) buf, BUF_MAX, "\n", 1, 0, 1);
 
     if (ret <= 0)
     {
@@ -2592,7 +2582,7 @@ static int quisk_set_vfo_opt(RIG *rig, int status)
         return -RIG_EPROTO;
     }
 
-    rig->state.vfo_opt = status;
+    STATE(rig)->vfo_opt = status;
     return RIG_OK;
 }
 
@@ -2627,7 +2617,7 @@ static int quisk_get_trn(RIG *rig, int *trn)
 
     if (ret <= 0)
     {
-        return -RIG_EPROTO;
+        RETURNFUNC(-RIG_EPROTO);
     }
 
     if (strstr(buf, "OFF")) { *trn = RIG_TRN_OFF; }
@@ -2645,7 +2635,7 @@ static int quisk_get_trn(RIG *rig, int *trn)
 #endif
 
 static int quisk_mW2power(RIG *rig, float *power, unsigned int mwpower,
-                              freq_t freq, rmode_t mode)
+                          freq_t freq, rmode_t mode)
 {
     char cmdbuf[32];
     char buf[BUF_MAX];
@@ -2659,7 +2649,7 @@ static int quisk_mW2power(RIG *rig, float *power, unsigned int mwpower,
 
     if (ret <= 0)
     {
-        return -RIG_EPROTO;
+        RETURNFUNC(-RIG_EPROTO);
     }
 
     *power = atof(buf);
@@ -2669,7 +2659,7 @@ static int quisk_mW2power(RIG *rig, float *power, unsigned int mwpower,
 
 
 static int quisk_power2mW(RIG *rig, unsigned int *mwpower, float power,
-                              freq_t freq, rmode_t mode)
+                          freq_t freq, rmode_t mode)
 {
     char cmdbuf[64];
     char buf[BUF_MAX];
@@ -2684,7 +2674,7 @@ static int quisk_power2mW(RIG *rig, unsigned int *mwpower, float power,
 
     if (ret <= 0)
     {
-        return -RIG_EPROTO;
+        RETURNFUNC(-RIG_EPROTO);
     }
 
     *mwpower = atof(buf);

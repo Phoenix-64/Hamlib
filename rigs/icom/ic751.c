@@ -79,7 +79,7 @@ static const struct icom_priv_caps ic751_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic751_caps =
+struct rig_caps ic751_caps =
 {
     RIG_MODEL(RIG_MODEL_IC751),
     .model_name = "IC-751",
@@ -111,7 +111,6 @@ const struct rig_caps ic751_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
     },
     .parm_gran =  {},
     .ctcss_list =  NULL,
@@ -210,7 +209,7 @@ const struct rig_caps ic751_caps =
     .rig_init = icom_init,
     .rig_cleanup =  icom_cleanup,
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,

@@ -1,4 +1,4 @@
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #define MDS_DATA_LEN 256
 #define MDS_RET_LEN 256
@@ -15,8 +15,8 @@ struct mds_priv_data {
     char ret_data[MDS_RET_LEN];       /* returned data--max value, most are less */
 };
 
-extern const struct rig_caps mds_4710_caps;
-extern const struct rig_caps mds_9710_caps;
+extern struct rig_caps mds_4710_caps;
+extern struct rig_caps mds_9710_caps;
 
 int mds_init(RIG *rig);
 int mds_open(RIG *rig);

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 #include "ic10.h"
 
@@ -43,6 +43,7 @@ static struct kenwood_priv_caps  ts440_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
     .if_len =  37,
+    .tone_table_base = 1,
 };
 
 /*
@@ -53,7 +54,7 @@ static struct kenwood_priv_caps  ts440_priv_caps  =
  * .http = //www.ifrance.fr/clucas/modposte/ts440/mod440.htm
  *
  */
-const struct rig_caps ts440_caps =
+struct rig_caps ts440_caps =
 {
     RIG_MODEL(RIG_MODEL_TS440),
     .model_name = "TS-440S",

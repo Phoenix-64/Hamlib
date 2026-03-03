@@ -22,10 +22,10 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 #include "misc.h"
-
+#include "cache.h"
 
 #define IC821H_MODES (RIG_MODE_SSB|RIG_MODE_CW|RIG_MODE_FM)
 
@@ -54,9 +54,8 @@ static const struct icom_priv_caps ic821h_priv_caps =
 
 // split could be on VFOA/B or Main/Sub
 // If Main/Sub we assume we're doing satmode
-int ic821h_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
+static int ic821h_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 {
-    struct icom_priv_data *priv = (struct icom_priv_data *) rig->state.priv;
     int retval = -RIG_EINTERNAL;
 
     ENTERFUNC;
@@ -65,18 +64,18 @@ int ic821h_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 
     if (tx_vfo == RIG_VFO_MAIN)
     {
-        rig->state.cache.satmode =
+        CACHE(rig)->satmode =
             split;  // we emulate satmode of other rigs since we apparently can't query
         rig_debug(RIG_DEBUG_TRACE, "%s: tx_vfo==MAIN so assuming sat mode=%d\n",
-                  __func__, rig->state.cache.satmode);
-        priv->tx_vfo = split == RIG_SPLIT_ON ? RIG_VFO_SUB : RIG_VFO_MAIN;
+                  __func__, CACHE(rig)->satmode);
+        STATE(rig)->tx_vfo = split == RIG_SPLIT_ON ? RIG_VFO_SUB : RIG_VFO_MAIN;
         // the IC821 seems to be backwards in satmode -- setting Main select Sub and vice versa
         retval = rig_set_vfo(rig, RIG_VFO_SUB);
     }
     else if (tx_vfo == RIG_VFO_A)
     {
         retval = rig_set_vfo(rig, RIG_VFO_A);
-        priv->tx_vfo = split == RIG_SPLIT_ON ? RIG_VFO_B : RIG_VFO_A;
+        STATE(rig)->tx_vfo = split == RIG_SPLIT_ON ? RIG_VFO_B : RIG_VFO_A;
     }
     else
     {
@@ -88,7 +87,7 @@ int ic821h_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
     RETURNFUNC(retval);
 }
 
-const struct rig_caps ic821h_caps =
+struct rig_caps ic821h_caps =
 {
     RIG_MODEL(RIG_MODEL_IC821H),
     .model_name = "IC-821H",
@@ -121,8 +120,8 @@ const struct rig_caps ic821h_caps =
     .ctcss_list =  NULL,
     .dcs_list =  NULL,
     .preamp =   { RIG_DBLST_END, },
-    .attenuator =   { RIG_DBLST_END, },    /* Attanuator 15dB for each band. manual button */
-    .max_rit =  Hz(0),     /* SSB,CW: +-1.0kHz  FM: +-5.0kHz */
+    .attenuator =   { RIG_DBLST_END, },    /* Attenuator 15dB for each band. manual button */
+    .max_rit =  Hz(0),     /* SSB,CW: +-1.0 kHz  FM: +-5.0 kHz */
     .max_xit =  Hz(0),
     .max_ifshift =  Hz(0),  /* 1.2kHz manual knob */
     .targetable_vfo =  0,
@@ -182,8 +181,8 @@ const struct rig_caps ic821h_caps =
     },
     /* mode/filter list, remember: order matters! */
     .filters =  {
-        {RIG_MODE_CW | RIG_MODE_SSB, kHz(2.3)}, /* buildin */
-        {RIG_MODE_FM, kHz(15)},                 /* buildin */
+        {RIG_MODE_CW | RIG_MODE_SSB, kHz(2.3)}, /* built-in */
+        {RIG_MODE_FM, kHz(15)},                 /* built-in */
         RIG_FLT_END,
     },
 

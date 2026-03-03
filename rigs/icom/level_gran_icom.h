@@ -12,7 +12,6 @@ LVL_KEYSPD
 
         // Once included these values can be overridden in the back-end
         // Known variants are AGC_TIME, PREAMP, ATT, NB, CWPITCH, IF, NOTCHF, VOXDELAY, BKINDL, BKIN_DLYMS, RFPOWER_METER(255 or 100), RFPOWER_METER_WATTS(255 or 100)
-        // cppcheck-suppress *
         /* raw data */
         [LVL_RAWSTR]        = { .min = { .i = 0 },     .max = { .i = 255 } },
         /* levels with dB units */
@@ -21,9 +20,13 @@ LVL_KEYSPD
         [LVL_STRENGTH]      = { .min = { .i = 0 },     .max = { .i = 60 },   .step = { .i = 0 } },
         [LVL_NB]            = { .min = { .f = 0 },     .max = { .f = 10 },   .step = { .f = 1 } },
         /* levels with WPM units */
+#if !defined(NO_LVL_KEYSPD) 
         [LVL_KEYSPD]  = { .min = { .i = 4 },           .max = { .i = 60 },   .step = { .i = 1 } },
+#endif
         /* levels with Hz units */
+#if !defined(NO_LVL_CWPITCH) 
         [LVL_CWPITCH]       = { .min = { .i = 300 },   .max = { .i = 900  }, .step = { .i = 5  } },
+#endif
         [LVL_IF]            = { .min = { .i = -1200 }, .max = { .i = 1200 }, .step = { .i = 20 } },
         [LVL_NOTCHF]        = { .min = { .i = 1 },     .max = { .i = 3200 }, .step = { .i = 10 } },
         /* levels with time units */
@@ -51,7 +54,13 @@ LVL_KEYSPD
         [LVL_VOXGAIN]       = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/255.0f } },
         [LVL_ANTIVOX]       = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/255.0f } },
         [LVL_ALC]           = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/120.0f } },
+#if !defined(NO_LVL_USB_AF) 
         [LVL_USB_AF]        = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/255.0f } },
+#endif
+#if !defined(NO_LVL_PBT_IN) 
         [LVL_PBT_IN]        = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/255.0f } },
+#endif
+#if !defined(NO_LVL_PBT_OUT) 
         [LVL_PBT_OUT]       = { .min = { .f = .0 },    .max = { .f = 1 },    .step = { .f = 1.0f/255.0f } },
+#endif 
 

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 #include "ic10.h"
 
@@ -46,6 +46,7 @@ static struct kenwood_priv_caps  r5000_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
     .if_len =  32,
+    .tone_table_base = 1,
 };
 
 /*
@@ -53,7 +54,7 @@ static struct kenwood_priv_caps  r5000_priv_caps  =
  *
  * TODO: scan, get/set_channel, RIT
  */
-const struct rig_caps r5000_caps =
+struct rig_caps r5000_caps =
 {
     RIG_MODEL(RIG_MODEL_R5000),
     .model_name = "R-5000",

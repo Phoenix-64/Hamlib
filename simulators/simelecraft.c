@@ -1,23 +1,14 @@
 // can run this using rigctl/rigctld and socat pty devices
-// gcc -o simyaesu simyaesu.c
 #define _XOPEN_SOURCE 700
 // since we are POSIX here we need this
-#if  0
-struct ip_mreq
-{
-    int dummy;
-};
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
 #include <string.h>
-#include <unistd.h>
-#include <hamlib/rig.h>
-#include "sim.h"
 
-#define BUFSIZE 256
+#include "hamlib/rig.h"
+#include "sim.h"
+#include "misc.h"
+
 
 float freqA = 14074000;
 float freqB = 14074500;
@@ -35,99 +26,26 @@ int rxattenuatorB = 0;
 int keyspd = 20;
 int ai = 0;
 int dt = 0;
+int modea = 2;
+int modeb = 2;
+int ptt = 0;
 
-// ID 0310 == 310, Must drop leading zero
-typedef enum nc_rigid_e
-{
-    NC_RIGID_NONE            = 0,
-    NC_RIGID_FT450           = 241,
-    NC_RIGID_FT450D          = 244,
-    NC_RIGID_FT950           = 310,
-    NC_RIGID_FT891           = 135,
-    NC_RIGID_FT991           = 135,
-    NC_RIGID_FT2000          = 251,
-    NC_RIGID_FT2000D         = 252,
-    NC_RIGID_FTDX1200        = 583,
-    NC_RIGID_FTDX9000D       = 101,
-    NC_RIGID_FTDX9000Contest = 102,
-    NC_RIGID_FTDX9000MP      = 103,
-    NC_RIGID_FTDX5000        = 362,
-    NC_RIGID_FTDX3000        = 460,
-    NC_RIGID_FTDX101D        = 681,
-    NC_RIGID_FTDX101MP       = 682
-} nc_rigid_t;
-
-int
-getmyline(int fd, char *buf)
-{
-    char c;
-    int i = 0;
-    memset(buf, 0, BUFSIZE);
-
-    while (read(fd, &c, 1) > 0)
-    {
-        buf[i++] = c;
-
-        if (c == ';') { return strlen(buf); }
-    }
-
-    return strlen(buf);
-}
-
-#if defined(WIN32) || defined(_WIN32)
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd;
-    fd = open(comport, O_RDWR);
-
-    if (fd < 0)
-    {
-        perror(comport);
-    }
-
-    return fd;
-}
-
-#else
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd = posix_openpt(O_RDWR);
-    char *name = ptsname(fd);
-
-    if (name == NULL)
-    {
-        perror("pstname");
-        return -1;
-    }
-
-    printf("name=%s\n", name);
-
-    if (fd == -1 || grantpt(fd) == -1 || unlockpt(fd) == -1)
-    {
-        perror("posix_openpt");
-        return -1;
-    }
-
-    return fd;
-}
-#endif
 
 
 
 int main(int argc, char *argv[])
 {
-    char buf[256];
+    char buf[BUFSIZE];
     char *pbuf;
     int n;
     int fd = openPort(argv[1]);
-    int modea = 3, modeb = 3;
     int freqa = 14074000, freqb = 14073500;
 
     while (1)
     {
         buf[0] = 0;
 
-        if ((n = getmyline(fd, buf)) > 0) { printf("Cmd:%s, len=%d\n", buf, n); }
+        if ((n = getmyline(fd, buf)) > 0) { if (strstr(buf, "BW")) printf("Cmd:%s, len=%d\n", buf, n); }
         else {continue; }
 
         if (strcmp(buf, "RM5;") == 0)
@@ -159,8 +77,10 @@ int main(int argc, char *argv[])
             printf("%s\n", buf);
             hl_usleep(50 * 1000);
             //pbuf = "IF059014200000+000000700000;";
-            pbuf = "IF00007230000     -000000 0001000001 ;" ;
+            pbuf = strdup("IF00007230000     -000000 00?1000001 ;") ;
+            pbuf[28] = ptt == 0 ? '0' : '1';
             WRITE(fd, pbuf, strlen(pbuf));
+            free(pbuf);
         }
         else if (strcmp(buf, "ID;") == 0)
         {
@@ -309,9 +229,13 @@ int main(int argc, char *argv[])
         {
             WRITE(fd, "K30;", 4);
         }
+        else if (strcmp(buf, "RVD;") == 0)
+        {
+            WRITE(fd, "RVD02.36;", 9);
+        }
         else if (strcmp(buf, "RVM;") == 0)
         {
-            WRITE(fd, "RV02.37;", 8);
+            WRITE(fd, "RVM02.37;", 9);
         }
         else if (strcmp(buf, "MD;") == 0)
         {
@@ -426,6 +350,14 @@ int main(int argc, char *argv[])
         else if (strncmp(buf, "KY", 2) == 0)
         {
             printf("Morse: %s\n", buf);
+        }
+        else if (strncmp(buf, "TX", 2) == 0)
+        {
+            ptt = 1;
+        }
+        else if (strncmp(buf, "RX", 2) == 0)
+        {
+            ptt = 0;
         }
         else if (strlen(buf) > 0)
         {

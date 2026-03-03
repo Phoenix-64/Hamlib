@@ -30,7 +30,7 @@
 
 #include "hamlib/rig.h"
 #include "bandplan.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "yaesu.h"
 #include "ft840.h"
@@ -239,7 +239,7 @@ struct ft840_priv_data
  *
  */
 
-const struct rig_caps ft840_caps =
+struct rig_caps ft840_caps =
 {
     RIG_MODEL(RIG_MODEL_FT840),
     .model_name =         "FT-840",
@@ -387,15 +387,15 @@ static int ft840_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct ft840_priv_data *) calloc(1,
-                      sizeof(struct ft840_priv_data));
+    STATE(rig)->priv = (struct ft840_priv_data *) calloc(1,
+                       sizeof(struct ft840_priv_data));
 
-    if (!rig->state.priv)                       /* whoops! memory shortage! */
+    if (!STATE(rig)->priv)                       /* whoops! memory shortage! */
     {
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     /* TODO: read pacing from preferences */
     priv->pacing = FT840_PACING_DEFAULT_VALUE; /* set pacing to minimum for now */
@@ -422,12 +422,12 @@ static int ft840_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -440,7 +440,6 @@ static int ft840_cleanup(RIG *rig)
 
 static int ft840_open(RIG *rig)
 {
-    struct rig_state *rig_s;
     struct ft840_priv_data *priv;
     int err;
 
@@ -451,13 +450,12 @@ static int ft840_open(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
-    rig_s = &rig->state;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: write_delay = %i msec\n",
-              __func__, rig_s->rigport.write_delay);
+              __func__, RIGPORT(rig)->write_delay);
     rig_debug(RIG_DEBUG_TRACE, "%s: post_write_delay = %i msec\n",
-              __func__, rig_s->rigport.post_write_delay);
+              __func__, RIGPORT(rig)->post_write_delay);
     rig_debug(RIG_DEBUG_TRACE,
               "%s: read pacing = %i\n", __func__, priv->pacing);
 
@@ -515,7 +513,7 @@ static int ft840_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed freq = %"PRIfreq" Hz\n", __func__, freq);
@@ -571,7 +569,7 @@ static int ft840_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -662,7 +660,7 @@ static int ft840_set_mode(RIG *rig, vfo_t vfo, rmode_t mode,
               rig_strrmode(mode));
     rig_debug(RIG_DEBUG_TRACE, "%s: passed width = %d Hz\n", __func__, (int)width);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -799,7 +797,7 @@ static int ft840_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -943,7 +941,7 @@ static int ft840_set_vfo(RIG *rig, vfo_t vfo)
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -1023,7 +1021,7 @@ static int ft840_get_vfo(RIG *rig, vfo_t *vfo)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     /* Get flags for VFO status */
     err = ft840_get_update_data(rig, FT840_NATIVE_READ_FLAGS,
@@ -1129,7 +1127,7 @@ static int ft840_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed ptt = 0x%02x\n", __func__, ptt);
@@ -1192,7 +1190,7 @@ static int ft840_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     /* Get flags for VFO status */
     err = ft840_get_update_data(rig, FT840_NATIVE_READ_FLAGS,
@@ -1305,7 +1303,7 @@ static int ft840_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     /* Get flags for VFO split status */
     err = ft840_get_update_data(rig, FT840_NATIVE_READ_FLAGS,
@@ -1372,7 +1370,7 @@ static int ft840_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed rit = %li\n", __func__, rit);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     /*
      * The assumption here is that the user hasn't changed
@@ -1452,7 +1450,7 @@ static int ft840_get_rit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
 
     rig_debug(RIG_DEBUG_TRACE, "%s: passed vfo = 0x%02x\n", __func__, vfo);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (vfo == RIG_VFO_CURR)
     {
@@ -1604,7 +1602,7 @@ static int ft840_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     rig_debug(RIG_DEBUG_TRACE, "%s: passed level = %s\n", __func__,
               rig_strlevel(level));
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     switch (level)
     {
@@ -1737,7 +1735,7 @@ static int ft840_get_update_data(RIG *rig, unsigned char ci, unsigned char rl)
         return -RIG_EINVAL;
     }
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     err = ft840_send_static_cmd(rig, ci);
 
@@ -1746,7 +1744,7 @@ static int ft840_get_update_data(RIG *rig, unsigned char ci, unsigned char rl)
         return err;
     }
 
-    n = read_block(&rig->state.rigport, priv->update_data, rl);
+    n = read_block(RIGPORT(rig), priv->update_data, rl);
 
     if (n < 0)
     {
@@ -1789,7 +1787,7 @@ static int ft840_send_static_cmd(RIG *rig, unsigned char ci)
         return -RIG_EINVAL;
     }
 
-    err = write_block(&rig->state.rigport, ncmd[ci].nseq,
+    err = write_block(RIGPORT(rig), ncmd[ci].nseq,
                       YAESU_CMD_LENGTH);
 
     if (err != RIG_OK)
@@ -1834,7 +1832,7 @@ static int ft840_send_dynamic_cmd(RIG *rig, unsigned char ci,
               "%s: passed p1 = 0x%02x, p2 = 0x%02x, p3 = 0x%02x, p4 = 0x%02x,\n",
               __func__, p1, p2, p3, p4);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (ncmd[ci].ncomp)
     {
@@ -1850,7 +1848,7 @@ static int ft840_send_dynamic_cmd(RIG *rig, unsigned char ci,
     priv->p_cmd[P3] = p3;
     priv->p_cmd[P4] = p4;
 
-    err = write_block(&rig->state.rigport, (unsigned char *) &priv->p_cmd,
+    err = write_block(RIGPORT(rig), (unsigned char *) &priv->p_cmd,
                       YAESU_CMD_LENGTH);
 
     if (err != RIG_OK)
@@ -1893,7 +1891,7 @@ static int ft840_send_dial_freq(RIG *rig, unsigned char ci, freq_t freq)
     rig_debug(RIG_DEBUG_TRACE, "%s: passed ci = %i\n", __func__, ci);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed freq = %"PRIfreq" Hz\n", __func__, freq);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (ncmd[ci].ncomp)
     {
@@ -1911,7 +1909,7 @@ static int ft840_send_dial_freq(RIG *rig, unsigned char ci, freq_t freq)
     rig_debug(RIG_DEBUG_TRACE, fmt, __func__, (int64_t)from_bcd(priv->p_cmd,
               FT840_BCD_DIAL) * 10);
 
-    err = write_block(&rig->state.rigport, (unsigned char *) &priv->p_cmd,
+    err = write_block(RIGPORT(rig), (unsigned char *) &priv->p_cmd,
                       YAESU_CMD_LENGTH);
 
     if (err != RIG_OK)
@@ -1959,7 +1957,7 @@ static int ft840_send_rit_freq(RIG *rig, unsigned char ci, shortfreq_t rit)
     rig_debug(RIG_DEBUG_TRACE, "%s: passed ci = %i\n", __func__, ci);
     rig_debug(RIG_DEBUG_TRACE, "%s: passed rit = %li Hz\n", __func__, rit);
 
-    priv = (struct ft840_priv_data *)rig->state.priv;
+    priv = (struct ft840_priv_data *)STATE(rig)->priv;
 
     if (ncmd[ci].ncomp)
     {
@@ -1993,7 +1991,7 @@ static int ft840_send_rit_freq(RIG *rig, unsigned char ci, shortfreq_t rit)
     priv->p_cmd[P1] = p1;         /* ick */
     priv->p_cmd[P2] = p2;
 
-    err = write_block(&rig->state.rigport, (char *) &priv->p_cmd,
+    err = write_block(RIGPORT(rig), (char *) &priv->p_cmd,
                       YAESU_CMD_LENGTH);
 
     if (err != RIG_OK)

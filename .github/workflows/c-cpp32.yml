@@ -12,10 +12,11 @@ jobs:
     runs-on: fedora:32
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: bootstrap
       run: |
         sudo apt install libusb-1.0-0-dev
+        sudo apt install libgpiod-dev
         ./bootstrap
     - name: configure
       run: ./configure --without-cxx-binding

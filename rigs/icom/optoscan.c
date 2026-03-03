@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
@@ -60,7 +60,7 @@ static int optoscan_wait_timer(RIG *rig, pltstate_t *state);
 
 /*
  * optoscan_open
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int optoscan_open(RIG *rig)
 {
@@ -70,7 +70,7 @@ int optoscan_open(RIG *rig)
     unsigned char ackbuf[16];
     int ack_len, retval;
 
-    rs = &rig->state;
+    rs = STATE(rig);
     priv = (struct icom_priv_data *)rs->priv;
 
     pltstate = calloc(1, sizeof(pltstate_t));
@@ -106,7 +106,7 @@ int optoscan_open(RIG *rig)
 
 /*
  * optoscan_close
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int optoscan_close(RIG *rig)
 {
@@ -115,7 +115,7 @@ int optoscan_close(RIG *rig)
     unsigned char ackbuf[16];
     int ack_len, retval;
 
-    rs = &rig->state;
+    rs = STATE(rig);
     priv = (struct icom_priv_data *)rs->priv;
 
     /* select LOCAL control */
@@ -141,7 +141,7 @@ int optoscan_close(RIG *rig)
 
 /*
  * optoscan_get_info
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 const char *optoscan_get_info(RIG *rig)
 {
@@ -176,7 +176,7 @@ const char *optoscan_get_info(RIG *rig)
 
 /*
  * optoscan_get_ctcss_tone
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int optoscan_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
 {
@@ -209,7 +209,7 @@ int optoscan_get_ctcss_tone(RIG *rig, vfo_t vfo, tone_t *tone)
 
 /*
  * optoscan_get_dcs_code
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int optoscan_get_dcs_code(RIG *rig, vfo_t vfo, tone_t *code)
 {
@@ -292,9 +292,9 @@ int optoscan_recv_dtmf(RIG *rig, vfo_t vfo, char *digits, int *length)
 }
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
-int optoscan_set_ext_parm(RIG *rig, token_t token, value_t val)
+int optoscan_set_ext_parm(RIG *rig, hamlib_token_t token, value_t val)
 {
     unsigned char epbuf[MAXFRAMELEN], ackbuf[MAXFRAMELEN];
     int ack_len;
@@ -364,10 +364,10 @@ int optoscan_set_ext_parm(RIG *rig, token_t token, value_t val)
 }
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *  and val points to a buffer big enough to hold the conf value.
  */
-int optoscan_get_ext_parm(RIG *rig, token_t token, value_t *val)
+int optoscan_get_ext_parm(RIG *rig, hamlib_token_t token, value_t *val)
 {
     struct optostat status_block;
     int retval;
@@ -422,7 +422,7 @@ int optoscan_get_ext_parm(RIG *rig, token_t token, value_t *val)
 
 /*
  * optoscan_set_level
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int optoscan_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
@@ -487,7 +487,7 @@ int optoscan_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
 /*
  * optoscan_get_level
- * Assumes rig!=NULL, rig->state.priv!=NULL, val!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, val!=NULL
  */
 int optoscan_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
@@ -611,13 +611,14 @@ int optoscan_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
     pltune_cb_t cb;
     int rc, pin_state;
     struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     if (scan != RIG_SCAN_PLT)
     {
         return -RIG_ENAVAIL;
     }
 
-    rs = &rig->state;
+    rs = STATE(rig);
     cb = rig->callbacks.pltune;
     state = ((struct icom_priv_data *)rs->priv)->pltstate;
 
@@ -630,7 +631,7 @@ int optoscan_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
     {
         /* time for CIV command to be sent. this is subtracted from */
         /* rcvr settle time */
-        state->usleep_time = (1000000 / (rig->state.rigport.parm.serial.rate))
+        state->usleep_time = (1000000 / (rp->parm.serial.rate))
                              * 13 * 9;
 
         rc = cb(rig, vfo, &(state->next_freq), &(state->next_mode),
@@ -666,7 +667,7 @@ int optoscan_scan(RIG *rig, vfo_t vfo, scan_t scan, int ch)
 
         optoscan_wait_timer(rig, state); /*Step 5*/
 
-        ser_get_car(&rs->rigport, &pin_state);
+        ser_get_car(rp, &pin_state);
 
         if (pin_state)   /*Step 6*/
         {
@@ -795,12 +796,11 @@ static int optoscan_send_freq(RIG *rig, vfo_t vfo, const pltstate_t *state)
 
 static int optoscan_RTS_toggle(RIG *rig)
 {
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     int state = 0;
 
-    rs = &rig->state;
-    ser_get_rts(&rs->rigport, &state);
-    ser_set_rts(&rs->rigport, !state);
+    ser_get_rts(rp, &state);
+    ser_set_rts(rp, !state);
 
     return RIG_OK;
 }

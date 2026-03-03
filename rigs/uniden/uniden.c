@@ -91,7 +91,7 @@ tone_t uniden_dcs_list[] =
 
 /**
  * uniden_transaction
- * Assumes rig!=NULL rig->state!=NULL rig->caps!=NULL
+ * Assumes rig!=NULL STATE(rig)!=NULL rig->caps!=NULL
  *
  * cmdstr - Command to be sent to the rig. Cmdstr can also be NULL, indicating
  *          that only a reply is needed (nothing will be send).
@@ -99,7 +99,7 @@ tone_t uniden_dcs_list[] =
  *          that the prefix is either the cmdstr prefix or OK.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed and will return with RIG_OK after command was sent.
- * datasize - in: Size of buffer. It is the caller's responsibily to provide
+ * datasize - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *            out: location where to store number of bytes read.
  *
@@ -116,21 +116,22 @@ uniden_transaction(RIG *rig, const char *cmdstr, int cmd_len,
                    char *data, size_t *datasize)
 {
     struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     int retval;
     int retry_read = 0;
     char replybuf[BUFSZ];
     size_t reply_len = BUFSZ;
 
-    rs = &rig->state;
+    rs = STATE(rig);
     rs->transaction_active = 1;
 
 transaction_write:
 
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
     if (cmdstr)
     {
-        retval = write_block(&rs->rigport, (unsigned char *) cmdstr, strlen(cmdstr));
+        retval = write_block(rp, (unsigned char *) cmdstr, strlen(cmdstr));
 
         if (retval != RIG_OK)
         {
@@ -150,12 +151,12 @@ transaction_write:
     }
 
     memset(data, 0, *datasize);
-    retval = read_string(&rs->rigport, (unsigned char *) data, *datasize, EOM,
+    retval = read_string(rp, (unsigned char *) data, *datasize, EOM,
                          strlen(EOM), 0, 1);
 
     if (retval < 0)
     {
-        if (retry_read++ < rig->state.rigport.retry)
+        if (retry_read++ < rp->retry)
         {
             goto transaction_write;
         }
@@ -173,7 +174,7 @@ transaction_write:
         rig_debug(RIG_DEBUG_ERR, "%s: Command is not correctly terminated '%s'\n",
                   __func__, data);
 
-        if (retry_read++ < rig->state.rigport.retry)
+        if (retry_read++ < rp->retry)
         {
             goto transaction_write;
         }
@@ -251,7 +252,7 @@ transaction_write:
          */
         rig_debug(RIG_DEBUG_ERR, "%s: Unexpected reply '%s'\n", __func__, data);
 
-        if (retry_read++ < rig->state.rigport.retry)
+        if (retry_read++ < rp->retry)
         {
             goto transaction_write;
         }
@@ -428,7 +429,7 @@ int uniden_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     switch (level)
     {
     case RIG_LEVEL_ATT:
-        if (rig->state.attenuator[0] == 0)
+        if (STATE(rig)->attenuator[0] == 0)
         {
             return -RIG_EINVAL;
         }
@@ -499,7 +500,7 @@ int uniden_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
             return -RIG_ERJCTED;
         }
 
-        val->i = lvlbuf[2] == 'N' ? rig->state.attenuator[0] : 0;
+        val->i = lvlbuf[2] == 'N' ? STATE(rig)->attenuator[0] : 0;
         break;
 
     default:
@@ -629,7 +630,7 @@ int uniden_get_channel(RIG *rig, vfo_t vfo, channel_t *chan, int read_only)
     /* TODO: Trunk, Delay, Recording */
 
     chan->flags = (membuf[22] == 'N') ? RIG_CHFLAG_SKIP : 0;
-    chan->levels[LVL_ATT].i = (membuf[25] == 'N') ? rig->state.attenuator[0] : 0;
+    chan->levels[LVL_ATT].i = (membuf[25] == 'N') ? STATE(rig)->attenuator[0] : 0;
     sscanf(membuf + 41, "%d", &tone);
 
     if (tone >= 1 && tone <= 38)
@@ -692,7 +693,8 @@ int uniden_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
     }
 
     /* PM089T08511625 */
-    SNPRINTF(cmdbuf, sizeof(cmdbuf), "PM%03d%c%08u" EOM, chan->channel_num, ' ', (unsigned)(chan->freq / 100));
+    SNPRINTF(cmdbuf, sizeof(cmdbuf), "PM%03d%c%08u" EOM, chan->channel_num, ' ',
+             (unsigned)(chan->freq / 100));
 
     ret = uniden_transaction(rig, cmdbuf, strlen(cmdbuf), NULL, membuf, &mem_len);
 
@@ -790,7 +792,8 @@ DECLARE_PROBERIG_BACKEND(uniden)
     int rates[] = { 9600, 19200, 0 };   /* possible baud rates */
     int rates_idx;
 
-    memset(idbuf,0,IDBUFSZ);
+    memset(idbuf, 0, IDBUFSZ);
+
     if (!port)
     {
         return RIG_MODEL_NONE;

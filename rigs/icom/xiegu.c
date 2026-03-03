@@ -31,13 +31,14 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 
 #include "icom.h"
 #include "icom_defs.h"
 #include "frame.h"
 #include "misc.h"
+#include "cache.h"
 #include "tones.h"
 #include "bandplan.h"
 
@@ -131,6 +132,56 @@ static int x108g_rig_open(RIG *rig)
     RETURNFUNC(RIG_OK);
 }
 
+static int xiegu_rig_open(RIG *rig)
+{
+    int retval;
+    unsigned char id[4];
+    int id_len = 2;
+    int cmd = 0x19;
+    int subcmd = 0x00;
+    unsigned short iid;
+
+    retval = icom_rig_open(rig);
+
+    if (retval != RIG_OK) { return retval; }
+
+    retval = icom_transaction(rig, cmd, subcmd, NULL, 0, id, &id_len);
+
+    if (retval == RIG_OK)
+    {
+        dump_hex(id, id_len);
+        iid = (int)id[1];
+
+        if (id_len > 2)
+        {
+            iid = (iid << 8) + id[2];
+        }
+
+        rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu Radio ID=0x%04x\n", __func__, iid);
+
+        switch (iid)
+        {
+        case 0x0070: rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu model %s\n", __func__,
+                                   "G90"); break;
+
+        case 0x0090: rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu model %s\n", __func__,
+                                   "G90S"); break;
+
+        case 0x0106: rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu model %s\n", __func__,
+                                   "G106/G106C"); break;
+
+        case 0x6100:
+        case 0x00a4: rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu model %s\n", __func__,
+                                   "X6100/X6200"); break;
+
+        default: rig_debug(RIG_DEBUG_VERBOSE, "%s: Xiegu model %s\n", __func__,
+                               "Unknown"); break;
+        }
+    }
+
+    return retval;
+}
+
 /*
  * taken from IC-7000 rig capabilities.
  *
@@ -141,14 +192,747 @@ static struct icom_priv_caps x108g_priv_caps =
     0x70,   /* default address */
     0,      /* 731 mode */
     0,    /* no XCHG */
-    ic7200_ts_sc_list
+    ic7200_ts_sc_list,
 };
 
 
-const struct rig_caps x108g_caps =
+struct rig_caps x108g_caps =
 {
     RIG_MODEL(RIG_MODEL_X108G),
     .model_name = "X108G",
+    .mfg_name =  "Xiegu",
+    .version =  BACKEND_VER ".3",
+    .copyright =  "LGPL",
+    .status =  RIG_STATUS_STABLE,
+    .rig_type =  RIG_TYPE_TRANSCEIVER,
+    .ptt_type =  RIG_PTT_RIG,
+    .dcd_type =  RIG_DCD_RIG,
+    .port_type =  RIG_PORT_SERIAL,
+    .serial_rate_min =  300,
+    .serial_rate_max =  19200,
+    .serial_data_bits =  8,
+    .serial_stop_bits =  1,
+    .serial_parity =  RIG_PARITY_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .write_delay =  0,
+    .post_write_delay =  0,
+    .timeout =  1000,
+    .retry =  3,
+    .has_get_func =  X108G_FUNCS,
+    .has_set_func =  X108G_FUNCS,
+    .has_get_level =  X108G_LEVELS,
+    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
+    .has_get_parm =  X108G_PARMS,
+    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
+    .level_gran = {
+        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+    },
+    .parm_gran =  {},
+    .ctcss_list =  common_ctcss_list,
+    .dcs_list =  common_dcs_list,
+    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
+    .attenuator =   { 12, RIG_DBLST_END, },
+    .max_rit =  Hz(9999),
+    .max_xit =  Hz(9999),
+    .max_ifshift =  Hz(0), /* TODO */
+    .targetable_vfo =  0,
+    .vfo_ops =  X108G_VFO_OPS,
+    .scan_ops =  X108G_SCAN_OPS,
+    .transceive =  RIG_TRN_RIG,
+    .bank_qty =   5,
+    .chan_desc_sz =  0, /* TODO */
+
+    .chan_list =  {
+        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
+        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
+        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
+        RIG_CHAN_END,
+    },
+
+    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list1 =   {
+        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
+        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .tuning_steps = {
+        {X108G_1HZ_TS_MODES, 1},
+        {X108G_NOT_TS_MODES, 10},
+        {X108G_ALL_RX_MODES, Hz(100)},
+        {X108G_ALL_RX_MODES, kHz(1)},
+        {X108G_ALL_RX_MODES, kHz(5)},
+        {X108G_ALL_RX_MODES, kHz(9)},
+        {X108G_ALL_RX_MODES, kHz(10)},
+        {X108G_ALL_RX_MODES, kHz(12.5)},
+        {X108G_ALL_RX_MODES, kHz(20)},
+        {X108G_ALL_RX_MODES, kHz(25)},
+        {X108G_ALL_RX_MODES, kHz(100)},
+        {X108G_NOT_TS_MODES, MHz(1)},
+        RIG_TS_END,
+    },
+
+    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.4)},
+        {RIG_MODE_SSB, kHz(1.8)},
+        {RIG_MODE_SSB, kHz(3)},
+        {RIG_MODE_FM, kHz(10)},
+        {RIG_MODE_FM, kHz(15)},
+        {RIG_MODE_FM, kHz(7)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(3)},
+        {RIG_MODE_AM, kHz(9)},
+        {RIG_MODE_WFM, kHz(280)},
+        RIG_FLT_END,
+    },
+
+    .str_cal = X108G_STR_CAL,
+
+    .cfgparams =  icom_cfg_params,
+    .set_conf =  icom_set_conf,
+    .get_conf =  icom_get_conf,
+
+    .priv = (void *)& x108g_priv_caps,
+    .rig_init =   icom_init,
+    .rig_cleanup =   icom_cleanup,
+    .rig_open =  x108g_rig_open,
+    .rig_close =  icom_rig_close,
+
+    .set_freq =  icom_set_freq,
+    .get_freq =  icom_get_freq,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
+    .set_vfo =  icom_set_vfo,
+    .set_ant =  NULL,  /*automatically set by rig depending band */
+    .get_ant =  NULL,
+
+    .decode_event =  icom_decode_event,
+    .set_level =  icom_set_level,
+    .get_level =  icom_get_level,
+    .set_func =  icom_set_func,
+    .get_func =  icom_get_func,
+    .set_parm =  NULL,
+    .get_parm =  NULL,
+    .set_mem =  icom_set_mem,
+    .set_bank =  icom_set_bank,
+    .vfo_op =  icom_vfo_op,
+    .scan =  icom_scan,
+    .set_ptt =  x108g_set_ptt,
+    .get_ptt =  icom_get_ptt,
+    .get_dcd =  icom_get_dcd,
+    .set_ts =  icom_set_ts,
+    .get_ts =  NULL,
+    .set_rptr_shift =  icom_set_rptr_shift,
+    .get_rptr_shift =  NULL,
+    .set_rptr_offs =  icom_set_rptr_offs,
+    .get_rptr_offs =  icom_get_rptr_offs,
+    .set_ctcss_tone =  icom_set_ctcss_tone,
+    .get_ctcss_tone =  icom_get_ctcss_tone,
+    .set_ctcss_sql =  icom_set_ctcss_sql,
+    .get_ctcss_sql =  icom_get_ctcss_sql,
+    .set_dcs_code =  icom_set_dcs_code,
+    .get_dcs_code =  icom_get_dcs_code,
+    .set_split_freq =  x108g_set_split_freq,
+    .get_split_freq =  icom_get_split_freq,
+    .set_split_mode =  x108g_set_split_mode,
+    .get_split_mode =  icom_get_split_mode,
+    .set_split_vfo =  x108g_set_split_vfo,
+    .get_split_vfo =  NULL,
+    //.set_powerstat = icom_set_powerstat,
+    //.get_powerstat = icom_get_powerstat,
+
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+static struct icom_priv_caps x6100_priv_caps =
+{
+    0xa4,   /* default address */
+    0,      /* 731 mode */
+    0,    /* no XCHG */
+    ic7200_ts_sc_list,
+    .x25x26_always = 0,
+    .x25x26_possibly = 1,
+    .x1cx03_always = 0,
+    .x1cx03_possibly = 0,
+    .x1ax03_supported = 0,
+    .mode_with_filter = 1,
+    .data_mode_supported = 1
+};
+
+struct rig_caps x6100_caps =
+{
+    RIG_MODEL(RIG_MODEL_X6100),
+    .model_name = "X6100",
+    .mfg_name =  "Xiegu",
+    .version =  BACKEND_VER ".6",
+    .copyright =  "LGPL",
+    .status =  RIG_STATUS_STABLE,
+    .rig_type =  RIG_TYPE_TRANSCEIVER,
+    .ptt_type =  RIG_PTT_RIG,
+    .dcd_type =  RIG_DCD_RIG,
+    .port_type =  RIG_PORT_SERIAL,
+    .serial_rate_min =  300,
+    .serial_rate_max =  19200,
+    .serial_data_bits =  8,
+    .serial_stop_bits =  1,
+    .serial_parity =  RIG_PARITY_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .write_delay =  3,
+    .post_write_delay =  0,
+    .timeout =  1000,
+    .retry =  3,
+    .has_get_func =  X108G_FUNCS,
+    .has_set_func =  X108G_FUNCS,
+    .has_get_level =  X108G_LEVELS,
+    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
+    .has_get_parm =  X108G_PARMS,
+    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
+    .level_gran = {
+        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+    },
+    .parm_gran =  {},
+    .ctcss_list =  common_ctcss_list,
+    .dcs_list =  common_dcs_list,
+    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
+    .attenuator =   { 12, RIG_DBLST_END, },
+    .max_rit =  Hz(9999),
+    .max_xit =  Hz(9999),
+    .max_ifshift =  Hz(0), /* TODO */
+    .vfo_ops =  X108G_VFO_OPS,
+    .targetable_vfo =  RIG_TARGETABLE_FREQ | RIG_TARGETABLE_MODE,
+    .scan_ops =  X108G_SCAN_OPS,
+    .transceive =  RIG_TRN_RIG,
+    .bank_qty =   5,
+    .chan_desc_sz =  0, /* TODO */
+
+    .chan_list =  {
+        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
+        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
+        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
+        RIG_CHAN_END,
+    },
+
+    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list1 =   {
+        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
+        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .tuning_steps = {
+        {X108G_1HZ_TS_MODES, 1},
+        {X108G_NOT_TS_MODES, 10},
+        {X108G_ALL_RX_MODES, Hz(100)},
+        {X108G_ALL_RX_MODES, kHz(1)},
+        {X108G_ALL_RX_MODES, kHz(5)},
+        {X108G_ALL_RX_MODES, kHz(9)},
+        {X108G_ALL_RX_MODES, kHz(10)},
+        {X108G_ALL_RX_MODES, kHz(12.5)},
+        {X108G_ALL_RX_MODES, kHz(20)},
+        {X108G_ALL_RX_MODES, kHz(25)},
+        {X108G_ALL_RX_MODES, kHz(100)},
+        {X108G_NOT_TS_MODES, MHz(1)},
+        RIG_TS_END,
+    },
+
+    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.4)},
+        {RIG_MODE_SSB, kHz(1.8)},
+        {RIG_MODE_SSB, kHz(3)},
+        {RIG_MODE_FM, kHz(10)},
+        {RIG_MODE_FM, kHz(15)},
+        {RIG_MODE_FM, kHz(7)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(3)},
+        {RIG_MODE_AM, kHz(9)},
+        {RIG_MODE_WFM, kHz(280)},
+        RIG_FLT_END,
+    },
+
+    .str_cal = X108G_STR_CAL,
+
+    .cfgparams =  icom_cfg_params,
+    .set_conf =  icom_set_conf,
+    .get_conf =  icom_get_conf,
+
+    .priv = (void *)& x6100_priv_caps,
+    .rig_init =   icom_init,
+    .rig_cleanup =   icom_cleanup,
+    .rig_open =  xiegu_rig_open,
+    .rig_close =  icom_rig_close,
+
+    .set_freq =  icom_set_freq,
+    .get_freq =  icom_get_freq,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
+    .set_vfo =  icom_set_vfo,
+    .set_ant =  NULL,  /*automatically set by rig depending band */
+    .get_ant =  NULL,
+
+    .decode_event =  icom_decode_event,
+    .set_level =  icom_set_level,
+    .get_level =  icom_get_level,
+    .set_func =  icom_set_func,
+    .get_func =  icom_get_func,
+    .set_parm =  NULL,
+    .get_parm =  NULL,
+    .set_mem =  icom_set_mem,
+    .set_bank =  icom_set_bank,
+    .vfo_op =  icom_vfo_op,
+    .scan =  icom_scan,
+    .set_ptt =  x108g_set_ptt,
+    .get_ptt =  icom_get_ptt,
+    .get_dcd =  icom_get_dcd,
+    .set_ts =  icom_set_ts,
+    .get_ts =  NULL,
+    .set_rptr_shift =  icom_set_rptr_shift,
+    .get_rptr_shift =  NULL,
+    .set_rptr_offs =  icom_set_rptr_offs,
+    .get_rptr_offs =  icom_get_rptr_offs,
+    .set_ctcss_tone =  icom_set_ctcss_tone,
+    .get_ctcss_tone =  icom_get_ctcss_tone,
+    .set_ctcss_sql =  icom_set_ctcss_sql,
+    .get_ctcss_sql =  icom_get_ctcss_sql,
+    .set_dcs_code =  icom_set_dcs_code,
+    .get_dcs_code =  icom_get_dcs_code,
+    // testing with X6100 showed it rejected the 0x0f 0x01 command
+    .set_split_freq =  icom_set_split_freq,
+    .get_split_freq =  icom_get_split_freq,
+    .set_split_mode =  icom_set_split_mode,
+    .get_split_mode =  icom_get_split_mode,
+    .set_split_vfo =  icom_set_split_vfo,
+    .get_split_vfo =  NULL,
+    //.set_powerstat = icom_set_powerstat,
+    //.get_powerstat = icom_get_powerstat,
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+struct rig_caps x6200_caps =
+{
+    RIG_MODEL(RIG_MODEL_X6200),
+    .model_name = "X6200",
+    .mfg_name =  "Xiegu",
+    .version =  BACKEND_VER ".1",
+    .copyright =  "LGPL",
+    .status =  RIG_STATUS_STABLE,
+    .rig_type =  RIG_TYPE_TRANSCEIVER,
+    .ptt_type =  RIG_PTT_RIG,
+    .dcd_type =  RIG_DCD_RIG,
+    .port_type =  RIG_PORT_SERIAL,
+    .serial_rate_min =  300,
+    .serial_rate_max =  19200,
+    .serial_data_bits =  8,
+    .serial_stop_bits =  1,
+    .serial_parity =  RIG_PARITY_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .write_delay =  3,
+    .post_write_delay =  0,
+    .timeout =  1000,
+    .retry =  3,
+    .has_get_func =  X108G_FUNCS,
+    .has_set_func =  X108G_FUNCS,
+    .has_get_level =  X108G_LEVELS,
+    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
+    .has_get_parm =  X108G_PARMS,
+    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
+    .level_gran = {
+        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+    },
+    .parm_gran =  {},
+    .ctcss_list =  common_ctcss_list,
+    .dcs_list =  common_dcs_list,
+    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
+    .attenuator =   { 12, RIG_DBLST_END, },
+    .max_rit =  Hz(9999),
+    .max_xit =  Hz(9999),
+    .max_ifshift =  Hz(0), /* TODO */
+    .vfo_ops =  X108G_VFO_OPS,
+    .targetable_vfo =  RIG_TARGETABLE_FREQ | RIG_TARGETABLE_MODE,
+    .scan_ops =  X108G_SCAN_OPS,
+    .transceive =  RIG_TRN_RIG,
+    .bank_qty =   5,
+    .chan_desc_sz =  0, /* TODO */
+
+    .chan_list =  {
+        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
+        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
+        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
+        RIG_CHAN_END,
+    },
+
+    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list1 =   {
+        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
+        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .tuning_steps = {
+        {X108G_1HZ_TS_MODES, 1},
+        {X108G_NOT_TS_MODES, 10},
+        {X108G_ALL_RX_MODES, Hz(100)},
+        {X108G_ALL_RX_MODES, kHz(1)},
+        {X108G_ALL_RX_MODES, kHz(5)},
+        {X108G_ALL_RX_MODES, kHz(9)},
+        {X108G_ALL_RX_MODES, kHz(10)},
+        {X108G_ALL_RX_MODES, kHz(12.5)},
+        {X108G_ALL_RX_MODES, kHz(20)},
+        {X108G_ALL_RX_MODES, kHz(25)},
+        {X108G_ALL_RX_MODES, kHz(100)},
+        {X108G_NOT_TS_MODES, MHz(1)},
+        RIG_TS_END,
+    },
+
+    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.4)},
+        {RIG_MODE_SSB, kHz(1.8)},
+        {RIG_MODE_SSB, kHz(3)},
+        {RIG_MODE_FM, kHz(10)},
+        {RIG_MODE_FM, kHz(15)},
+        {RIG_MODE_FM, kHz(7)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(3)},
+        {RIG_MODE_AM, kHz(9)},
+        {RIG_MODE_WFM, kHz(280)},
+        RIG_FLT_END,
+    },
+
+    .str_cal = X108G_STR_CAL,
+
+    .cfgparams =  icom_cfg_params,
+    .set_conf =  icom_set_conf,
+    .get_conf =  icom_get_conf,
+
+    .priv = (void *)& x6100_priv_caps,
+    .rig_init =   icom_init,
+    .rig_cleanup =   icom_cleanup,
+    .rig_open =  xiegu_rig_open,
+    .rig_close =  icom_rig_close,
+
+    .set_freq =  icom_set_freq,
+    .get_freq =  icom_get_freq,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
+    .set_vfo =  icom_set_vfo,
+    .set_ant =  NULL,  /*automatically set by rig depending band */
+    .get_ant =  NULL,
+
+    .decode_event =  icom_decode_event,
+    .set_level =  icom_set_level,
+    .get_level =  icom_get_level,
+    .set_func =  icom_set_func,
+    .get_func =  icom_get_func,
+    .set_parm =  NULL,
+    .get_parm =  NULL,
+    .set_mem =  icom_set_mem,
+    .set_bank =  icom_set_bank,
+    .vfo_op =  icom_vfo_op,
+    .scan =  icom_scan,
+    .set_ptt =  x108g_set_ptt,
+    .get_ptt =  icom_get_ptt,
+    .get_dcd =  icom_get_dcd,
+    .set_ts =  icom_set_ts,
+    .get_ts =  NULL,
+    .set_rptr_shift =  icom_set_rptr_shift,
+    .get_rptr_shift =  NULL,
+    .set_rptr_offs =  icom_set_rptr_offs,
+    .get_rptr_offs =  icom_get_rptr_offs,
+    .set_ctcss_tone =  icom_set_ctcss_tone,
+    .get_ctcss_tone =  icom_get_ctcss_tone,
+    .set_ctcss_sql =  icom_set_ctcss_sql,
+    .get_ctcss_sql =  icom_get_ctcss_sql,
+    .set_dcs_code =  icom_set_dcs_code,
+    .get_dcs_code =  icom_get_dcs_code,
+    // testing with X6100 showed it rejected the 0x0f 0x01 command
+    .set_split_freq =  icom_set_split_freq,
+    .get_split_freq =  icom_get_split_freq,
+    .set_split_mode =  icom_set_split_mode,
+    .get_split_mode =  icom_get_split_mode,
+    .set_split_vfo =  icom_set_split_vfo,
+    .get_split_vfo =  NULL,
+    //.set_powerstat = icom_set_powerstat,
+    //.get_powerstat = icom_get_powerstat,
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+static struct icom_priv_caps g90_priv_caps =
+{
+    0xa4,   /* default address */
+    0,      /* 731 mode */
+    0,    /* no XCHG */
+    ic7200_ts_sc_list,
+    .x25x26_always = 0,
+    .x25x26_possibly = 1, // Firmware G90 v20240504.8 doesn't work well -- see https://github.com/Hamlib/Hamlib/issues/1547
+    .x1cx03_always = 0,
+    .x1cx03_possibly = 0,
+    .x1ax03_supported = 0,
+    .mode_with_filter = 1,
+    .data_mode_supported = 1
+};
+
+struct rig_caps g90_caps =
+{
+    RIG_MODEL(RIG_MODEL_G90),
+    .model_name = "G90",
+    .mfg_name =  "Xiegu",
+    .version =  BACKEND_VER ".11",
+    .copyright =  "LGPL",
+    .status =  RIG_STATUS_STABLE,
+    .rig_type =  RIG_TYPE_TRANSCEIVER,
+    .ptt_type =  RIG_PTT_RIG,
+    .dcd_type =  RIG_DCD_RIG,
+    .port_type =  RIG_PORT_SERIAL,
+    .serial_rate_min =  19200,
+    .serial_rate_max =  19200,
+    .serial_data_bits =  8,
+    .serial_stop_bits =  1,
+    .serial_parity =  RIG_PARITY_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .write_delay =  0,
+    .post_write_delay =  0,
+    .timeout =  1000,
+    .retry =  3,
+    .has_get_func =  X108G_FUNCS,
+    .has_set_func =  X108G_FUNCS,
+    .has_get_level =  X108G_LEVELS,
+    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
+    .has_get_parm =  X108G_PARMS,
+    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
+    .level_gran = {
+        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
+    },
+    .parm_gran =  {},
+    .ctcss_list =  common_ctcss_list,
+    .dcs_list =  common_dcs_list,
+    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
+    .attenuator =   { 12, RIG_DBLST_END, },
+    .max_rit =  Hz(9999),
+    .max_xit =  Hz(9999),
+    .max_ifshift =  Hz(0), /* TODO */
+    .vfo_ops =  X108G_VFO_OPS,
+    .targetable_vfo =  RIG_TARGETABLE_FREQ | RIG_TARGETABLE_MODE,
+    .scan_ops =  X108G_SCAN_OPS,
+    .transceive =  RIG_TRN_RIG,
+    .bank_qty =   5,
+    .chan_desc_sz =  0, /* TODO */
+
+    .chan_list =  {
+        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
+        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
+        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
+        RIG_CHAN_END,
+    },
+
+    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list1 =   {
+        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
+        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
+    },
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
+        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
+        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
+        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
+        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
+        RIG_FRNG_END,
+    },
+
+    .tuning_steps = {
+        {X108G_1HZ_TS_MODES, 1},
+        {X108G_NOT_TS_MODES, 10},
+        {X108G_ALL_RX_MODES, Hz(100)},
+        {X108G_ALL_RX_MODES, kHz(1)},
+        {X108G_ALL_RX_MODES, kHz(5)},
+        {X108G_ALL_RX_MODES, kHz(9)},
+        {X108G_ALL_RX_MODES, kHz(10)},
+        {X108G_ALL_RX_MODES, kHz(12.5)},
+        {X108G_ALL_RX_MODES, kHz(20)},
+        {X108G_ALL_RX_MODES, kHz(25)},
+        {X108G_ALL_RX_MODES, kHz(100)},
+        {X108G_NOT_TS_MODES, MHz(1)},
+        RIG_TS_END,
+    },
+
+    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
+    .filters =  {
+        {RIG_MODE_SSB, kHz(2.4)},
+        {RIG_MODE_SSB, kHz(1.8)},
+        {RIG_MODE_SSB, kHz(3)},
+        {RIG_MODE_FM, kHz(10)},
+        {RIG_MODE_FM, kHz(15)},
+        {RIG_MODE_FM, kHz(7)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
+        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
+        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
+        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
+        {RIG_MODE_AM, kHz(6)},
+        {RIG_MODE_AM, kHz(3)},
+        {RIG_MODE_AM, kHz(9)},
+        {RIG_MODE_WFM, kHz(280)},
+        RIG_FLT_END,
+    },
+
+    .str_cal = X108G_STR_CAL,
+
+    .cfgparams =  icom_cfg_params,
+    .set_conf =  icom_set_conf,
+    .get_conf =  icom_get_conf,
+
+    .priv = (void *)& g90_priv_caps,
+    .rig_init =   icom_init,
+    .rig_cleanup =   icom_cleanup,
+    .rig_open =  xiegu_rig_open,
+    .rig_close =  icom_rig_close,
+
+    .set_freq =  icom_set_freq,
+    .get_freq =  icom_get_freq,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
+    .set_vfo =  icom_set_vfo,
+    .set_ant =  NULL,  /*automatically set by rig depending band */
+    .get_ant =  NULL,
+
+    .decode_event =  icom_decode_event,
+    .set_level =  icom_set_level,
+    .get_level =  icom_get_level,
+    .set_func =  icom_set_func,
+    .get_func =  icom_get_func,
+    .set_parm =  NULL,
+    .get_parm =  NULL,
+    .set_mem =  icom_set_mem,
+    .set_bank =  icom_set_bank,
+    .vfo_op =  icom_vfo_op,
+    .scan =  icom_scan,
+    .set_ptt =  x108g_set_ptt,
+    .get_ptt =  icom_get_ptt,
+    .get_dcd =  icom_get_dcd,
+    .set_ts =  icom_set_ts,
+    .get_ts =  NULL,
+    .set_rptr_shift =  icom_set_rptr_shift,
+    .get_rptr_shift =  NULL,
+    .set_rptr_offs =  icom_set_rptr_offs,
+    .get_rptr_offs =  icom_get_rptr_offs,
+    .set_ctcss_tone =  icom_set_ctcss_tone,
+    .get_ctcss_tone =  icom_get_ctcss_tone,
+    .set_ctcss_sql =  icom_set_ctcss_sql,
+    .get_ctcss_sql =  icom_get_ctcss_sql,
+    .set_dcs_code =  icom_set_dcs_code,
+    .get_dcs_code =  icom_get_dcs_code,
+    .set_split_freq =  icom_set_split_freq,
+    .get_split_freq =  icom_get_split_freq,
+    .set_split_mode =  icom_set_split_mode,
+    .get_split_mode =  icom_get_split_mode,
+    .set_split_vfo =  icom_set_split_vfo,
+    .get_split_vfo =  NULL,
+    //.set_powerstat = icom_set_powerstat,
+    //.get_powerstat = icom_get_powerstat,
+    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
+};
+
+struct rig_caps x5105_caps =
+{
+    RIG_MODEL(RIG_MODEL_X5105),
+    .model_name = "X5105",
     .mfg_name =  "Xiegu",
     .version =  BACKEND_VER ".2",
     .copyright =  "LGPL",
@@ -216,7 +1000,7 @@ const struct rig_caps x108g_caps =
     .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
         {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
     },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
         FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
         FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
         FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
@@ -272,536 +1056,8 @@ const struct rig_caps x108g_caps =
     .priv = (void *)& x108g_priv_caps,
     .rig_init =   icom_init,
     .rig_cleanup =   icom_cleanup,
-    .rig_open =  x108g_rig_open,
-    .rig_close =  icom_rig_open,
-
-    .set_freq =  icom_set_freq,
-    .get_freq =  icom_get_freq,
-    .set_mode =  icom_set_mode,
-    .get_mode =  icom_get_mode,
-    .set_vfo =  icom_set_vfo,
-    .set_ant =  NULL,  /*automatically set by rig depending band */
-    .get_ant =  NULL,
-
-    .decode_event =  icom_decode_event,
-    .set_level =  icom_set_level,
-    .get_level =  icom_get_level,
-    .set_func =  icom_set_func,
-    .get_func =  icom_get_func,
-    .set_parm =  NULL,
-    .get_parm =  NULL,
-    .set_mem =  icom_set_mem,
-    .set_bank =  icom_set_bank,
-    .vfo_op =  icom_vfo_op,
-    .scan =  icom_scan,
-    .set_ptt =  x108g_set_ptt,
-    .get_ptt =  icom_get_ptt,
-    .get_dcd =  icom_get_dcd,
-    .set_ts =  icom_set_ts,
-    .get_ts =  NULL,
-    .set_rptr_shift =  icom_set_rptr_shift,
-    .get_rptr_shift =  NULL,
-    .set_rptr_offs =  icom_set_rptr_offs,
-    .get_rptr_offs =  icom_get_rptr_offs,
-    .set_ctcss_tone =  icom_set_ctcss_tone,
-    .get_ctcss_tone =  icom_get_ctcss_tone,
-    .set_ctcss_sql =  icom_set_ctcss_sql,
-    .get_ctcss_sql =  icom_get_ctcss_sql,
-    .set_dcs_code =  icom_set_dcs_code,
-    .get_dcs_code =  icom_get_dcs_code,
-    .set_split_freq =  x108g_set_split_freq,
-    .get_split_freq =  icom_get_split_freq,
-    .set_split_mode =  x108g_set_split_mode,
-    .get_split_mode =  icom_get_split_mode,
-    .set_split_vfo =  x108g_set_split_vfo,
-    .get_split_vfo =  NULL,
-    //.set_powerstat = icom_set_powerstat,
-    //.get_powerstat = icom_get_powerstat,
-
-    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
-};
-
-const struct rig_caps x6100_caps =
-{
-    RIG_MODEL(RIG_MODEL_X6100),
-    .model_name = "X6100",
-    .mfg_name =  "Xiegu",
-    .version =  BACKEND_VER ".4",
-    .copyright =  "LGPL",
-    .status =  RIG_STATUS_STABLE,
-    .rig_type =  RIG_TYPE_TRANSCEIVER,
-    .ptt_type =  RIG_PTT_RIG,
-    .dcd_type =  RIG_DCD_RIG,
-    .port_type =  RIG_PORT_SERIAL,
-    .serial_rate_min =  300,
-    .serial_rate_max =  19200,
-    .serial_data_bits =  8,
-    .serial_stop_bits =  1,
-    .serial_parity =  RIG_PARITY_NONE,
-    .serial_handshake =  RIG_HANDSHAKE_NONE,
-    .write_delay =  3,
-    .post_write_delay =  0,
-    .timeout =  1000,
-    .retry =  3,
-    .has_get_func =  X108G_FUNCS,
-    .has_set_func =  X108G_FUNCS,
-    .has_get_level =  X108G_LEVELS,
-    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
-    .has_get_parm =  X108G_PARMS,
-    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
-    .level_gran = {
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-    },
-    .parm_gran =  {},
-    .ctcss_list =  common_ctcss_list,
-    .dcs_list =  common_dcs_list,
-    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
-    .attenuator =   { 12, RIG_DBLST_END, },
-    .max_rit =  Hz(9999),
-    .max_xit =  Hz(9999),
-    .max_ifshift =  Hz(0), /* TODO */
-    .vfo_ops =  X108G_VFO_OPS,
-    .targetable_vfo =  RIG_TARGETABLE_FREQ | RIG_TARGETABLE_MODE,
-    .scan_ops =  X108G_SCAN_OPS,
-    .transceive =  RIG_TRN_RIG,
-    .bank_qty =   5,
-    .chan_desc_sz =  0, /* TODO */
-
-    .chan_list =  {
-        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
-        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
-        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
-        RIG_CHAN_END,
-    },
-
-    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list1 =   {
-        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
-        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .tuning_steps = {
-        {X108G_1HZ_TS_MODES, 1},
-        {X108G_NOT_TS_MODES, 10},
-        {X108G_ALL_RX_MODES, Hz(100)},
-        {X108G_ALL_RX_MODES, kHz(1)},
-        {X108G_ALL_RX_MODES, kHz(5)},
-        {X108G_ALL_RX_MODES, kHz(9)},
-        {X108G_ALL_RX_MODES, kHz(10)},
-        {X108G_ALL_RX_MODES, kHz(12.5)},
-        {X108G_ALL_RX_MODES, kHz(20)},
-        {X108G_ALL_RX_MODES, kHz(25)},
-        {X108G_ALL_RX_MODES, kHz(100)},
-        {X108G_NOT_TS_MODES, MHz(1)},
-        RIG_TS_END,
-    },
-
-    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
-    .filters =  {
-        {RIG_MODE_SSB, kHz(2.4)},
-        {RIG_MODE_SSB, kHz(1.8)},
-        {RIG_MODE_SSB, kHz(3)},
-        {RIG_MODE_FM, kHz(10)},
-        {RIG_MODE_FM, kHz(15)},
-        {RIG_MODE_FM, kHz(7)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
-        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
-        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
-        {RIG_MODE_AM, kHz(6)},
-        {RIG_MODE_AM, kHz(3)},
-        {RIG_MODE_AM, kHz(9)},
-        {RIG_MODE_WFM, kHz(280)},
-        RIG_FLT_END,
-    },
-
-    .str_cal = X108G_STR_CAL,
-
-    .cfgparams =  icom_cfg_params,
-    .set_conf =  icom_set_conf,
-    .get_conf =  icom_get_conf,
-
-    .priv = (void *)& x108g_priv_caps,
-    .rig_init =   icom_init,
-    .rig_cleanup =   icom_cleanup,
-    .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
-
-    .set_freq =  icom_set_freq,
-    .get_freq =  icom_get_freq,
-    .set_mode =  icom_set_mode_with_data,
-    .get_mode =  icom_get_mode_with_data,
-    .set_vfo =  icom_set_vfo,
-    .set_ant =  NULL,  /*automatically set by rig depending band */
-    .get_ant =  NULL,
-
-    .decode_event =  icom_decode_event,
-    .set_level =  icom_set_level,
-    .get_level =  icom_get_level,
-    .set_func =  icom_set_func,
-    .get_func =  icom_get_func,
-    .set_parm =  NULL,
-    .get_parm =  NULL,
-    .set_mem =  icom_set_mem,
-    .set_bank =  icom_set_bank,
-    .vfo_op =  icom_vfo_op,
-    .scan =  icom_scan,
-    .set_ptt =  x108g_set_ptt,
-    .get_ptt =  icom_get_ptt,
-    .get_dcd =  icom_get_dcd,
-    .set_ts =  icom_set_ts,
-    .get_ts =  NULL,
-    .set_rptr_shift =  icom_set_rptr_shift,
-    .get_rptr_shift =  NULL,
-    .set_rptr_offs =  icom_set_rptr_offs,
-    .get_rptr_offs =  icom_get_rptr_offs,
-    .set_ctcss_tone =  icom_set_ctcss_tone,
-    .get_ctcss_tone =  icom_get_ctcss_tone,
-    .set_ctcss_sql =  icom_set_ctcss_sql,
-    .get_ctcss_sql =  icom_get_ctcss_sql,
-    .set_dcs_code =  icom_set_dcs_code,
-    .get_dcs_code =  icom_get_dcs_code,
-    // testing with X6100 showed it rejected the 0x0f 0x01 command
-    .set_split_freq =  icom_set_split_freq,
-    .get_split_freq =  icom_get_split_freq,
-    .set_split_mode =  icom_set_split_mode,
-    .get_split_mode =  icom_get_split_mode,
-    .set_split_vfo =  icom_set_split_vfo,
-    .get_split_vfo =  NULL,
-    //.set_powerstat = icom_set_powerstat,
-    //.get_powerstat = icom_get_powerstat,
-    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
-};
-
-const struct rig_caps g90_caps =
-{
-    RIG_MODEL(RIG_MODEL_G90),
-    .model_name = "G90",
-    .mfg_name =  "Xiegu",
-    .version =  BACKEND_VER ".5",
-    .copyright =  "LGPL",
-    .status =  RIG_STATUS_STABLE,
-    .rig_type =  RIG_TYPE_TRANSCEIVER,
-    .ptt_type =  RIG_PTT_RIG,
-    .dcd_type =  RIG_DCD_RIG,
-    .port_type =  RIG_PORT_SERIAL,
-    .serial_rate_min =  300,
-    .serial_rate_max =  19200,
-    .serial_data_bits =  8,
-    .serial_stop_bits =  1,
-    .serial_parity =  RIG_PARITY_NONE,
-    .serial_handshake =  RIG_HANDSHAKE_NONE,
-    .write_delay =  0,
-    .post_write_delay =  0,
-    .timeout =  1000,
-    .retry =  3,
-    .has_get_func =  X108G_FUNCS,
-    .has_set_func =  X108G_FUNCS,
-    .has_get_level =  X108G_LEVELS,
-    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
-    .has_get_parm =  X108G_PARMS,
-    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
-    .level_gran = {
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-    },
-    .parm_gran =  {},
-    .ctcss_list =  common_ctcss_list,
-    .dcs_list =  common_dcs_list,
-    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
-    .attenuator =   { 12, RIG_DBLST_END, },
-    .max_rit =  Hz(9999),
-    .max_xit =  Hz(9999),
-    .max_ifshift =  Hz(0), /* TODO */
-    .targetable_vfo =  0,
-    .vfo_ops =  X108G_VFO_OPS,
-    .targetable_vfo =  RIG_TARGETABLE_FREQ | RIG_TARGETABLE_MODE,
-    .scan_ops =  X108G_SCAN_OPS,
-    .transceive =  RIG_TRN_RIG,
-    .bank_qty =   5,
-    .chan_desc_sz =  0, /* TODO */
-
-    .chan_list =  {
-        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
-        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
-        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
-        RIG_CHAN_END,
-    },
-
-    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list1 =   {
-        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
-        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .tuning_steps = {
-        {X108G_1HZ_TS_MODES, 1},
-        {X108G_NOT_TS_MODES, 10},
-        {X108G_ALL_RX_MODES, Hz(100)},
-        {X108G_ALL_RX_MODES, kHz(1)},
-        {X108G_ALL_RX_MODES, kHz(5)},
-        {X108G_ALL_RX_MODES, kHz(9)},
-        {X108G_ALL_RX_MODES, kHz(10)},
-        {X108G_ALL_RX_MODES, kHz(12.5)},
-        {X108G_ALL_RX_MODES, kHz(20)},
-        {X108G_ALL_RX_MODES, kHz(25)},
-        {X108G_ALL_RX_MODES, kHz(100)},
-        {X108G_NOT_TS_MODES, MHz(1)},
-        RIG_TS_END,
-    },
-
-    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
-    .filters =  {
-        {RIG_MODE_SSB, kHz(2.4)},
-        {RIG_MODE_SSB, kHz(1.8)},
-        {RIG_MODE_SSB, kHz(3)},
-        {RIG_MODE_FM, kHz(10)},
-        {RIG_MODE_FM, kHz(15)},
-        {RIG_MODE_FM, kHz(7)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
-        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
-        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
-        {RIG_MODE_AM, kHz(6)},
-        {RIG_MODE_AM, kHz(3)},
-        {RIG_MODE_AM, kHz(9)},
-        {RIG_MODE_WFM, kHz(280)},
-        RIG_FLT_END,
-    },
-
-    .str_cal = X108G_STR_CAL,
-
-    .cfgparams =  icom_cfg_params,
-    .set_conf =  icom_set_conf,
-    .get_conf =  icom_get_conf,
-
-    .priv = (void *)& x108g_priv_caps,
-    .rig_init =   icom_init,
-    .rig_cleanup =   icom_cleanup,
-    .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
-
-    .set_freq =  icom_set_freq,
-    .get_freq =  icom_get_freq,
-    .set_mode =  icom_set_mode,
-    .get_mode =  icom_get_mode,
-    .set_vfo =  icom_set_vfo,
-    .set_ant =  NULL,  /*automatically set by rig depending band */
-    .get_ant =  NULL,
-
-    .decode_event =  icom_decode_event,
-    .set_level =  icom_set_level,
-    .get_level =  icom_get_level,
-    .set_func =  icom_set_func,
-    .get_func =  icom_get_func,
-    .set_parm =  NULL,
-    .get_parm =  NULL,
-    .set_mem =  icom_set_mem,
-    .set_bank =  icom_set_bank,
-    .vfo_op =  icom_vfo_op,
-    .scan =  icom_scan,
-    .set_ptt =  x108g_set_ptt,
-    .get_ptt =  icom_get_ptt,
-    .get_dcd =  icom_get_dcd,
-    .set_ts =  icom_set_ts,
-    .get_ts =  NULL,
-    .set_rptr_shift =  icom_set_rptr_shift,
-    .get_rptr_shift =  NULL,
-    .set_rptr_offs =  icom_set_rptr_offs,
-    .get_rptr_offs =  icom_get_rptr_offs,
-    .set_ctcss_tone =  icom_set_ctcss_tone,
-    .get_ctcss_tone =  icom_get_ctcss_tone,
-    .set_ctcss_sql =  icom_set_ctcss_sql,
-    .get_ctcss_sql =  icom_get_ctcss_sql,
-    .set_dcs_code =  icom_set_dcs_code,
-    .get_dcs_code =  icom_get_dcs_code,
-    .set_split_freq =  icom_set_split_freq,
-    .get_split_freq =  icom_get_split_freq,
-    .set_split_mode =  icom_set_split_mode,
-    .get_split_mode =  icom_get_split_mode,
-    .set_split_vfo =  icom_set_split_vfo,
-    .get_split_vfo =  NULL,
-    //.set_powerstat = icom_set_powerstat,
-    //.get_powerstat = icom_get_powerstat,
-    .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
-};
-
-const struct rig_caps x5105_caps =
-{
-    RIG_MODEL(RIG_MODEL_X5105),
-    .model_name = "X5105",
-    .mfg_name =  "Xiegu",
-    .version =  BACKEND_VER ".1",
-    .copyright =  "LGPL",
-    .status =  RIG_STATUS_STABLE,
-    .rig_type =  RIG_TYPE_TRANSCEIVER,
-    .ptt_type =  RIG_PTT_RIG,
-    .dcd_type =  RIG_DCD_RIG,
-    .port_type =  RIG_PORT_SERIAL,
-    .serial_rate_min =  300,
-    .serial_rate_max =  19200,
-    .serial_data_bits =  8,
-    .serial_stop_bits =  1,
-    .serial_parity =  RIG_PARITY_NONE,
-    .serial_handshake =  RIG_HANDSHAKE_NONE,
-    .write_delay =  0,
-    .post_write_delay =  0,
-    .timeout =  1000,
-    .retry =  3,
-    .has_get_func =  X108G_FUNCS,
-    .has_set_func =  X108G_FUNCS,
-    .has_get_level =  X108G_LEVELS,
-    .has_set_level =  RIG_LEVEL_SET(X108G_LEVELS),
-    .has_get_parm =  X108G_PARMS,
-    .has_set_parm =  RIG_PARM_SET(X108G_PARMS),
-    .level_gran = {
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-    },
-    .parm_gran =  {},
-    .ctcss_list =  common_ctcss_list,
-    .dcs_list =  common_dcs_list,
-    .preamp =   { 10, RIG_DBLST_END, }, /* FIXME: TBC it's a guess*/
-    .attenuator =   { 12, RIG_DBLST_END, },
-    .max_rit =  Hz(9999),
-    .max_xit =  Hz(9999),
-    .max_ifshift =  Hz(0), /* TODO */
-    .targetable_vfo =  0,
-    .vfo_ops =  X108G_VFO_OPS,
-    .scan_ops =  X108G_SCAN_OPS,
-    .transceive =  RIG_TRN_RIG,
-    .bank_qty =   5,
-    .chan_desc_sz =  0, /* TODO */
-
-    .chan_list =  {
-        {   1,  99, RIG_MTYPE_MEM,  X108G_MEM_CAP },
-        { 100, 105, RIG_MTYPE_EDGE, X108G_MEM_CAP },    /* two by two */
-        { 106, 107, RIG_MTYPE_CALL, X108G_MEM_CAP },
-        RIG_CHAN_END,
-    },
-
-    .rx_range_list1 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list1 =   {
-        FRQ_RNG_HF(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(1, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(1, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(1, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(1, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(1, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .rx_range_list2 =   { {kHz(30), MHz(199.999999), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS},
-        {MHz(400), MHz(470), X108G_ALL_RX_MODES, -1, -1, X108G_VFOS}, RIG_FRNG_END,
-    },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
-        FRQ_RNG_HF(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_6m(2, X108G_OTHER_TX_MODES, W(2), W(100), X108G_VFOS, RIG_ANT_1),
-        FRQ_RNG_2m(2, X108G_OTHER_TX_MODES, W(2), W(50), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(35), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_HF(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_6m(2, X108G_AM_TX_MODES, W(1), W(40), X108G_VFOS, RIG_ANT_1), /* AM class */
-        FRQ_RNG_2m(2, X108G_AM_TX_MODES, W(2), W(20), X108G_VFOS, RIG_ANT_2),
-        FRQ_RNG_70cm(2, X108G_OTHER_TX_MODES, W(2), W(14), X108G_VFOS, RIG_ANT_2),
-        RIG_FRNG_END,
-    },
-
-    .tuning_steps = {
-        {X108G_1HZ_TS_MODES, 1},
-        {X108G_NOT_TS_MODES, 10},
-        {X108G_ALL_RX_MODES, Hz(100)},
-        {X108G_ALL_RX_MODES, kHz(1)},
-        {X108G_ALL_RX_MODES, kHz(5)},
-        {X108G_ALL_RX_MODES, kHz(9)},
-        {X108G_ALL_RX_MODES, kHz(10)},
-        {X108G_ALL_RX_MODES, kHz(12.5)},
-        {X108G_ALL_RX_MODES, kHz(20)},
-        {X108G_ALL_RX_MODES, kHz(25)},
-        {X108G_ALL_RX_MODES, kHz(100)},
-        {X108G_NOT_TS_MODES, MHz(1)},
-        RIG_TS_END,
-    },
-
-    /* mode/filter list, remember: order matters! But duplication may speed up search.  Put the most commonly used modes first!  Remember these are defaults, with dsp rigs you can change them to anything you want except FM and WFM which are fixed */
-    .filters =  {
-        {RIG_MODE_SSB, kHz(2.4)},
-        {RIG_MODE_SSB, kHz(1.8)},
-        {RIG_MODE_SSB, kHz(3)},
-        {RIG_MODE_FM, kHz(10)},
-        {RIG_MODE_FM, kHz(15)},
-        {RIG_MODE_FM, kHz(7)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(500)},
-        {RIG_MODE_CW | RIG_MODE_CWR | RIG_MODE_RTTY | RIG_MODE_RTTYR, Hz(250)},
-        {RIG_MODE_CW | RIG_MODE_CWR, kHz(1.2)},
-        {RIG_MODE_RTTY | RIG_MODE_RTTYR, kHz(2.4)},
-        {RIG_MODE_AM, kHz(6)},
-        {RIG_MODE_AM, kHz(3)},
-        {RIG_MODE_AM, kHz(9)},
-        {RIG_MODE_WFM, kHz(280)},
-        RIG_FLT_END,
-    },
-
-    .str_cal = X108G_STR_CAL,
-
-    .cfgparams =  icom_cfg_params,
-    .set_conf =  icom_set_conf,
-    .get_conf =  icom_get_conf,
-
-    .priv = (void *)& x108g_priv_caps,
-    .rig_init =   icom_init,
-    .rig_cleanup =   icom_cleanup,
-    .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_open =  xiegu_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,
@@ -851,7 +1107,7 @@ const struct rig_caps x5105_caps =
 
 /*
  * x108g_set_ptt
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  * The response from the x108g isn't quite right at this time
  * Eventually they may fix their firmware and we can use the icom_set_split_vfo
  */
@@ -887,14 +1143,14 @@ int x108g_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
  * The response from the x108g isn't quite right at this time
  * Eventually they may fix their firmware and we can use the icom_set_split_vfo
  * x108g_set_split
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 static int x108g_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 {
-    struct icom_priv_data *priv = (struct icom_priv_data *)rig->state.priv;
     unsigned char ackbuf[MAXFRAMELEN];
     int ack_len = sizeof(ackbuf), rc;
     int split_sc;
+    struct rig_cache *cachep = CACHE(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -907,10 +1163,10 @@ static int x108g_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
     case RIG_SPLIT_ON:
         split_sc = S_SPLT_ON;
 
-        if (!priv->split_on)
+        if (cachep->split == RIG_SPLIT_OFF)
         {
             /* ensure VFO A is Rx and VFO B is Tx as we assume that elsewhere */
-            if ((rig->state.vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B))
+            if ((STATE(rig)->vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B))
             {
                 if (RIG_OK != (rc = icom_set_vfo(rig, RIG_VFO_A))) { return rc; }
             }
@@ -934,13 +1190,13 @@ static int x108g_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
         return -RIG_ERJCTED;
     }
 
-    priv->split_on = RIG_SPLIT_ON == split;
+    cachep->split = split;
     return RIG_OK;
 }
 
 /*
  * x108g_set_split_freq
- * Assumes rig!=NULL, rig->state.priv!=NULL,
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL,
  *
  * Assumes also that the current VFO is the rx VFO.
  */
@@ -949,12 +1205,12 @@ static int x108g_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
     int rc;
     vfo_t rx_vfo, tx_vfo;
     struct icom_priv_data *priv;
-    struct rig_state *rs;
+    struct rig_state *rs = STATE(rig);
+    struct rig_cache *cachep = CACHE(rig);
     unsigned char ackbuf[MAXFRAMELEN];
     int ack_len = sizeof(ackbuf);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
-    rs = &rig->state;
     priv = (struct icom_priv_data *)rs->priv;
 
     /* This method works also in memory mode(RIG_VFO_MEM) */
@@ -973,13 +1229,18 @@ static int x108g_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
              current VFO is VFO A and the split Tx VFO is always VFO B. These
              assumptions allow us to deal with the lack of VFO and split
              queries */
-    if ((rig->state.vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
-            && priv->split_on)                              /* broken if user changes split on rig :( */
+    /* broken if user changes split on rig :( */
+    if ((STATE(rig)->vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
+            && cachep->split != RIG_SPLIT_OFF)
     {
         /* VFO A/B style rigs swap VFO on split Tx so we need to disable
                  split for certainty */
-        if (RIG_OK != (rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_OFF, NULL, 0,
-                                             ackbuf, &ack_len))) { return rc; }
+        rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_OFF, NULL, 0, ackbuf, &ack_len);
+
+        if (rc != RIG_OK)
+        {
+            return rc;
+        }
 
         if (ack_len != 2 || ackbuf[0] != 0x0f)
         {
@@ -997,12 +1258,16 @@ static int x108g_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
 
     if (RIG_OK != (rc = icom_set_vfo(rig, rx_vfo))) { return rc; }
 
-    if ((rig->state.vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
-            && priv->split_on)
+    if ((STATE(rig)->vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
+            && cachep->split != RIG_SPLIT_OFF)
     {
         /* Re-enable split */
-        if (RIG_OK != (rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_ON, NULL, 0,
-                                             ackbuf, &ack_len))) { return rc; }
+        rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_ON, NULL, 0, ackbuf, &ack_len);
+
+        if (rc != RIG_OK)
+        {
+            return rc;
+        }
     }
 
     return rc;
@@ -1010,7 +1275,7 @@ static int x108g_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
 
 /*
  * x108g_set_split_mode
- * Assumes rig!=NULL, rig->state.priv!=NULL,
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL,
  */
 static int x108g_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
                                 pbwidth_t tx_width)
@@ -1018,12 +1283,12 @@ static int x108g_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
     int rc;
     vfo_t rx_vfo, tx_vfo;
     struct icom_priv_data *priv;
-    struct rig_state *rs;
+    struct rig_state *rs = STATE(rig);
+    struct rig_cache *cachep = CACHE(rig);
     unsigned char ackbuf[MAXFRAMELEN];
     int ack_len = sizeof(ackbuf);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
-    rs = &rig->state;
     priv = (struct icom_priv_data *)rs->priv;
 
     /* This method works also in memory mode(RIG_VFO_MEM) */
@@ -1043,13 +1308,18 @@ static int x108g_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
              current VFO is VFO A and the split Tx VFO is always VFO B. These
              assumptions allow us to deal with the lack of VFO and split
              queries */
-    if ((rig->state.vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
-            && priv->split_on)                              /* broken if user changes split on rig :( */
+    /* broken if user changes split on rig :( */
+    if ((STATE(rig)->vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
+            && cachep->split != RIG_SPLIT_OFF)
     {
         /* VFO A/B style rigs swap VFO on split Tx so we need to disable
                  split for certainty */
-        if (RIG_OK != (rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_OFF, NULL, 0,
-                                             ackbuf, &ack_len))) { return rc; }
+        rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_OFF, NULL, 0, ackbuf, &ack_len);
+
+        if (rc != RIG_OK)
+        {
+            return rc;
+        }
 
         if (ack_len != 2 || ackbuf[0] != 0x0f)
         {
@@ -1068,14 +1338,17 @@ static int x108g_set_split_mode(RIG *rig, vfo_t vfo, rmode_t tx_mode,
 
     if (RIG_OK != (rc = icom_set_vfo(rig, rx_vfo))) { return rc; }
 
-    if ((rig->state.vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
-            && priv->split_on)
+    if ((STATE(rig)->vfo_list & (RIG_VFO_A | RIG_VFO_B)) == (RIG_VFO_A | RIG_VFO_B)
+            && cachep->split != RIG_SPLIT_OFF)
     {
         /* Re-enable split */
-        if (RIG_OK != (rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_ON, NULL, 0,
-                                             ackbuf, &ack_len))) { return rc; }
+        rc = icom_transaction(rig, C_CTL_SPLT, S_SPLT_ON, NULL, 0, ackbuf, &ack_len);
+
+        if (rc != RIG_OK)
+        {
+            return rc;
+        }
     }
 
     return rc;
 }
-

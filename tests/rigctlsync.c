@@ -23,8 +23,9 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -68,7 +69,7 @@
 #  endif
 #endif
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "rigctl_parse.h"
 #include "riglist.h"
 #include "sleep.h"
@@ -79,7 +80,7 @@
  * NB: do NOT use -W since it's reserved by POSIX.
  * TODO: add an option to read from a file
  */
-#define SHORT_OPTIONS "B:m:M:r:R:p:d:P:D:s:S:c:C:lLuvhVZ"
+#define SHORT_OPTIONS "Bm:M:r:R:p:d:P:D:s:S:c:C:lLuvhVZ"
 static struct option long_options[] =
 {
     {"mapa2b",          0, 0, 'B'},
@@ -104,11 +105,11 @@ static struct option long_options[] =
     {0, 0, 0, 0}
 };
 
-void usage();
+static void usage(FILE *fout);
 static RIG *my_rig;             /* handle to rig */
 static RIG
 *my_rig_sync;        /* rig the gets synchronized -- freq only for now */
-static int verbose;
+static int verbose = RIG_DEBUG_NONE;
 /* CW Skimmer can only set VFOA */
 /* IC7300 for example can run VFOA on FM and VFOB on CW */
 /* So -A/--mapa2b changes set_freq on VFOA to VFOB */
@@ -214,12 +215,7 @@ int main(int argc, char *argv[])
 
     printf("rigctlsync Version 1.0\n");
 
-    if (argc < 3)
-    {
-        usage();
-        return 1;
-    }
-
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -240,7 +236,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -253,12 +249,6 @@ int main(int argc, char *argv[])
 
         case 'm':
         case 'M':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (c == 'm')
             {
                 my_model[0] = atoi(optarg);
@@ -271,22 +261,10 @@ int main(int argc, char *argv[])
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             rig_file = optarg;
             break;
 
         case 'R':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             rig_file2 = optarg;
             break;
 
@@ -294,12 +272,6 @@ int main(int argc, char *argv[])
 #if 0
 
         case 'p':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             ptt_file = optarg;
             break;
 #endif
@@ -307,12 +279,6 @@ int main(int argc, char *argv[])
 #if 0
 
         case 'd':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             dcd_file = optarg;
             break;
 #endif
@@ -320,12 +286,6 @@ int main(int argc, char *argv[])
 #if 0
 
         case 'P':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (!strcmp(optarg, "RIG"))
             {
                 ptt_type = RIG_PTT_RIG;
@@ -361,12 +321,6 @@ int main(int argc, char *argv[])
 #if 0
 
         case 'D':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (!strcmp(optarg, "RIG"))
             {
                 dcd_type = RIG_DCD_RIG;
@@ -400,22 +354,10 @@ int main(int argc, char *argv[])
 #endif
 
         case 'c':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             civaddr = optarg;
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -425,23 +367,11 @@ int main(int argc, char *argv[])
             break;
 
         case 'S':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             serial_rate2 = atoi(optarg);
             break;
 
 
         case 'C':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (*conf_parms != '\0')
             {
                 strcat(conf_parms, ",");
@@ -454,11 +384,12 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms));
+            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms) - 1);
             break;
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         case 'L':
@@ -466,7 +397,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'l':
-            rig_set_debug(verbose);
             list_models();
             exit(0);
 
@@ -479,21 +409,19 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            usage();            /* unknown option? */
+            usage(stderr);        
             exit(1);
         }
     }
-
-    rig_set_debug(verbose);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s, %s\n", "rigctlsync", hamlib_version2);
     rig_debug(RIG_DEBUG_VERBOSE, "%s",
               "Report bugs to <hamlib-developer@lists.sourceforge.net>\n\n");
 
-    if (argc == 1)
+    if (argc < 3)
     {
-        usage();
-        exit(2);
+        usage(stderr);
+        exit(1);
     }
 
     my_rig = rig_init(my_model[0]);
@@ -539,11 +467,11 @@ int main(int argc, char *argv[])
 
     if (rig_file)
     {
-        strncpy(my_rig->state.rigport.pathname, rig_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(RIGPORT(my_rig)->pathname, rig_file, HAMLIB_FILPATHLEN - 1);
     }
 
     fprintf(stderr, "rig to send frequency to: %s\n", rig_file2);
-    strncpy(my_rig_sync->state.rigport.pathname, rig_file2, HAMLIB_FILPATHLEN - 1);
+    strncpy(RIGPORT(my_rig_sync)->pathname, rig_file2, HAMLIB_FILPATHLEN - 1);
 
 #if 0
 
@@ -552,22 +480,22 @@ int main(int argc, char *argv[])
      */
     if (ptt_type != RIG_PTT_NONE)
     {
-        my_rig->state.pttport.type.ptt = ptt_type;
+        PTTPORT(my_rig)->type.ptt = ptt_type;
     }
 
     if (dcd_type != RIG_DCD_NONE)
     {
-        my_rig->state.dcdport.type.dcd = dcd_type;
+        DCDPORT(my_rig)->type.dcd = dcd_type;
     }
 
     if (ptt_file)
     {
-        strncpy(my_rig->state.pttport.pathname, ptt_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(PTTPORT(my_rig)->pathname, ptt_file, HAMLIB_FILPATHLEN - 1);
     }
 
     if (dcd_file)
     {
-        strncpy(my_rig->state.dcdport.pathname, dcd_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(DCDPORT(my_rig)->pathname, dcd_file, HAMLIB_FILPATHLEN - 1);
     }
 
 #endif
@@ -575,12 +503,12 @@ int main(int argc, char *argv[])
     /* FIXME: bound checking and port type == serial */
     if (serial_rate != 0)
     {
-        my_rig->state.rigport.parm.serial.rate = serial_rate;
+        RIGPORT(my_rig)->parm.serial.rate = serial_rate;
     }
 
     if (serial_rate2 != 0)
     {
-        my_rig_sync->state.rigport.parm.serial.rate = serial_rate2;
+        RIGPORT(my_rig_sync)->parm.serial.rate = serial_rate2;
     }
 
 
@@ -663,26 +591,27 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void usage()
+static void usage(FILE *fout)
 {
     const char *name = "rigctlsync";
-    printf("Usage: %s -m rignumber -r comport -s baud -M rignumber -R comport [OPTIONS]...\n\n"
+
+    fprintf(fout, "Usage: %s -m rignumber -r comport -s baud -M rignumber -R comport [OPTIONS]...\n\n"
            "Will copy frequency from -m rig to -M rig\n"
            "e.g. will keep SDR# synchronized to a rig.\n\n",
            name);
 
-    printf("Example: Sync freq from rigctld to SDR#\n");
-    printf("\t%s -m 2 -M 9 -R 127.0.0.1:4532\n\n", name);
-    printf("See the %s.1 manual page for complete details.\n\n", name);
+    fprintf(fout, "Example: Sync freq from rigctld to SDR#\n");
+    fprintf(fout, "\t%s -m 2 -M 9 -R 127.0.0.1:4532\n\n", name);
+    fprintf(fout, "See the %s.1 manual page for complete details.\n\n", name);
 
-    printf(
+    fprintf(fout,
         "  -m, --model=ID                select radio model number. See model list (-l)\n"
         "  -r, --rig-file=DEVICE         set device of the radio to operate on\n"
         "  -R, --rig-file2=DEVICE        set device of the virtual com port to operate on\n"
         "  -s, --serial-speed=BAUD       set serial speed of the serial port\n"
         "  -S, --serial-speed2=BAUD      set serial speed of the virtual com port [default=115200]\n"
         "  -c, --civaddr=ID              set CI-V address, decimal (for Icom rigs only)\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
         "  -L, --show-conf               list all config parameters\n"
         "  -l, --list                    list all model numbers and exit\n"
         "  -u, --dump-caps               dump capabilities and exit\n"
@@ -692,6 +621,5 @@ void usage()
         "  -V, --version                 output version information and exit\n\n"
     );
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
-
+    fprintf(fout, "\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
 }

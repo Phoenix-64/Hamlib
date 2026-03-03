@@ -23,7 +23,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,16 +61,19 @@ extern int read_history();
 #endif                              /* HAVE_READLINE_HISTORY */
 
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 
 #include "rig.h"
 #include "rotctl_parse.h"
 #include "rotlist.h"
 
+
 /*
  * Prototypes
  */
-void usage();
+static void usage(FILE *fout);
+static void short_usage(FILE *fout);
+
 
 /*
  * Reminder: when adding long options,
@@ -108,8 +111,6 @@ static struct option long_options[] =
 /* variable for readline support */
 #ifdef HAVE_LIBREADLINE
 static const int have_rl = 1;
-#else
-static const int have_rl = 0;
 #endif
 
 int main(int argc, char *argv[])
@@ -120,7 +121,7 @@ int main(int argc, char *argv[])
     int retcode;        /* generic return code from functions */
     int exitcode;
 
-    int verbose = 0;
+    int verbose = RIG_DEBUG_NONE;
     int show_conf = 0;
     int dump_caps_opt = 0;
 
@@ -142,6 +143,7 @@ int main(int argc, char *argv[])
     azimuth_t az_offset = 0;
     elevation_t el_offset = 0;
 
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -162,7 +164,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -170,42 +172,18 @@ int main(int argc, char *argv[])
             exit(0);
 
         case 'm':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             my_model = atoi(optarg);
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_file = optarg;
             break;
 
         case 'R':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             rot_file2 = optarg;
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -215,12 +193,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'C':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (*conf_parms != '\0')
             {
                 strcat(conf_parms, ",");
@@ -233,16 +205,10 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms));
+            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms) - 1);
             break;
 
         case 't':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (strlen(optarg) > 1)
             {
                 send_cmd_term = strtol(optarg, NULL, 0);
@@ -255,22 +221,10 @@ int main(int argc, char *argv[])
             break;
 
         case 'o':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             az_offset = atof(optarg);
             break;
 
         case 'O':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             el_offset = atof(optarg);
             break;
 
@@ -287,6 +241,7 @@ int main(int argc, char *argv[])
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         case 'L':
@@ -294,7 +249,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'l':
-            rig_set_debug(0);
             list_models();
             exit(0);
 
@@ -307,12 +261,11 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            usage();    /* unknown option? */
+            /* unknown getopt option */
+            short_usage(stderr);
             exit(1);
         }
     }
-
-    rig_set_debug(verbose);
 
     rig_debug(RIG_DEBUG_VERBOSE, "rotctl %s\n", hamlib_version2);
     rig_debug(RIG_DEBUG_VERBOSE, "%s",
@@ -339,50 +292,56 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    char *token=strtok(conf_parms,",");
+    char *token = strtok(conf_parms, ",");
 
-    while(token)
+    while (token)
     {
         char mytoken[100], myvalue[100];
-        token_t lookup;
-        sscanf(token,"%99[^=]=%99s", mytoken, myvalue);
+        hamlib_token_t lookup;
+        sscanf(token, "%99[^=]=%99s", mytoken, myvalue);
         //printf("mytoken=%s,myvalue=%s\n",mytoken, myvalue);
-        lookup = rot_token_lookup(my_rot,mytoken);
+        lookup = rot_token_lookup(my_rot, mytoken);
+
         if (lookup == 0)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s', use -L switch to see\n", __func__, mytoken);
+            rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s', use -L switch to see\n",
+                      __func__, mytoken);
             token = strtok(NULL, ",");
             continue;
         }
-        retcode = rot_set_conf(my_rot, rot_token_lookup(my_rot,mytoken), myvalue);
+
+        retcode = rot_set_conf(my_rot, lookup, myvalue);
+
         if (retcode != RIG_OK)
         {
             fprintf(stderr, "Config parameter error: %s\n", rigerror(retcode));
             exit(2);
         }
+
         token = strtok(NULL, ",");
     }
 
+    hamlib_port_t *rotp = ROTPORT(my_rot);
+    hamlib_port_t *rotp2 = ROTPORT2(my_rot);
+
     if (rot_file)
     {
-        strncpy(my_rot->state.rotport.pathname, rot_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(rotp->pathname, rot_file, HAMLIB_FILPATHLEN - 1);
     }
 
     if (rot_file2)
     {
-        strncpy(my_rot->state.rotport2.pathname, rot_file2, HAMLIB_FILPATHLEN - 1);
+        strncpy(rotp2->pathname, rot_file2, HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
-    my_rot->state.rotport2.parm.serial.rate =
-        my_rot->state.rotport.parm.serial.rate;
-    my_rot->state.rotport2.parm.serial.data_bits =
-        my_rot->state.rotport.parm.serial.data_bits;
+    rotp2->parm.serial.rate = rotp->parm.serial.rate;
+    rotp2->parm.serial.data_bits = rotp->parm.serial.data_bits;
 
     if (serial_rate != 0)
     {
-        my_rot->state.rotport.parm.serial.rate = serial_rate;
-        my_rot->state.rotport2.parm.serial.rate = serial_rate;
+        rotp->parm.serial.rate = serial_rate;
+        rotp2->parm.serial.rate = serial_rate;
     }
 
     /*
@@ -412,8 +371,8 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
-    my_rot->state.az_offset = az_offset;
-    my_rot->state.el_offset = el_offset;
+    ROTSTATE(my_rot)->az_offset = az_offset;
+    ROTSTATE(my_rot)->el_offset = el_offset;
 
     if (verbose > 0)
     {
@@ -479,7 +438,7 @@ int main(int argc, char *argv[])
 
     do
     {
-        retcode = rotctl_parse(my_rot, stdin, stdout, (const char**)argv, argc,
+        retcode = rotctl_parse(my_rot, stdin, stdout, (const char **)argv, argc,
                                interactive, prompt, send_cmd_term);
 
         if (retcode == 2)
@@ -487,7 +446,7 @@ int main(int argc, char *argv[])
             exitcode = 2;
         }
     }
-    // cppcheck-suppress knownConditionTrueFalse
+
     while (retcode == 0 || retcode == 2);
 
 #ifdef HAVE_LIBREADLINE
@@ -523,18 +482,18 @@ int main(int argc, char *argv[])
 }
 
 
-void usage()
+static void usage(FILE *fout)
 {
-    printf("Usage: rotctl [OPTION]... [COMMAND]...\n"
+    fprintf(fout, "Usage: rotctl [OPTION]... [COMMAND]...\n"
            "Send COMMANDs to a connected antenna rotator.\n\n");
 
-    printf(
-        "  -m, --model=ID                select rotator model number. See model list\n"
+    fprintf(fout,
+        "  -m, --model=ID                select rotator model number. See model list (-l)\n"
         "  -r, --rot-file=DEVICE         set device of the rotator to operate on\n"
         "  -R, --rot-file2=DEVICE        set device of the 2nd rotator controller to operate on\n"
         "  -s, --serial-speed=BAUD       set serial speed of the serial port\n"
         "  -t, --send-cmd-term=CHAR      set send_cmd command termination char\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
         "  -o, --set-azoffset=VAL        set offset for azimuth\n"
         "  -O, --set-eloffset=VAL        set offset for elevation\n"
         "  -L, --show-conf               list all config parameters\n"
@@ -544,13 +503,21 @@ void usage()
         "  -i, --read-history            read prior interactive session history\n"
         "  -I, --save-history            save current interactive session history\n"
 #endif
-        "  -v, --verbose                 set verbose mode, cumulative\n"
+        "  -v, --verbose                 set verbose mode, cumulative (-v to -vvvvv)\n"
         "  -Z, --debug-time-stamps       enable time stamps for debug messages\n"
         "  -h, --help                    display this help and exit\n"
-        "  -V, --version                 output version information and exit\n\n"
+        "  -V, --version                 output version information and exit\n"
+        "  -                             read commands from standard input\n"
+        "\n"
     );
 
-    usage_rot(stdout);
+    usage_rot(fout);
+}
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
+
+static void short_usage(FILE *fout)
+{
+    fprintf(fout, "Usage: rotctl [OPTION]... [-m ID] [-r DEVICE] [-s BAUD] [COMMAND...|-]\n");
+    fprintf(fout, "Send COMMANDs to a connected antenna rotator.\n\n");
+    fprintf(fout, "Type: rotctl --help for extended usage.\n");
 }

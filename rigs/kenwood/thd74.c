@@ -25,6 +25,7 @@
 #include <math.h>
 
 #include "hamlib/rig.h"
+#include "hamlib/rig_state.h"
 #include "kenwood.h"
 #include "th.h"
 #include "misc.h"
@@ -64,8 +65,8 @@ static rmode_t thd74_mode_table[10] =
 
 static pbwidth_t thd74_width_table[10] =
 {
-    [0] = 10000,    // +-5KHz
-    [1] =  5000,    // +-2.5KHz
+    [0] = 10000,    // +-5 kHz
+    [1] =  5000,    // +-2.5 kHz
     [2] = 10000,    // FIXME: what should this be?
     [3] = 10000,    // FIXME: what should this be?
     [4] = 10000,    // FIXME: what should this be?
@@ -156,9 +157,10 @@ static struct kenwood_priv_caps thd74_priv_caps =
 int thd74_open(RIG *rig)
 {
     //int ret;
-    //struct kenwood_priv_data *priv = rig->state.priv;
+    //struct kenwood_priv_data *priv = STATE(rig)->priv;
     // this is already done in kenwood_init
     //strcpy(priv->verify_cmd, "ID\r");
+    //priv->verify_cmd_len = 3;
 
     //ret = kenwood_transaction(rig, "", NULL, 0);
 
@@ -239,7 +241,7 @@ static int thd74_get_vfo(RIG *rig, vfo_t *vfo)
 
 static int thd74_vfoc(RIG *rig, vfo_t vfo, char *vfoc)
 {
-    vfo = (vfo == RIG_VFO_CURR) ? rig->state.current_vfo : vfo;
+    vfo = (vfo == RIG_VFO_CURR) ? STATE(rig)->current_vfo : vfo;
 
     switch (vfo)
     {
@@ -395,7 +397,7 @@ static int thd74_round_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 static int thd74_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     int retval;
     char buf[128], fbuf[12];
 
@@ -422,7 +424,7 @@ static int thd74_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 static int thd74_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     int retval;
     char buf[128];
 
@@ -1347,7 +1349,7 @@ static int thd74_get_channel(RIG *rig, vfo_t vfo, channel_t *chan,
 
 int thd74_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: called\n", __func__);
 
@@ -1363,7 +1365,7 @@ int thd74_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 
 int thd74_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *txvfo)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: called\n", __func__);
 
@@ -1385,7 +1387,7 @@ otherwise return -RIG_EPROTO
 */
 int thd74_get_split_freq(RIG *rig, vfo_t vfo, freq_t *tx_freq)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
     int retval;
     char buf[128];
 
@@ -1417,7 +1419,7 @@ otherwise return -RIG_EPROTO
 */
 int thd74_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
 {
-    struct kenwood_priv_data *priv = rig->state.priv;
+    struct kenwood_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_TRACE, "%s: called\n", __func__);
 
@@ -1448,7 +1450,7 @@ int thd74_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
 
 static int thd74_get_block(RIG *rig, int block_num, char *block)
 {
-    hamlib_port_t *rp = &rig->state.rigport;
+    hamlib_port_t *rp = RIGPORT(rig);
     char cmd[CMD_SZ] = "R\0\0\0\0";
     char resp[CMD_SZ];
     int ret;
@@ -1510,9 +1512,9 @@ static int thd74_get_block(RIG *rig, int block_num, char *block)
 int thd74_get_chan_all_cb(RIG *rig, chan_cb_t chan_cb, rig_ptr_t arg)
 {
     int i, j, ret;
-    hamlib_port_t *rp = &rig->state.rigport;
+    hamlib_port_t *rp = RIGPORT(rig);
     channel_t *chan;
-    chan_t *chan_list = rig->state.chan_list;
+    chan_t *chan_list = STATE(rig)->chan_list;
     int chan_next = chan_list[0].start;
     char block[BLOCK_SZ];
     char resp[CMD_SZ];
@@ -1644,7 +1646,7 @@ int thd74_get_chan_all_cb(RIG *rig, chan_cb_t chan_cb, rig_ptr_t arg)
 /*
  * th-d74 rig capabilities.
  */
-const struct rig_caps thd74_caps =
+struct rig_caps thd74_caps =
 {
     RIG_MODEL(RIG_MODEL_THD74),
     .model_name = "TH-D74",

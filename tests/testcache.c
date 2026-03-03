@@ -10,8 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <hamlib/rig.h>
-#include <hamlib/riglist.h>
+#include "hamlib/rig.h"
+#include "hamlib/riglist.h"
 //#include "misc.h"
 
 
@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
 
     /* Set up serial port, baud rate */
 
-    strncpy(my_rig->state.rigport.pathname, rig_file, HAMLIB_FILPATHLEN - 1);
+    rig_set_conf(my_rig, rig_token_lookup(my_rig, "rig_pathname"), rig_file);
 
     /* Open my rig */
     retcode = rig_open(my_rig);
@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
 
     vfo_t vfo;
     retcode = rig_get_vfo(my_rig, &vfo);
+
     if (retcode != RIG_OK)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: rig_get_vfo: %s\n", __func__, rigerror(retcode));
@@ -165,7 +166,7 @@ int main(int argc, char *argv[])
     rig_get_split_vfo(my_rig, RIG_VFO_A, &split, &tx_vfo);
     printf("split=%d, tx_vfo=%s\n", split, rig_strvfo(tx_vfo));
 
-    if (split != 0 || tx_vfo != RIG_VFO_A) { printf("split#1 failed\n"); exit(1); }
+    if (split != 0 || tx_vfo != RIG_VFO_NONE) { printf("split#1 failed\n"); exit(1); }
 
     rig_set_split_vfo(my_rig, RIG_VFO_A, RIG_SPLIT_ON, RIG_VFO_B);
     hl_usleep(1000 * 1000);

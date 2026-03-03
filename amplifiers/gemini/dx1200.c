@@ -29,7 +29,6 @@
 
 #include "gemini.h"
 
-
 struct gemini_priv_data *gemini_priv;
 /*
  * API local implementation
@@ -62,7 +61,7 @@ const struct amp_caps gemini_amp_caps =
     .mfg_name =     "Gemini",
     .version =      "20230318.0",
     .copyright =    "LGPL",
-    .status =     RIG_STATUS_BETA,
+    .status =     RIG_STATUS_STABLE,
     .amp_type =     AMP_TYPE_OTHER,
     .port_type =    RIG_PORT_NETWORK,
     .write_delay =    0,
@@ -104,7 +103,6 @@ const struct amp_caps gemini_amp_caps =
 
 static int gemini_send_priv_cmd(AMP *amp, const char *cmdstr)
 {
-    struct amp_state *rs;
     int err;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
@@ -114,8 +112,7 @@ static int gemini_send_priv_cmd(AMP *amp, const char *cmdstr)
         return -RIG_EINVAL;
     }
 
-    rs = &amp->state;
-    err = write_block(&rs->ampport, cmdstr, strlen(cmdstr));
+    err = write_block(AMPPORT(amp), cmdstr, strlen(cmdstr));
 
     if (err != RIG_OK)
     {

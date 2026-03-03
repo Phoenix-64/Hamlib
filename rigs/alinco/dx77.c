@@ -24,12 +24,12 @@
 #include <stdlib.h>
 #include <string.h>  /* String function definitions */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "alinco.h"
-#include <serial.h>
+#include "iofunc.h"
 #include "tones.h"
-#include <misc.h>
+#include "misc.h"
 
 /*
  * modes in use by the "2G" command
@@ -150,7 +150,7 @@ int dx77_get_mem(RIG *rig, vfo_t vfo, int *ch);
  *  - up/down
  *  - scan
  */
-const struct rig_caps dx77_caps =
+struct rig_caps dx77_caps =
 {
     RIG_MODEL(RIG_MODEL_DX77),
     .model_name =       "DX-77",
@@ -289,7 +289,7 @@ const struct rig_caps dx77_caps =
 
 /*
  * dx77_transaction
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, RIGPORT(rig)!= NULL, data!=NULL, data_len!=NULL
  * Otherwise, you'll get a nice seg fault. You've been warned!
  * TODO: error case handling
  */
@@ -301,7 +301,7 @@ int dx77_transaction(RIG *rig,
 {
 
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
     char echobuf[BUFSZ + 1];
 
     if (cmd == NULL)
@@ -311,11 +311,9 @@ int dx77_transaction(RIG *rig,
         return -RIG_EINTERNAL;
     }
 
-    rs = &rig->state;
+    rig_flush(rp);
 
-    rig_flush(&rs->rigport);
-
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -326,7 +324,7 @@ int dx77_transaction(RIG *rig,
      * Transceiver sends an echo of cmd followed by a CR/LF
      * TODO: check whether cmd and echobuf match (optional)
      */
-    retval = read_string(&rs->rigport, (unsigned char *) echobuf, BUFSZ,
+    retval = read_string(rp, (unsigned char *) echobuf, BUFSZ,
                          LF, strlen(LF), 0, 1);
 
     if (retval < 0)
@@ -343,7 +341,7 @@ int dx77_transaction(RIG *rig,
     /* no data expected, check for OK returned */
     if (data == NULL)
     {
-        retval = read_string(&rs->rigport, (unsigned char *) echobuf, BUFSZ,
+        retval = read_string(rp, (unsigned char *) echobuf, BUFSZ,
                              LF, strlen(LF), 0, 1);
 
         if (retval < 0)
@@ -365,7 +363,7 @@ int dx77_transaction(RIG *rig,
         }
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) data, BUFSZ,
+    retval = read_string(rp, (unsigned char *) data, BUFSZ,
                          LF, strlen(LF), 0, 1);
 
     if (retval < 0)
@@ -1260,7 +1258,7 @@ int dx77_set_parm(RIG *rig, setting_t parm, value_t val)
  */
 int dx77_set_ctcss_tone(RIG *rig, vfo_t vfo, tone_t tone)
 {
-    const struct rig_caps *caps;
+    struct rig_caps *caps;
     unsigned char tonebuf[BUFSZ];
     int i;
 

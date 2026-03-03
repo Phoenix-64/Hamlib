@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "bandplan.h"
 #include "kenwood.h"
 
@@ -66,7 +66,7 @@ static struct kenwood_priv_caps  ts690_priv_caps  =
  *  - how to set_split in vfo mode?
  *  - ...
  */
-const struct rig_caps ts690s_caps =
+struct rig_caps ts690s_caps =
 {
     RIG_MODEL(RIG_MODEL_TS690S),
     .model_name = "TS-690S",

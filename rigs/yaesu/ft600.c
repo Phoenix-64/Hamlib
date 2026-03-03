@@ -29,7 +29,7 @@
 #include <string.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "yaesu.h"
 #include "ft600.h"
 #include "misc.h"
@@ -219,7 +219,7 @@ static const yaesu_cmd_set_t ncmd[] =
             { 246,  60 } /* S9+60dB */  \
 }}
 
-const struct rig_caps ft600_caps =
+struct rig_caps ft600_caps =
 {
     RIG_MODEL(RIG_MODEL_FT600),
     .model_name =     "FT-600",
@@ -340,10 +340,10 @@ static int ft600_init(RIG *rig)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    rig->state.priv = (struct ft600_priv_data *) calloc(1,
-                      sizeof(struct ft600_priv_data));
+    STATE(rig)->priv = (struct ft600_priv_data *) calloc(1,
+                       sizeof(struct ft600_priv_data));
 
-    if (!rig->state.priv) { return -RIG_ENOMEM; }
+    if (!STATE(rig)->priv) { return -RIG_ENOMEM; }
 
     return RIG_OK;
 }
@@ -355,12 +355,12 @@ static int ft600_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
@@ -389,20 +389,21 @@ static int ft600_send_priv_cmd(RIG *rig, unsigned char cmd_index)
 
     if (!rig) { return -RIG_EINVAL; }
 
-    return write_block(&rig->state.rigport, (unsigned char *) &ncmd[cmd_index].nseq,
+    return write_block(RIGPORT(rig), (unsigned char *) &ncmd[cmd_index].nseq,
                        YAESU_CMD_LENGTH);
 }
 
 static int ft600_read_status(RIG *rig)
 {
     struct ft600_priv_data *priv;
+    hamlib_port_t *rp = RIGPORT(rig);
     int ret;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    priv = (struct ft600_priv_data *)rig->state.priv;
+    priv = (struct ft600_priv_data *)STATE(rig)->priv;
 
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
     ret = ft600_send_priv_cmd(rig, FT600_NATIVE_CAT_READ_STATUS);
 
@@ -412,8 +413,8 @@ static int ft600_read_status(RIG *rig)
     }
 
 
-    ret = read_block(&rig->state.rigport,
-                     (unsigned char *) &priv->status, FT600_STATUS_UPDATE_DATA_LENGTH);
+    ret = read_block(rp, (unsigned char *) &priv->status,
+                     FT600_STATUS_UPDATE_DATA_LENGTH);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: read status=%i \n", __func__, ret);
 
@@ -433,7 +434,7 @@ static int ft600_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    priv = (struct ft600_priv_data *)rig->state.priv;
+    priv = (struct ft600_priv_data *)STATE(rig)->priv;
 
     ret = ft600_send_priv_cmd(rig, FT600_NATIVE_CAT_READ_METERS);
 
@@ -444,7 +445,7 @@ static int ft600_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: read tx status=%i \n", __func__, ret);
 
-    ret = read_block(&rig->state.rigport, &priv->s_meter, 5);
+    ret = read_block(RIGPORT(rig), &priv->s_meter, 5);
 
     if (ret < 0)
     {
@@ -475,13 +476,13 @@ static int ft600_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     freq = (int)freq / 10;
     to_bcd(p_cmd, freq, 8); /* store bcd format in in p_cmd */
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 
 static int ft600_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
 
-    struct ft600_priv_data *priv = (struct ft600_priv_data *)rig->state.priv;
+    struct ft600_priv_data *priv = (struct ft600_priv_data *)STATE(rig)->priv;
     freq_t f;
     int ret;
     rig_debug(RIG_DEBUG_VERBOSE, "%s: get_freq\n", __func__);
@@ -532,7 +533,7 @@ static int ft600_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 static int ft600_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
 
-    struct ft600_priv_data *priv = (struct ft600_priv_data *)rig->state.priv;
+    struct ft600_priv_data *priv = (struct ft600_priv_data *)STATE(rig)->priv;
     int ret;
 
     if (!mode)
@@ -643,7 +644,7 @@ static int ft600_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         else if (width <= 2400) { p_cmd[3] = 0x00; }
         else { p_cmd[3] = 0x01; }
 
-        ret = write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+        ret = write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 
         if (ret != RIG_OK)
         {

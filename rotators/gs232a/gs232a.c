@@ -23,14 +23,14 @@
 // cppcheck-suppress *
 #include <stdio.h>
 // cppcheck-suppress *
-// cppcheck-suppress *
 #include <string.h>  /* String function definitions */
-// cppcheck-suppress *
 // cppcheck-suppress *
 #include <math.h>
 
 #include "hamlib/rotator.h"
-#include "serial.h"
+#include "hamlib/port.h"
+#include "hamlib/rot_state.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 #include "idx_builtin.h"
@@ -50,7 +50,7 @@
  * cmdstr - Command to be sent to the rig.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed, but answer will still be read.
- * data_len - in: Size of buffer. It is the caller's responsibily to provide
+ * data_len - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -64,19 +64,17 @@ static int
 gs232a_transaction(ROT *rot, const char *cmdstr,
                    char *data, size_t data_len, int no_reply)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int retval;
     int retry_read = 0;
 
-    rs = &rot->state;
-
 transaction_write:
 
-    rig_flush(&rs->rotport);
+    rig_flush(rotp);
 
     if (cmdstr)
     {
-        retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+        retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
         if (retval != RIG_OK)
         {
@@ -98,7 +96,7 @@ transaction_write:
     if (!no_reply)
     {
         memset(data, 0, data_len);
-        retval = read_string(&rs->rotport, (unsigned char *) data, data_len,
+        retval = read_string(rotp, (unsigned char *) data, data_len,
                              REPLY_EOM, strlen(REPLY_EOM), 0, 1);
 
         if (strncmp(data, "\r\n", 2) == 0
@@ -112,7 +110,7 @@ transaction_write:
 
         if (retval < 0)
         {
-            if (retry_read++ < rot->state.rotport.retry)
+            if (retry_read++ < rotp->retry)
             {
                 goto transaction_write;
             }
@@ -129,7 +127,7 @@ transaction_write:
         rig_debug(RIG_DEBUG_ERR, "%s: Command is not correctly terminated '%s'\n",
                   __func__, data);
 
-        if (retry_read++ < rig->state.rotport.retry)
+        if (retry_read++ < rotp->retry)
         {
             goto transaction_write;
         }
@@ -236,7 +234,7 @@ gs232a_rot_stop(ROT *rot)
 
 static int gs232a_rot_get_level(ROT *rot, setting_t level, value_t *val)
 {
-    const struct rot_state *rs = &rot->state;
+    const struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
@@ -256,7 +254,7 @@ static int gs232a_rot_get_level(ROT *rot, setting_t level, value_t *val)
 
 static int gs232a_rot_set_level(ROT *rot, setting_t level, value_t val)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called: %s\n", __func__, rot_strlevel(level));
 
@@ -278,7 +276,7 @@ static int gs232a_rot_set_level(ROT *rot, setting_t level, value_t val)
         }
 
         /* between 1 (slowest) and 4 (fastest) */
-        SNPRINTF(cmdstr, sizeof(cmdstr), "X%u" EOM, speed);
+        SNPRINTF(cmdstr, sizeof(cmdstr), "X%d" EOM, speed);
         retval = gs232a_transaction(rot, cmdstr, NULL, 0, 1);
 
         if (retval != RIG_OK)
@@ -364,7 +362,7 @@ static int gs232a_rot_move(ROT *rot, int direction, int speed)
 
 static int gs232a_rot_init(ROT *rot)
 {
-    struct rot_state *rs = &rot->state;
+    struct rot_state *rs = ROTSTATE(rot);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -663,6 +661,7 @@ DECLARE_INITROT_BACKEND(gs232a)
     rot_register(&gs232_rot_caps);
     rot_register(&amsat_lvb_rot_caps);
     rot_register(&st2_rot_caps);
+    rot_register(&gs232_af6sa_wrc_caps);
 
     return RIG_OK;
 }

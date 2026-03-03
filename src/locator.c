@@ -76,7 +76,7 @@
  */
 
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -84,7 +84,7 @@
 #include <math.h>
 
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 
 
 /** \brief Standard definition of a radian. */
@@ -217,14 +217,13 @@ double HAMLIB_API dms2dec(int degrees, int minutes, double seconds, int sw)
  *
  * \param degrees Degrees, whole degrees.
  * \param minutes Minutes, decimal minutes.
- * \param seconds Seconds, decimal seconds.
  * \param sw South or West.
  *
  * Convert a degrees decimal minutes (D M.MMM) notation common on many GPS
  * units to a decimal degrees (D.DDD) angle value.
  *
- * \note For the parameters \a degrees > 360, \a minutes > 60.0, \a seconds >
- * 60.0 are allowed, but the resulting angle will not be normalized.
+ * \note For the parameters \a degrees > 360, \a minutes > 60.0 are allowed, but
+ * the resulting angle will not be normalized.
  *
  * When the variable \a sw is passed a value of 1, the returned decimal
  * degrees value will be negative (*South* or *West*).  When passed a value of
@@ -234,7 +233,7 @@ double HAMLIB_API dms2dec(int degrees, int minutes, double seconds, int sw)
  *
  * \sa dec2dmmm()
  */
-double HAMLIB_API dmmm2dec(int degrees, double minutes, double seconds, int sw)
+double HAMLIB_API dmmm2dec(int degrees, double minutes, int sw)
 {
     double st;
 
@@ -250,7 +249,7 @@ double HAMLIB_API dmmm2dec(int degrees, double minutes, double seconds, int sw)
         minutes = fabs(minutes);
     }
 
-    st = (double)degrees + (minutes / 60) + (seconds / 3600);
+    st = (double)degrees + minutes / 60;
 
     if (sw == 1)
     {
@@ -290,7 +289,7 @@ double HAMLIB_API dmmm2dec(int degrees, double minutes, double seconds, int sw)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The conversion was successful.
- * \retval RIG_EINVAL Either of the pointers are NULL.
+ * \retval -RIG_EINVAL Either of the pointers are NULL.
  *
  * \sa dms2dec()
  */
@@ -388,7 +387,7 @@ int HAMLIB_API dec2dms(double dec,
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The conversion was successful.
- * \retval RIG_EINVAL Either of the pointers are NULL.
+ * \retval -RIG_EINVAL Either of the pointers are NULL.
  *
  * \sa dmmm2dec()
  */
@@ -438,7 +437,7 @@ int HAMLIB_API dec2dmmm(double dec, int *degrees, double *minutes, int *sw)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The conversion was successful.
- * \retval RIG_EINVAL The QRA locator exceeds RR99xx99xx99 or exceeds length
+ * \retval -RIG_EINVAL The QRA locator exceeds RR99xx99xx99 or exceeds length
  * limit--currently 1 to 6 lon/lat pairs--or is otherwise malformed.
  *
  * \bug The fifth pair ranges from aa to xx, there is another convention
@@ -531,7 +530,7 @@ int HAMLIB_API locator2longlat(double *longitude,
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The conversion was successful.
- * \retval RIG_EINVAL if \a locator is NULL or \a pair_count exceeds length
+ * \retval -RIG_EINVAL if \a locator is NULL or \a pair_count exceeds length
  * limit.  Currently 1 to 6 lon/lat pairs.
  *
  * \bug \a locator is not tested for overflow.
@@ -611,7 +610,7 @@ int HAMLIB_API longlat2locator(double longitude,
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The calculations were successful.
- * \retval RIG_EINVAL If a NULL pointer passed or \a lat and \a lon values
+ * \retval -RIG_EINVAL If a NULL pointer passed or \a lat and \a lon values
  * exceed -90 to 90 or -180 to 180.
  *
  * \sa distance_long_path(), azimuth_long_path()

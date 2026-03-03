@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #include "gnuradio.h"
 
@@ -49,7 +49,7 @@ static const struct gnuradio_priv_caps mc4020_priv_caps =
 };
 
 
-const struct rig_caps mc4020_caps =
+struct rig_caps mc4020_caps =
 {
     .rig_model =      RIG_MODEL_MC4020,
     .model_name =     "GNU Radio MC4020",

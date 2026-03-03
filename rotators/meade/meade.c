@@ -25,10 +25,12 @@
 #include <math.h>
 #include <sys/time.h>
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
+#include "hamlib/port.h"
+#include "hamlib/rot_state.h"
 #include <num_stdio.h>
 
-#include "serial.h"
+#include "iofunc.h"
 #include "register.h"
 
 #include "meade.h"
@@ -85,7 +87,7 @@ struct meade_priv_data
  * cmdstr - Command to be sent to the rig.
  * data - Buffer for reply string.  Can be NULL, indicating that no reply is
  *        is needed, but answer will still be read.
- * data_len - in: Size of buffer. It is the caller's responsibily to provide
+ * data_len - in: Size of buffer. It is the caller's responsibility to provide
  *            a large enough buffer for all possible replies for a command.
  *
  * returns:
@@ -96,20 +98,18 @@ struct meade_priv_data
 static int meade_transaction(ROT *rot, const char *cmdstr,
                              char *data, size_t *data_len, size_t expected_return_length)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int return_value;
     int retry_read = 0;
-
-    rs = &rot->state;
 
     while (1)
     {
 transaction:
-        rig_flush(&rs->rotport);
+        rig_flush(rotp);
 
         if (cmdstr)
         {
-            return_value = write_block(&rs->rotport, (unsigned char *) cmdstr,
+            return_value = write_block(rotp, (unsigned char *) cmdstr,
                                        strlen(cmdstr));
 
             if (return_value != RIG_OK)
@@ -123,7 +123,7 @@ transaction:
            return value is expected, Strings end with '#' */
         if (data != NULL)
         {
-            return_value = read_string(&rs->rotport, (unsigned char *) data,
+            return_value = read_string(rotp, (unsigned char *) data,
                                        expected_return_length + 1,
                                        "\r\n", strlen("\r\n"), 0, 1);
 
@@ -134,7 +134,7 @@ transaction:
             }
             else
             {
-                if (retry_read++ >= rot->state.rotport.retry)
+                if (retry_read++ >= rotp->retry)
                 {
                     rig_debug(RIG_DEBUG_ERR, "%s: read_string error %s\n", __func__,
                               rigerror(return_value));
@@ -161,19 +161,19 @@ static int meade_init(ROT *rot)
 {
     struct meade_priv_data *priv;
 
-    rot->state.priv = (struct meade_priv_data *)
-                      calloc(1, sizeof(struct meade_priv_data));
+    ROTSTATE(rot)->priv = (struct meade_priv_data *)
+                          calloc(1, sizeof(struct meade_priv_data));
 
-    if (!rot->state.priv)
+    if (!ROTSTATE(rot)->priv)
     {
         return -RIG_ENOMEM;
     }
 
-    priv = rot->state.priv;
+    priv = ROTSTATE(rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called version %s\n", __func__,
               rot->caps->version);
-    rot->state.rotport.type.rig = RIG_PORT_SERIAL;
+    ROTPORT(rot)->type.rig = RIG_PORT_SERIAL;
 
     priv->az = priv->el = 0;
 
@@ -189,12 +189,12 @@ static int meade_cleanup(ROT *rot)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    if (rot->state.priv)
+    if (ROTSTATE(rot)->priv)
     {
-        free(rot->state.priv);
+        free(ROTSTATE(rot)->priv);
     }
 
-    rot->state.priv = NULL;
+    ROTSTATE(rot)->priv = NULL;
 
     return RIG_OK;
 }
@@ -206,7 +206,7 @@ static int meade_open(ROT *rot)
 {
     char return_str[BUFSIZE];
     size_t return_str_size = 0;
-    struct meade_priv_data *priv = (struct meade_priv_data *)rot->state.priv;
+    struct meade_priv_data *priv = (struct meade_priv_data *)ROTSTATE(rot)->priv;
     int retval;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
@@ -259,7 +259,7 @@ static int meade_close(ROT *rot)
  */
 static int meade_set_position(ROT *rot, azimuth_t az, elevation_t el)
 {
-    struct meade_priv_data *priv = (struct meade_priv_data *)rot->state.priv;
+    struct meade_priv_data *priv = (struct meade_priv_data *)ROTSTATE(rot)->priv;
     char cmd_str[BUFSIZE];
     char return_str[BUFSIZE];
     size_t return_str_size;
@@ -312,7 +312,7 @@ static int meade_set_position(ROT *rot, azimuth_t az, elevation_t el)
     {
         rig_debug(RIG_DEBUG_VERBOSE, "%s: expected 110, got %s\n", __func__,
                   return_str);
-        return RIG_EINVAL;
+        return -RIG_EINVAL;
     }
 }
 
@@ -355,8 +355,8 @@ static int meade_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
     rig_debug(RIG_DEBUG_VERBOSE, "%s: az=%03d:%02d:%02d, el=%03d:%02d:%02d\n",
               __func__, az_degrees, az_minutes, az_seconds, el_degrees, el_minutes,
               el_seconds);
-    *az = dmmm2dec(az_degrees, az_minutes, az_seconds, az_seconds);
-    *el = dmmm2dec(el_degrees, el_minutes, el_seconds, el_seconds);
+    *az = dms2dec(az_degrees, az_minutes, az_seconds, 0);
+    *el = dms2dec(el_degrees, el_minutes, el_seconds, 0);
     return RIG_OK;
 }
 
@@ -365,7 +365,7 @@ static int meade_get_position(ROT *rot, azimuth_t *az, elevation_t *el)
  */
 static int meade_stop(ROT *rot)
 {
-    struct meade_priv_data *priv = (struct meade_priv_data *)rot->state.priv;
+    struct meade_priv_data *priv = (struct meade_priv_data *)ROTSTATE(rot)->priv;
     azimuth_t az;
     elevation_t el;
 
@@ -409,7 +409,8 @@ static int meade_reset(ROT *rot, rot_reset_t reset)
  */
 static int meade_move(ROT *rot, int direction, int speed)
 {
-    const struct meade_priv_data *priv = (struct meade_priv_data *)rot->state.priv;
+    const struct meade_priv_data *priv = (struct meade_priv_data *)ROTSTATE(
+            rot)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
     rig_debug(RIG_DEBUG_TRACE, "%s: Direction = %d, Speed = %d\n", __func__,
@@ -439,7 +440,8 @@ static int meade_move(ROT *rot, int direction, int speed)
 static const char *meade_get_info(ROT *rot)
 {
     static char buf[256]; // this is not thread-safe but not important either
-    const struct meade_priv_data *priv = (struct meade_priv_data *)rot->state.priv;
+    const struct meade_priv_data *priv = (struct meade_priv_data *)ROTSTATE(
+            rot)->priv;
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     SNPRINTF(buf, sizeof(buf),
@@ -495,9 +497,6 @@ const struct rot_caps meade_caps =
     .move =             meade_move,
 
     .get_info =         meade_get_info,
-
-    .get_conf =         rot_get_conf,
-    .set_conf =         rot_set_conf,
 };
 
 DECLARE_INITROT_BACKEND(meade)

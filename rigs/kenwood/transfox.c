@@ -23,7 +23,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 
@@ -63,7 +63,7 @@ static int transfox_get_level(RIG *rig, vfo_t vfo, setting_t level,
  *
  * Part of info comes from http://www.sigfox-system.com/TransFox-FE?lang=en
  */
-const struct rig_caps transfox_caps =
+struct rig_caps transfox_caps =
 {
     RIG_MODEL(RIG_MODEL_TRANSFOX),
     .model_name =       "Transfox",
@@ -170,7 +170,7 @@ int transfox_open(RIG *rig)
 {
     rig_debug(RIG_DEBUG_TRACE, "%s called\n", __func__);
 
-    rig->state.current_vfo = RIG_VFO_A;
+    STATE(rig)->current_vfo = RIG_VFO_A;
 
     /* do not call kenwood_open(rig), rig has no "ID" command */
 

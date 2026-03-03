@@ -32,11 +32,11 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 #include "icom_defs.h"
 #include "frame.h"
-#include <misc.h>
+#include "misc.h"
 
 #define OMNIVIP_VFO_ALL (RIG_VFO_A|RIG_VFO_B|RIG_VFO_MEM)
 
@@ -59,7 +59,7 @@ static struct icom_priv_caps omnivip_priv_caps =
     NULL    /* TODO */
 };
 
-const struct rig_caps omnivip_caps =
+struct rig_caps omnivip_caps =
 {
     RIG_MODEL(RIG_MODEL_OMNIVIP),
     .model_name = "Omni VI Plus",
@@ -159,7 +159,7 @@ const struct rig_caps omnivip_caps =
     .rig_cleanup =   icom_cleanup,
 
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,
     .set_mode =  icom_set_mode,
@@ -179,7 +179,7 @@ const struct rig_caps omnivip_caps =
 
 /*
  * omni6_set_ptt based on icom_set_ptt
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int omni6_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {

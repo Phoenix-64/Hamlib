@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "aor.h"
 
 
@@ -80,14 +80,14 @@ static const struct aor_priv_caps ar2700_priv_caps =
  * part of info from http://www.aoruk.com/2700.htm
  * Interface unit: CU-8232 (or equivalent)
  */
-const struct rig_caps ar2700_caps =
+struct rig_caps ar2700_caps =
 {
     RIG_MODEL(RIG_MODEL_AR2700),
     .model_name = "AR2700",
     .mfg_name =  "AOR",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_SCANNER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

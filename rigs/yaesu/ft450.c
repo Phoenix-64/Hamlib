@@ -34,7 +34,7 @@
 /*
  * FT-450 rig capabilities
  */
-const struct rig_caps ft450_caps =
+struct rig_caps ft450_caps =
 {
     RIG_MODEL(RIG_MODEL_FT450),
     .model_name =         "FT-450",
@@ -64,15 +64,23 @@ const struct rig_caps ft450_caps =
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran =
     {
+#define NO_LVL_CWPITCH
+#define NO_LVL_NOTCHF
+#define NO_LVL_VOXGAIN
+#define NO_LVL_NR
 #include "level_gran_yaesu.h"
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_NOTCHF
+#undef NO_LVL_VOXGAIN
+#undef NO_LVL_NR
         [LVL_CWPITCH] = { .min = { .i = 400 }, .max = { .i = 800 }, .step = { .i = 100 } },
         [LVL_NOTCHF] = { .min = { .i = 1 }, .max = { .i = 4000 }, .step = { .i = 10 } },
-        [LVL_VOXGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/255.0f } },
-        [LVL_NR] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/11.0f } },
+        [LVL_VOXGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 255.0f } },
+        [LVL_NR] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 11.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BANDUNUSED,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -94,6 +102,7 @@ const struct rig_caps ft450_caps =
     .chan_list =          {
         {   1, 500, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP },
         { 501, 504, RIG_MTYPE_EDGE, NEWCAT_MEM_CAP },    /* two by two */
+        {   1,   1, RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 

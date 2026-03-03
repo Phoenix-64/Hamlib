@@ -46,7 +46,7 @@ public:
 #endif
 
 
-    const struct rig_caps *caps;
+    struct rig_caps *caps;
 
     // This method opens the communication port to the rig
     void open(void);
@@ -54,11 +54,13 @@ public:
     // This method closes the communication port to the rig
     void close(void);
 
-    void setConf(token_t token, const char *val);
+    void setConf(hamlib_token_t token, const char *val);
     void setConf(const char *name, const char *val);
-    void getConf(token_t token, char *val);
-    void getConf(const char *name, char *val);
-    token_t tokenLookup(const char *name);
+    HL_DEPRECATED void getConf(hamlib_token_t token, char *val);
+    HL_DEPRECATED void getConf(const char *name, char *val);
+    void getConf2(hamlib_token_t token, char *val, int val_len);
+    void getConf2(const char *name, char *val, int val_len);
+    hamlib_token_t tokenLookup(const char *name);
 
     void setFreq(freq_t freq, vfo_t vfo = RIG_VFO_CURR);
     freq_t getFreq(vfo_t vfo = RIG_VFO_CURR);

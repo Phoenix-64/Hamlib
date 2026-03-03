@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "misc.h"
 #include "icom.h"
 #include "icom_defs.h"
@@ -42,7 +42,7 @@ static int icf8101_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     int freq_len = 5;
     int ack_len;
     unsigned char freqbuf[MAXFRAMELEN], ackbuf[MAXFRAMELEN];
-    vfo_t vfo_save = rig->state.current_vfo;
+    vfo_t vfo_save = STATE(rig)->current_vfo;
 
     if (vfo != vfo_save)
     {
@@ -69,17 +69,31 @@ static int icf8101_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s, mode=%s, width=%d\n", __func__,
               rig_strvfo(vfo), rig_strrmode(mode), (int)width);
 
+    modebuf[0] = 0;
     switch (mode)
     {
-    case RIG_MODE_LSB:  modebuf[0] = 0x00; modebuf[1] = 0x00; break;
+    case RIG_MODE_LSB:   modebuf[1] = 0x00; break;
 
-    case RIG_MODE_USB:  modebuf[0] = 0x00; modebuf[1] = 0x01; break;
+    case RIG_MODE_USB:   modebuf[1] = 0x01; break;
 
-    case RIG_MODE_AM:   modebuf[0] = 0x00; modebuf[1] = 0x02; break;
+    case RIG_MODE_AM:    modebuf[1] = 0x02; break;
 
-    case RIG_MODE_CW:   modebuf[0] = 0x00; modebuf[1] = 0x03; break;
+    case RIG_MODE_CW:    modebuf[1] = 0x03; break;
 
-    case RIG_MODE_RTTY: modebuf[0] = 0x00; modebuf[1] = 0x04; break;
+    case RIG_MODE_RTTY:  modebuf[1] = 0x04; break;
+
+ // AB4MW added the 6 "D" modes for digital operation below
+    case RIG_MODE_LSBD1: modebuf[1] = 0x18; break;
+
+    case RIG_MODE_LSBD2: modebuf[1] = 0x20; break;
+
+    case RIG_MODE_LSBD3: modebuf[1] = 0x22; break;
+
+    case RIG_MODE_USBD1: modebuf[1] = 0x19; break;
+
+    case RIG_MODE_USBD2: modebuf[1] = 0x21; break;
+
+    case RIG_MODE_USBD3: modebuf[1] = 0x23; break;
 
     default:
         rig_debug(RIG_DEBUG_ERR, "%s: unknown mode of '%s\n", __func__,
@@ -94,23 +108,22 @@ static int icf8101_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 static int icf8101_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode,
                             pbwidth_t *width)
 {
-    int retval = icom_get_mode(rig, vfo, mode, width);
+    int retval;
     unsigned char modebuf[MAXFRAMELEN];
     int modebuf_len;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s\n", __func__, rig_strvfo(vfo));
-    if (retval != RIG_OK)
-    {
-        return retval;
-    }
-    retval = icom_transaction(rig, 0x1A, 0x34, NULL, 0, modebuf, &modebuf_len);
-    if (retval != RIG_OK)
-    {
-        return retval;
-    }
-    dump_hex(modebuf, modebuf_len);
 
-    switch (modebuf[1])
+    retval = icom_transaction(rig, 0x1A, 0x34, NULL, 0, modebuf, &modebuf_len);
+
+    if (retval != RIG_OK)
+    {
+        return retval;
+    }
+
+    //dump_hex(modebuf, modebuf_len);
+
+    switch (modebuf[3])
     {
     case 0x00: *mode = RIG_MODE_LSB; break;
 
@@ -121,6 +134,19 @@ static int icf8101_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode,
     case 0x03: *mode = RIG_MODE_CW; break;
 
     case 0x04: *mode = RIG_MODE_RTTY; break;
+
+// AB4MW added the 6 "D" modes for digital operation below
+    case 0x18: *mode = RIG_MODE_LSBD1; break;
+
+    case 0x20: *mode = RIG_MODE_LSBD2; break;
+
+    case 0x22: *mode = RIG_MODE_LSBD3; break;
+
+    case 0x19: *mode = RIG_MODE_USBD1; break;
+
+    case 0x21: *mode = RIG_MODE_USBD2; break;
+
+    case 0x23: *mode = RIG_MODE_USBD3; break;
 
     default:
         rig_debug(RIG_DEBUG_ERR, "%s: unknown mode response=0x%02x\n", __func__,
@@ -149,8 +175,10 @@ static int icf8101_r2i_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width,
     return err;
 }
 
-
-#define ICF8101_MODES (RIG_MODE_LSB|RIG_MODE_USB|RIG_MODE_CW|RIG_MODE_AM|RIG_MODE_RTTY)
+// AB4MW added the 6 "D" modes for digital ops
+#define ICF8101_MODES (RIG_MODE_LSB|RIG_MODE_USB|RIG_MODE_CW|RIG_MODE_AM|RIG_MODE_RTTY|\
+		       RIG_MODE_USBD1|RIG_MODE_USBD2|RIG_MODE_USBD3|RIG_MODE_LSBD1|\
+		       RIG_MODE_LSBD2|RIG_MODE_LSBD3)
 
 #define ICF8101_VFO_ALL (RIG_VFO_A|RIG_VFO_B)
 
@@ -186,7 +214,7 @@ static const struct icom_priv_caps icf8101_priv_caps =
     .r2i_mode = icf8101_r2i_mode
 };
 
-int icf8101_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
+static int icf8101_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
     switch (func)
     {
@@ -195,7 +223,7 @@ int icf8101_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     }
 }
 
-int icf8101_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
+static int icf8101_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 {
     switch (func)
     {
@@ -204,7 +232,7 @@ int icf8101_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
     }
 }
 
-int icf8101_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+static int icf8101_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -219,7 +247,7 @@ int icf8101_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     }
 }
 
-int icf8101_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
+static int icf8101_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -233,24 +261,24 @@ int icf8101_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
     }
 }
 
-int icf8101_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
+static int icf8101_set_split_freq(RIG *rig, vfo_t vfo, freq_t tx_freq)
 {
     return rig_set_freq(rig, RIG_VFO_B, tx_freq);
 }
 
-int icf8101_get_split_freq(RIG *rig, vfo_t vfo, freq_t *tx_freq)
+static int icf8101_get_split_freq(RIG *rig, vfo_t vfo, freq_t *tx_freq)
 {
     return rig_get_freq(rig, RIG_VFO_B, tx_freq);
 }
 
-int icf8101_set_split_freq_mode(RIG *rig, vfo_t vfo, freq_t tx_freq,
+static int icf8101_set_split_freq_mode(RIG *rig, vfo_t vfo, freq_t tx_freq,
                                 rmode_t mode, pbwidth_t width)
 {
     rig_set_freq(rig, RIG_VFO_B, tx_freq);
     return rig_set_mode(rig, RIG_VFO_B, mode, -1);
 }
 
-int icf8101_get_split_freq_mode(RIG *rig, vfo_t vfo, freq_t *tx_freq,
+static int icf8101_get_split_freq_mode(RIG *rig, vfo_t vfo, freq_t *tx_freq,
                                 rmode_t *mode, pbwidth_t *width)
 {
     rig_get_freq(rig, RIG_VFO_B, tx_freq);
@@ -259,7 +287,7 @@ int icf8101_get_split_freq_mode(RIG *rig, vfo_t vfo, freq_t *tx_freq,
 
 
 
-int icf8101_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
+static int icf8101_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 {
     unsigned char cmdbuf[4];
     int ack_len;
@@ -273,7 +301,7 @@ int icf8101_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
                             &ack_len);
 }
 
-int icf8101_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
+static int icf8101_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
 {
     int retval;
     int ack_len;
@@ -295,7 +323,7 @@ int icf8101_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
     return retval;
 }
 
-int icf8101_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
+static int icf8101_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 {
     unsigned char ackbuf[MAXFRAMELEN], pttbuf[2];
     int ack_len = sizeof(ackbuf), retval;
@@ -344,9 +372,9 @@ int icf8101_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
 /*
  * icf8101_get_ptt
- * Assumes rig!=NULL, rig->state.priv!=NULL, ptt!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, ptt!=NULL
  */
-int icf8101_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
+static int icf8101_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 {
     unsigned char pttbuf[MAXFRAMELEN];
     int ptt_len, retval;
@@ -380,7 +408,7 @@ int icf8101_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 }
 
 
-const struct rig_caps icf8101_caps =
+struct rig_caps icf8101_caps =
 {
     RIG_MODEL(RIG_MODEL_ICF8101),
     .model_name =   "IC-F8101",
@@ -393,7 +421,9 @@ const struct rig_caps icf8101_caps =
     .dcd_type =   RIG_DCD_RIG,
     .port_type =    RIG_PORT_SERIAL,
     .serial_rate_min =  300,
-    .serial_rate_max =  19200,
+// AB4MW set serial_rate_max to 38400 for this radio, which is IMPORTANT
+//    if also using the log stream on the same serial port.
+    .serial_rate_max =  38400,
     .serial_data_bits = 8,
     .serial_stop_bits = 1,
     .serial_parity =  RIG_PARITY_NONE,

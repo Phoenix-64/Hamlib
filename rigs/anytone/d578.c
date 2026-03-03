@@ -26,14 +26,14 @@
 #define D578_VFO (RIG_VFO_A|RIG_VFO_B)
 #define D578_MODES (RIG_MODE_USB|RIG_MODE_AM)
 
-const struct rig_caps anytone_d578_caps =
+struct rig_caps anytone_d578_caps =
 {
     RIG_MODEL(RIG_MODEL_ATD578UVIII),
     .model_name         =  "D578A",
     .mfg_name           =  "AnyTone",
     .version            =  BACKEND_VER ".0",
     .copyright          =  "Michael Black W9MDB: GNU LGPL",
-    .status             =  RIG_STATUS_ALPHA,
+    .status             =  RIG_STATUS_BETA,
     .rig_type           =  RIG_TYPE_TRANSCEIVER,
     .ptt_type           =  RIG_PTT_RIG,
     .dcd_type           =  RIG_DCD_NONE,

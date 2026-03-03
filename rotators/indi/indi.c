@@ -22,15 +22,15 @@
 
 #include "indi_wrapper.h"
 
-#include <hamlib/rotator.h>
-#include <register.h>
+#include "hamlib/rotator.h"
+#include "register.h"
 
 const struct rot_caps indi_rot_caps =
 {
     ROT_MODEL(ROT_MODEL_INDI),
     .model_name =       "INDI",
     .mfg_name =         "INDI",
-    .version =          "0.1",
+    .version =          "0.3",
     .copyright =        "LGPL",
     .status =           RIG_STATUS_STABLE,
     .rot_type =         ROT_TYPE_OTHER,

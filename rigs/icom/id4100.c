@@ -79,14 +79,14 @@ static struct icom_priv_caps id4100_priv_caps =
     1,      /* no XCHG */
 };
 
-const struct rig_caps id4100_caps =
+struct rig_caps id4100_caps =
 {
     RIG_MODEL(RIG_MODEL_ID4100),
     .model_name = "ID-4100",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".1",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_MOBILE,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_RIG,
@@ -176,7 +176,7 @@ const struct rig_caps id4100_caps =
     .rig_init =   icom_init,
     .rig_cleanup =   icom_cleanup,
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,

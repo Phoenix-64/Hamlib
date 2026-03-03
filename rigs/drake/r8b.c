@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "drake.h"
 
 
@@ -78,14 +78,14 @@
  *
  */
 
-const struct rig_caps r8b_caps =
+struct rig_caps r8b_caps =
 {
     RIG_MODEL(RIG_MODEL_DKR8B),
     .model_name = "R-8B",
     .mfg_name =  "Drake",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

@@ -22,7 +22,7 @@
 #ifndef _NETWORK_H
 #define _NETWORK_H 1
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "iofunc.h"
 
 __BEGIN_DECLS
@@ -31,6 +31,7 @@ __BEGIN_DECLS
 int network_open(hamlib_port_t *p, int default_port);
 int network_close(hamlib_port_t *rp);
 void network_flush(hamlib_port_t *rp);
+int network_flush2(hamlib_port_t *rp, unsigned char *stopset, char *buf, int buf_len);
 int network_publish_rig_poll_data(RIG *rig);
 int network_publish_rig_transceive_data(RIG *rig);
 int network_publish_rig_spectrum_data(RIG *rig, struct rig_spectrum_line *line);

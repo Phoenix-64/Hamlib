@@ -37,8 +37,9 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
+#include "cache.h"
 #include "yaesu.h"
 #include "ft747.h"
 
@@ -204,8 +205,8 @@ static const yaesu_cmd_set_t ft747_ncmd[] =
     { 1, { 0x00, 0x00, 0x00, 0x00, 0x05 } }, /* select vfo A */
     { 1, { 0x00, 0x00, 0x00, 0x01, 0x05 } }, /* select vfo B */
     { 0, { 0x00, 0x00, 0x00, 0x00, 0x06 } }, /* memory to vfo*/
-    { 1, { 0x00, 0x00, 0x00, 0x00, 0x07 } }, /* up 500 khz */
-    { 1, { 0x00, 0x00, 0x00, 0x00, 0x08 } }, /* down 500 khz */
+    { 1, { 0x00, 0x00, 0x00, 0x00, 0x07 } }, /* up 500 kHz */
+    { 1, { 0x00, 0x00, 0x00, 0x00, 0x08 } }, /* down 500 kHz */
     { 1, { 0x00, 0x00, 0x00, 0x00, 0x09 } }, /* clarify off */
     { 1, { 0x00, 0x00, 0x00, 0x01, 0x09 } }, /* clarify on */
     { 0, { 0x00, 0x00, 0x00, 0x00, 0x0a } }, /* set freq */
@@ -296,12 +297,12 @@ struct ft747_priv_data
  * Also this struct is READONLY!
  */
 
-const struct rig_caps ft747_caps =
+struct rig_caps ft747_caps =
 {
     RIG_MODEL(RIG_MODEL_FT747),
     .model_name =       "FT-747GX",
     .mfg_name =         "Yaesu",
-    .version =           "20220819.1",
+    .version =           "20241108.0",
     .copyright =         "LGPL",
     .status =            RIG_STATUS_STABLE,
     .rig_type =          RIG_TYPE_MOBILE,
@@ -441,10 +442,10 @@ const struct rig_caps ft747_caps =
 
 int ft747_init(RIG *rig)
 {
-    rig->state.priv = (struct ft747_priv_data *) calloc(1,
-                      sizeof(struct ft747_priv_data));
+    STATE(rig)->priv = (struct ft747_priv_data *) calloc(1,
+                       sizeof(struct ft747_priv_data));
 
-    if (!rig->state.priv)           /* whoops! memory shortage! */
+    if (!STATE(rig)->priv)           /* whoops! memory shortage! */
     {
         return -RIG_ENOMEM;
     }
@@ -465,12 +466,12 @@ int ft747_cleanup(RIG *rig)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called\n", __func__);
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -483,17 +484,17 @@ int ft747_cleanup(RIG *rig)
 int ft747_open(RIG *rig)
 {
     struct rig_state *rig_s;
+    hamlib_port_t *rp = RIGPORT(rig);
     struct ft747_priv_data *p;
     int ret;
 
-
-    rig_s = &rig->state;
+    rig_s = STATE(rig);
     p = (struct ft747_priv_data *)rig_s->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "ft747:rig_open: write_delay = %i msec \n",
-              rig_s->rigport.write_delay);
+              rp->write_delay);
     rig_debug(RIG_DEBUG_VERBOSE, "ft747:rig_open: post_write_delay = %i msec \n",
-              rig_s->rigport.post_write_delay);
+              rp->post_write_delay);
 
     /*
     * Copy native cmd PACING  to private cmd storage area
@@ -507,7 +508,7 @@ int ft747_open(RIG *rig)
 
     /* send PACING cmd to rig, once for all */
 
-    ret = write_block(&rig->state.rigport, p->p_cmd, YAESU_CMD_LENGTH);
+    ret = write_block(rp, p->p_cmd, YAESU_CMD_LENGTH);
 
     if (ret < 0)
     {
@@ -547,7 +548,7 @@ int ft747_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     // cppcheck-suppress *
     char *fmt = "%s: requested freq after conversion = %"PRIll" Hz \n";
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE,
               "ft747: requested freq = %"PRIfreq" Hz vfo = %s \n", freq, rig_strvfo(vfo));
@@ -568,7 +569,7 @@ int ft747_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     rig_force_cache_timeout(&p->status_tv);
 
     cmd = p->p_cmd; /* get native sequence */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 
 
@@ -579,22 +580,23 @@ int ft747_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 int ft747_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
     struct ft747_priv_data *p;
+    struct rig_cache *cachep = CACHE(rig);
     freq_t f;
     int ret;
 
     rig_debug(RIG_DEBUG_VERBOSE,
               "%s: called vfo=%s, freqMainA=%.0f, freqMainB=%.0f\n", __func__,
-              rig_strvfo(vfo), rig->state.cache.freqMainA, rig->state.cache.freqMainB);
+              rig_strvfo(vfo), cachep->freqMainA, cachep->freqMainB);
 
-    if (vfo == RIG_VFO_CURR) { vfo = rig->state.cache.vfo; }
+    if (vfo == RIG_VFO_CURR) { vfo = cachep->vfo; }
 
-    if (rig->state.cache.ptt == RIG_PTT_ON)
+    if (cachep->ptt == RIG_PTT_ON)
     {
-        *freq = RIG_VFO_B ? rig->state.cache.freqMainB : rig->state.cache.freqMainA;
+        *freq = RIG_VFO_B ? cachep->freqMainB : cachep->freqMainA;
         return RIG_OK;
     }
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
     ret = ft747_get_update_data(rig); /* get whole shebang from rig */
 
     if (ret < 0)
@@ -711,7 +713,7 @@ int ft747_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     rig_debug(RIG_DEBUG_VERBOSE, "ft747: cmd_index = %i \n", cmd_index);
 
     rig_force_cache_timeout(&((struct ft747_priv_data *)
-                              rig->state.priv)->status_tv);
+                              STATE(rig)->priv)->status_tv);
 
     /*
      * phew! now send cmd to rig
@@ -727,7 +729,7 @@ int ft747_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
     unsigned char mymode;     /* ft747 mode */
     int ret;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     ret = ft747_get_update_data(rig); /* get whole shebang from rig */
 
@@ -797,7 +799,7 @@ int ft747_set_vfo(RIG *rig, vfo_t vfo)
     struct ft747_priv_data *p;
     unsigned char cmd_index;  /* index of sequence to send */
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     switch (vfo)
     {
@@ -830,7 +832,7 @@ int ft747_get_vfo(RIG *rig, vfo_t *vfo)
     unsigned char status;     /* ft747 status flag */
     int ret;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     ret = ft747_get_update_data(rig); /* get whole shebang from rig */
 
@@ -871,7 +873,7 @@ int ft747_set_split(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
                 FT_747_NATIVE_SPLIT_OFF;
 
     rig_force_cache_timeout(&((struct ft747_priv_data *)
-                              rig->state.priv)->status_tv);
+                              STATE(rig)->priv)->status_tv);
 
     return ft747_send_priv_cmd(rig, cmd_index);
 
@@ -883,7 +885,7 @@ int ft747_get_split(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
     unsigned char status;     /* ft747 status flag */
     int ret;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     ret = ft747_get_update_data(rig); /* get whole shebang from rig */
 
@@ -929,7 +931,7 @@ int ft747_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
     }
 
     rig_force_cache_timeout(&((struct ft747_priv_data *)
-                              rig->state.priv)->status_tv);
+                              STATE(rig)->priv)->status_tv);
 
     /*
      * phew! now send cmd to rig
@@ -942,7 +944,7 @@ int ft747_set_mem(RIG *rig, vfo_t vfo, int ch)
 {
     struct ft747_priv_data *p;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     if (ch < 0 || ch > 0x13)
     {
@@ -958,7 +960,7 @@ int ft747_set_mem(RIG *rig, vfo_t vfo, int ch)
 
     rig_force_cache_timeout(&p->status_tv);
 
-    return write_block(&rig->state.rigport, p->p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p->p_cmd, YAESU_CMD_LENGTH);
 }
 
 int ft747_get_mem(RIG *rig, vfo_t vfo, int *ch)
@@ -967,7 +969,7 @@ int ft747_get_mem(RIG *rig, vfo_t vfo, int *ch)
     unsigned char mem_nb;
     int ret;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
 
     ret = ft747_get_update_data(rig); /* get whole shebang from rig */
 
@@ -1002,16 +1004,16 @@ static int ft747_get_update_data(RIG *rig)
     struct ft747_priv_data *p;
     //unsigned char last_byte;
 
-    p = (struct ft747_priv_data *)rig->state.priv;
-    rigport = &rig->state.rigport;
+    p = (struct ft747_priv_data *)STATE(rig)->priv;
+    rigport = RIGPORT(rig);
 
-    if (rig->state.cache.ptt == RIG_PTT_ON
+    if (CACHE(rig)->ptt == RIG_PTT_ON
             || !rig_check_cache_timeout(&p->status_tv, FT747_CACHE_TIMEOUT))
     {
         return RIG_OK;
     }
 
-    if (!rig->state.transmit)     /* rig doesn't respond in Tx mode */
+    if (!STATE(rig)->transmit)     /* rig doesn't respond in Tx mode */
     {
         int ret;
         //int port_timeout;
@@ -1064,7 +1066,7 @@ static int ft747_send_priv_cmd(RIG *rig, unsigned char ci)
         return -RIG_EINVAL;
     }
 
-    return write_block(&rig->state.rigport, ft747_ncmd[ci].nseq, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), ft747_ncmd[ci].nseq, YAESU_CMD_LENGTH);
 
 }
 

@@ -31,20 +31,19 @@
  * doc todo: deal with defined(HAVE_LIBUSB)... quashing the doc process.
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
-
-
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>  /* String function definitions */
-#include <sys/types.h>
+#include <strings.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
+#include "hamlib/port.h"
 
-#ifdef HAVE_LIBUSB_H
-#  include <libusb.h>
-#elif defined HAVE_LIBUSB_1_0_LIBUSB_H
-#  include <libusb-1.0/libusb.h>
+// LIBUSB_CFLAGS set by pkg-config should set the include path appropriately.
+#ifdef HAVE_LIBUSB
+#include <libusb.h>
 #endif
 
 #include "usb_port.h"
@@ -52,7 +51,7 @@
 /*
  * Compile only if libusb is available
  */
-#if defined(HAVE_LIBUSB) && (defined(HAVE_LIBUSB_H) || defined(HAVE_LIBUSB_1_0_LIBUSB_H))
+#if defined(HAVE_LIBUSB)
 
 /**
  * \brief Find and open USB device
@@ -67,10 +66,11 @@ static libusb_device_handle *find_and_open_device(const hamlib_port_t *port)
     char    string[256];
     int i, r;
 
-    rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
+    rig_debug(RIG_DEBUG_VERBOSE, "%s called LIBUSB_API_VERSION=%x\n", __func__,
+              LIBUSB_API_VERSION);
 
     rig_debug(RIG_DEBUG_VERBOSE,
-              "%s: looking for device %04x:%04x...",
+              "%s: looking for device %04x:%04x...\n",
               __func__,
               port->parm.usb.vid,
               port->parm.usb.pid);
@@ -93,7 +93,7 @@ static libusb_device_handle *find_and_open_device(const hamlib_port_t *port)
         libusb_get_device_descriptor(dev, &desc);
 
         rig_debug(RIG_DEBUG_VERBOSE,
-                  " %04x:%04x,",
+                  " %04x:%04x\n",
                   desc.idVendor,
                   desc.idProduct);
 
@@ -222,7 +222,7 @@ int usb_port_open(hamlib_port_t *port)
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    /* init default libusb-1.0 library contexte, if needed */
+    /* init default libusb-1.0 library context, if needed */
     r = libusb_init(NULL);
 
     if (r < 0)
@@ -243,33 +243,50 @@ int usb_port_open(hamlib_port_t *port)
     pathname[HAMLIB_FILPATHLEN - 1] = '\0';
 
     p = pathname;
-    q = strchr(p, ':');
 
-    if (q)
+    if (strlen(pathname) == 9)
     {
-        ++q;
-        port->parm.usb.vid = strtol(q, NULL, 16);
-        p = q;
+        // then is new new libusb format with just vid:pid
+        int n = sscanf(pathname, "%x:%x", &port->parm.usb.vid, &port->parm.usb.pid);
+
+        if (n != 2)
+        {
+            rig_debug(RIG_DEBUG_ERR, "%s: unable to parse vid:pid from '%s'\n", __func__,
+                      pathname);
+            return -RIG_EINVAL;
+        }
+    }
+
+    else
+    {
         q = strchr(p, ':');
 
         if (q)
         {
             ++q;
-            port->parm.usb.pid = strtol(q, NULL, 16);
+            port->parm.usb.vid = strtol(q, NULL, 16);
             p = q;
             q = strchr(p, ':');
 
             if (q)
             {
                 ++q;
-                port->parm.usb.vendor_name = q;
+                port->parm.usb.pid = strtol(q, NULL, 16);
                 p = q;
                 q = strchr(p, ':');
 
                 if (q)
                 {
-                    *q++ = '\0';
-                    port->parm.usb.product = q;
+                    ++q;
+                    port->parm.usb.vendor_name = q;
+                    p = q;
+                    q = strchr(p, ':');
+
+                    if (q)
+                    {
+                        *q++ = '\0';
+                        port->parm.usb.product = q;
+                    }
                 }
             }
         }
@@ -405,6 +422,6 @@ int usb_port_close(hamlib_port_t *port)
 }
 //! @endcond
 
-#endif  /* defined(HAVE_LIBUSB) && defined(HAVE_LIBUSB_H) */
+#endif  /* defined(HAVE_LIBUSB) */
 
 /** @} */

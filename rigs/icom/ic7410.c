@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 
 #include "icom.h"
@@ -115,17 +115,18 @@ static const struct icom_priv_caps ic7410_priv_caps =
         { .level = RIG_AGC_FAST, .icom_level = 3 },
         { .level = RIG_AGC_LAST, .icom_level = -1 },
     },
+    .data_mode_supported = 1,
 };
 
 
-const struct rig_caps ic7410_caps =
+struct rig_caps ic7410_caps =
 {
     RIG_MODEL(RIG_MODEL_IC7410),
     .model_name = "IC-7410",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".3",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_RIG,
@@ -148,16 +149,18 @@ const struct rig_caps ic7410_caps =
     .has_set_parm =  RIG_PARM_SET(IC7410_PARMS),    /* FIXME: parms */
     .level_gran =
     {
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 20 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = { .min = { .i = 6 }, .max = { .i = 48 }, .step = { .i = 1 } },
         [LVL_CWPITCH] = { .min = { .i = 300 }, .max = { .i = 900 }, .step = { .i = 1 } },
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
     },
     .parm_gran =  {
         [PARM_BACKLIGHT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.f = 1.0f / 255.0f}},
         [PARM_ANN] = {.min = {.i = 0}, .max = {.i = 2}, .step = {.i = 1}},
-        [PARM_KEYERTYPE] = {.step = {.s = "STRAIGHT, BUG, PADDLE"}},
+        [PARM_KEYERTYPE] = {.step = {.s = "STRAIGHT,BUG,PADDLE"}},
     },
 
     .ctcss_list =  common_ctcss_list,
@@ -179,6 +182,7 @@ const struct rig_caps ic7410_caps =
     .chan_list =  {
         {   1,  99, RIG_MTYPE_MEM  },
         { 100, 101, RIG_MTYPE_EDGE },    /* two by two */
+        {   1,  4, RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 
@@ -246,12 +250,12 @@ const struct rig_caps ic7410_caps =
     .rig_init =   icom_init,
     .rig_cleanup =   icom_cleanup,
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,
-    .set_mode =  icom_set_mode_with_data,
-    .get_mode =  icom_get_mode_with_data,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
     .set_vfo =  icom_set_vfo,
 //    .get_vfo =  icom_get_vfo,
     .set_ant =  icom_set_ant,

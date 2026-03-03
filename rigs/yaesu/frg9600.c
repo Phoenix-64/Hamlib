@@ -23,7 +23,7 @@
 
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "yaesu.h"
 
@@ -44,14 +44,14 @@ static int frg9600_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width);
  *
  */
 
-const struct rig_caps frg9600_caps =
+struct rig_caps frg9600_caps =
 {
     RIG_MODEL(RIG_MODEL_FRG9600),
     .model_name =         "FRG-9600",
     .mfg_name =           "Yaesu",
     .version =            "20160409.0",
     .copyright =          "LGPL",
-    .status =             RIG_STATUS_ALPHA,
+    .status =             RIG_STATUS_BETA,
     .rig_type =           RIG_TYPE_RECEIVER,
     .ptt_type =           RIG_PTT_NONE,
     .dcd_type =           RIG_DCD_NONE,
@@ -148,7 +148,7 @@ int frg9600_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     to_bcd_be(cmd + 1, freq / 10, 8);
 
     /* Frequency set */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 
 
@@ -191,6 +191,6 @@ int frg9600_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     cmd[0] = md;
 
     /* Mode set */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 

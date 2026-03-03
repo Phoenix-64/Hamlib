@@ -24,11 +24,12 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+#include <string.h>
 
 #include "hamlib/rig.h"
 #include "misc.h"
-#include "newcat.h"
 #include "bandplan.h"
+#include "idx_builtin.h"
 #include "newcat.h"
 #include "yaesu.h"
 #include "ft5000.h"
@@ -144,30 +145,31 @@ int ftdx3000_ext_tokens[] =
     TOK_BACKEND_NONE
 };
 
-int ft3000_set_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t option)
+static int ft3000_set_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t option)
 {
     char *cmd;
     int err;
-    struct newcat_priv_data *priv = (struct newcat_priv_data *)rig->state.priv;
+    struct newcat_priv_data *priv = (struct newcat_priv_data *)STATE(rig)->priv;
 
     ENTERFUNC;
 
     switch (ant)
     {
-    case 1:
+    case RIG_ANT_1:
         cmd = "AN01;"; // R3/1 ANT1/ANT3
         break;
 
-    case 2:
+    case RIG_ANT_2:
         cmd = "AN02;"; // RE/2 ANT2/ANT3
         break;
 
-    case 3:
+    case RIG_ANT_3:
         cmd = "AN03;"; // TRX ANT3
         break;
 
     default:
-        rig_debug(RIG_DEBUG_ERR, "%s: expected 1,2,3 got %u\n", __func__, ant);
+        rig_debug(RIG_DEBUG_ERR, "%s: expected one of %u,%u,%u got %u\n", __func__,
+                  RIG_ANT_1, RIG_ANT_2, RIG_ANT_3, ant);
         RETURNFUNC(-RIG_EINVAL);
     }
 
@@ -181,10 +183,10 @@ int ft3000_set_ant(RIG *rig, vfo_t vfo, ant_t ant, value_t option)
     RETURNFUNC(RIG_OK);
 }
 
-int ft3000_get_ant(RIG *rig, vfo_t vfo, ant_t dummy, value_t *option,
+static int ft3000_get_ant(RIG *rig, vfo_t vfo, ant_t dummy, value_t *option,
                    ant_t *ant_curr, ant_t *ant_tx, ant_t *ant_rx)
 {
-    struct newcat_priv_data *priv = (struct newcat_priv_data *)rig->state.priv;
+    struct newcat_priv_data *priv = (struct newcat_priv_data *)STATE(rig)->priv;
     int err;
 
     ENTERFUNC;
@@ -237,7 +239,7 @@ int ft3000_get_ant(RIG *rig, vfo_t vfo, ant_t dummy, value_t *option,
  * so this is just a copy of the FTDX 5000 caps.
  * It really needs to be reviewed for accuracy, but it works for WSJT-X.
  */
-const struct rig_caps ftdx3000_caps =
+struct rig_caps ftdx3000_caps =
 {
     RIG_MODEL(RIG_MODEL_FTDX3000),
     .model_name =         "FTDX-3000",
@@ -268,15 +270,23 @@ const struct rig_caps ftdx3000_caps =
     .has_get_parm =       RIG_PARM_BANDSELECT,
     .has_set_parm =       RIG_PARM_BANDSELECT,
     .level_gran = {
+#define NO_LVL_NOTCHF
+#define NO_LVL_MICGAIN
+#define NO_LVL_MONITOR_GAIN
+#define NO_LVL_RFPOWER
 #include "level_gran_yaesu.h"
+#undef NO_LVL_NOTCHF
+#undef NO_LVL_MICGAIN
+#undef NO_LVL_MONITOR_GAIN
+#undef NO_LVL_RFPOWER
         [LVL_NOTCHF] = { .min = { .i = 1 }, .max = { .i = 4000 }, .step = { .i = 10 } },
-        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
-        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f/100.0f } },
+        [LVL_MICGAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_MONITOR_GAIN] = { .min = { .f = 0 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
+        [LVL_RFPOWER] = { .min = { .f = .05 }, .max = { .f = 1.0 }, .step = { .f = 1.0f / 100.0f } },
     },
     .parm_gran =  {
         [PARM_BANDSELECT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.s = "BAND160M,BAND80M,BANDUNUSED,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN"}}
-        },
+    },
 
     .ctcss_list =         common_ctcss_list,
     .dcs_list =           NULL,
@@ -297,6 +307,7 @@ const struct rig_caps ftdx3000_caps =
     .chan_list =          {
         {   1,  99, RIG_MTYPE_MEM,  NEWCAT_MEM_CAP },
         { 100, 117, RIG_MTYPE_EDGE, NEWCAT_MEM_CAP },    /* two by two */
+        {   1,   5, RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
 

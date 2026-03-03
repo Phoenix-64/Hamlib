@@ -10,12 +10,14 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <hamlib/rig.h>
-#include <hamlib/riglist.h>
+#include "hamlib/rig.h"
+#include "hamlib/port.h"
+#include "hamlib/rig_state.h"
+#include "hamlib/riglist.h"
 #include "sprintflst.h"
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 
-#if 0
+#if 1
 #define MODEL RIG_MODEL_DUMMY
 #define PATH "/dev/ttyUSB0"
 #define BAUD 19200
@@ -31,21 +33,21 @@ int main()
     char *info_buf;
     freq_t freq;
     value_t rawstrength, power, strength;
-    float s_meter, rig_raw2val();
+    float s_meter, rig_raw2val(int i, cal_table_t *t);
     int status, retcode;
     unsigned int mwpower;
     rmode_t mode;
     pbwidth_t width;
 
     /* Set verbosity level */
-    rig_set_debug(RIG_DEBUG_TRACE);       // errors only
+    rig_set_debug(RIG_DEBUG_TRACE);       // Lots of output
 
     /* Instantiate a rig */
     my_rig = rig_init(MODEL); // your rig model.
 
-    strncpy(my_rig->state.rigport.pathname, PATH, HAMLIB_FILPATHLEN - 1);
+    rig_set_conf(my_rig, rig_token_lookup(my_rig, "rig_pathname"), PATH);
 
-    my_rig->state.rigport.parm.serial.rate = BAUD; // your baud rate
+    HAMLIB_RIGPORT(my_rig)->parm.serial.rate = BAUD; // your baud rate
 
     /* Open my rig */
     retcode = rig_open(my_rig);
@@ -88,7 +90,7 @@ int main()
 
     if (status != RIG_OK) { printf("Get mode failed?? Err=%s\n", rigerror(status)); }
 
-    printf("Current mode = 0x%lX = %s, width = %ld\n", mode, rig_strrmode(mode),
+    printf("Current mode = 0x%llX = %s, width = %ld\n", (unsigned long long)mode, rig_strrmode(mode),
            width);
 
     /* rig power output */
@@ -123,15 +125,16 @@ int main()
 
     printf("LEVEL_STRENGTH returns %d\n", strength.i);
 
-    const freq_range_t *range = rig_get_range(&my_rig->state.rx_range_list[0],
+    const struct rig_state *my_rs = HAMLIB_STATE(my_rig);
+    const freq_range_t *range = rig_get_range(&my_rs->rx_range_list[0],
                                 14074000, RIG_MODE_USB);
 
-    if (status != RIG_OK) { rig_debug(RIG_DEBUG_ERR, "%s: error rig_get_ragne: %s\n", __func__, rigerror(status)); }
+    if (status != RIG_OK) { rig_debug(RIG_DEBUG_ERR, "%s: error rig_get_range: %s\n", __func__, rigerror(status)); }
 
     if (range)
     {
         char vfolist[256];
-        rig_sprintf_vfo(vfolist, sizeof(vfo_list), my_rig->state.vfo_list);
+        rig_sprintf_vfo(vfolist, sizeof(vfolist), my_rs->vfo_list);
         printf("Range start=%"PRIfreq", end=%"PRIfreq", low_power=%d, high_power=%d, vfos=%s\n",
                range->startf, range->endf, range->low_power, range->high_power, vfolist);
     }

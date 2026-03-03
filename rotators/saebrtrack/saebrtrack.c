@@ -29,7 +29,7 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rotator.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "register.h"
 
 #include "saebrtrack.h"
@@ -49,7 +49,7 @@ static int
 saebrtrack_transaction(ROT *rot, const char *cmdstr, char *data,
                        size_t data_len)
 {
-    struct rot_state *rs;
+    hamlib_port_t *rotp = ROTPORT(rot);
     int retval;
 
     rig_debug(RIG_DEBUG_TRACE, "%s called: %s\n", __func__, cmdstr);
@@ -59,9 +59,8 @@ saebrtrack_transaction(ROT *rot, const char *cmdstr, char *data,
         return -RIG_EINVAL;
     }
 
-    rs = &rot->state;
-    rig_flush(&rs->rotport);
-    retval = write_block(&rs->rotport, (unsigned char *) cmdstr, strlen(cmdstr));
+    rig_flush(rotp);
+    retval = write_block(rotp, (unsigned char *) cmdstr, strlen(cmdstr));
 
     if (retval != RIG_OK)
     {
@@ -73,7 +72,7 @@ saebrtrack_transaction(ROT *rot, const char *cmdstr, char *data,
         return RIG_OK;    /* don't want a reply */
     }
 
-    retval = read_string(&rs->rotport, (unsigned char *) data, data_len,
+    retval = read_string(rotp, (unsigned char *) data, data_len,
                          "\n", 1, 0, 1);
 
     if (retval < 0)
@@ -154,7 +153,7 @@ const struct rot_caps saebrtrack_rot_caps =
     .mfg_name =       "Hamlib",
     .version =        "20200810.0",
     .copyright =   "LGPL",
-    .status =         RIG_STATUS_BETA,
+    .status =         RIG_STATUS_STABLE,
     .rot_type =       ROT_TYPE_OTHER,
     .port_type =      RIG_PORT_SERIAL,
     .serial_rate_min =  9600,

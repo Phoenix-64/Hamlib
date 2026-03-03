@@ -22,11 +22,10 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 #include "gpio.h"
+#include "hamlib/port.h"
 
 
 int gpio_open(hamlib_port_t *port, int output, int on_value)

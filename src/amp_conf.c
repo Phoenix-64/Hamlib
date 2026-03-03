@@ -18,6 +18,7 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 /**
  * \addtogroup amplifier
@@ -29,21 +30,22 @@
  * \file amp_conf.c
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
-#include <stdarg.h>
 #include <stdio.h>   /* Standard input/output definitions */
 #include <string.h>  /* String function definitions */
 
-#include <hamlib/amplifier.h>
+#include "hamlib/amplifier.h"
+#include "hamlib/port.h"
+#include "hamlib/amp_state.h"
 
 #include "amp_conf.h"
 #include "token.h"
 
 
 /*
- * Configuration options available in the amp->state struct.
+ * Configuration options available in the amp_state struct.
  */
 static const struct confparams ampfrontend_cfg_params[] =
 {
@@ -101,23 +103,24 @@ static const struct confparams ampfrontend_serial_cfg_params[] =
  * \return RIG_OK or a **negative value** error.
  *
  * \retval RIG_OK TOK_... value set successfully.
- * \retval RIG_EINVAL TOK_.. value not set.
+ * \retval -RIG_EINVAL TOK_.. value not set.
  *
  * \sa frontamp_get_conf()
  */
-int frontamp_set_conf(AMP *amp, token_t token, const char *val)
+int frontamp_set_conf(AMP *amp, hamlib_token_t token, const char *val)
 {
     struct amp_state *rs;
+    hamlib_port_t *ampp = AMPPORT(amp);
     int val_i;
 
-    rs = &amp->state;
+    rs = AMPSTATE(amp);
 
     amp_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     switch (token)
     {
     case TOK_PATHNAME:
-        strncpy(rs->ampport.pathname, val, HAMLIB_FILPATHLEN - 1);
+        strncpy(ampp->pathname, val, HAMLIB_FILPATHLEN - 1);
         strncpy(rs->ampport_deprecated.pathname, val, HAMLIB_FILPATHLEN - 1);
         break;
 
@@ -127,7 +130,7 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.write_delay = val_i;
+        ampp->write_delay = val_i;
         rs->ampport_deprecated.write_delay = val_i;
         break;
 
@@ -137,7 +140,7 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.post_write_delay = val_i;
+        ampp->post_write_delay = val_i;
         rs->ampport_deprecated.post_write_delay = val_i;
         break;
 
@@ -147,7 +150,7 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.timeout = val_i;
+        ampp->timeout = val_i;
         rs->ampport_deprecated.timeout = val_i;
         break;
 
@@ -157,12 +160,12 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.retry = val_i;
+        ampp->retry = val_i;
         rs->ampport_deprecated.retry = val_i;
         break;
 
     case TOK_SERIAL_SPEED:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -172,12 +175,12 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.parm.serial.rate = val_i;
+        ampp->parm.serial.rate = val_i;
         rs->ampport_deprecated.parm.serial.rate = val_i;
         break;
 
     case TOK_DATA_BITS:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -187,12 +190,12 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.parm.serial.data_bits = val_i;
+        ampp->parm.serial.data_bits = val_i;
         rs->ampport_deprecated.parm.serial.data_bits = val_i;
         break;
 
     case TOK_STOP_BITS:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
@@ -202,126 +205,123 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
             return -RIG_EINVAL;
         }
 
-        rs->ampport.parm.serial.stop_bits = val_i;
+        ampp->parm.serial.stop_bits = val_i;
         rs->ampport_deprecated.parm.serial.stop_bits = val_i;
         break;
 
     case TOK_PARITY:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "None"))
         {
-            rs->ampport.parm.serial.parity = RIG_PARITY_NONE;
-            rs->ampport_deprecated.parm.serial.parity = RIG_PARITY_NONE;
+            val_i = RIG_PARITY_NONE;
         }
         else if (!strcmp(val, "Odd"))
         {
-            rs->ampport.parm.serial.parity = RIG_PARITY_ODD;
-            rs->ampport_deprecated.parm.serial.parity = RIG_PARITY_ODD;
+            val_i = RIG_PARITY_ODD;
         }
         else if (!strcmp(val, "Even"))
         {
-            rs->ampport.parm.serial.parity = RIG_PARITY_EVEN;
-            rs->ampport_deprecated.parm.serial.parity = RIG_PARITY_EVEN;
+            val_i = RIG_PARITY_EVEN;
         }
         else if (!strcmp(val, "Mark"))
         {
-            rs->ampport.parm.serial.parity = RIG_PARITY_MARK;
-            rs->ampport_deprecated.parm.serial.parity = RIG_PARITY_MARK;
+            val_i = RIG_PARITY_MARK;
         }
         else if (!strcmp(val, "Space"))
         {
-            rs->ampport.parm.serial.parity = RIG_PARITY_SPACE;
-            rs->ampport_deprecated.parm.serial.parity = RIG_PARITY_SPACE;
+            val_i = RIG_PARITY_SPACE;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        ampp->parm.serial.parity = val_i;
+        rs->ampport_deprecated.parm.serial.parity = val_i;
         break;
 
     case TOK_HANDSHAKE:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "None"))
         {
-            rs->ampport.parm.serial.handshake = RIG_HANDSHAKE_NONE;
+            val_i = RIG_HANDSHAKE_NONE;
         }
         else if (!strcmp(val, "XONXOFF"))
         {
-            rs->ampport.parm.serial.handshake = RIG_HANDSHAKE_XONXOFF;
+            val_i = RIG_HANDSHAKE_XONXOFF;
         }
         else if (!strcmp(val, "Hardware"))
         {
-            rs->ampport.parm.serial.handshake = RIG_HANDSHAKE_HARDWARE;
+            val_i = RIG_HANDSHAKE_HARDWARE;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        ampp->parm.serial.handshake = val_i;
         break;
+
     case TOK_RTS_STATE:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "Unset"))
         {
-            rs->ampport.parm.serial.rts_state = RIG_SIGNAL_UNSET;
-            rs->ampport_deprecated.parm.serial.rts_state = RIG_SIGNAL_UNSET;
+            val_i = RIG_SIGNAL_UNSET;
         }
         else if (!strcmp(val, "ON"))
         {
-            rs->ampport.parm.serial.rts_state = RIG_SIGNAL_ON;
-            rs->ampport_deprecated.parm.serial.rts_state = RIG_SIGNAL_ON;
+            val_i = RIG_SIGNAL_ON;
         }
         else if (!strcmp(val, "OFF"))
         {
-            rs->ampport.parm.serial.rts_state = RIG_SIGNAL_OFF;
-            rs->ampport_deprecated.parm.serial.rts_state = RIG_SIGNAL_OFF;
+            val_i = RIG_SIGNAL_OFF;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        ampp->parm.serial.rts_state = val_i;
+        rs->ampport_deprecated.parm.serial.rts_state = val_i;
         break;
 
     case TOK_DTR_STATE:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
         if (!strcmp(val, "Unset"))
         {
-            rs->ampport.parm.serial.dtr_state = RIG_SIGNAL_UNSET;
-            rs->ampport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_UNSET;
+            val_i = RIG_SIGNAL_UNSET;
         }
         else if (!strcmp(val, "ON"))
         {
-            rs->ampport.parm.serial.dtr_state = RIG_SIGNAL_ON;
-            rs->ampport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_ON;
+            val_i = RIG_SIGNAL_ON;
         }
         else if (!strcmp(val, "OFF"))
         {
-            rs->ampport.parm.serial.dtr_state = RIG_SIGNAL_OFF;
-            rs->ampport_deprecated.parm.serial.dtr_state = RIG_SIGNAL_OFF;
+            val_i = RIG_SIGNAL_OFF;
         }
         else
         {
             return -RIG_EINVAL;
         }
 
+        ampp->parm.serial.dtr_state = val_i;
+        rs->ampport_deprecated.parm.serial.dtr_state = val_i;
         break;
 
 
@@ -366,75 +366,73 @@ int frontamp_set_conf(AMP *amp, token_t token, const char *val)
  * \return RIG_OK or a **negative value** on error.
  *
  * \retval RIG_OK TOK_... value queried successfully.
- * \retval RIG_EINVAL TOK_.. value not queried.
+ * \retval -RIG_EINVAL TOK_.. value not queried.
  *
  * \sa frontamp_set_conf()
  */
-int frontamp_get_conf2(AMP *amp, token_t token, char *val, int val_len)
+int frontamp_get_conf2(AMP *amp, hamlib_token_t token, char *val, int val_len)
 {
-    struct amp_state *rs;
+    hamlib_port_t *ampp = AMPPORT(amp);
     const char *s;
-
-    rs = &amp->state;
 
     amp_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
     switch (token)
     {
     case TOK_PATHNAME:
-        strncpy(val, rs->ampport.pathname, val_len - 1);
+        strncpy(val, ampp->pathname, val_len - 1);
         break;
 
     case TOK_WRITE_DELAY:
-        SNPRINTF(val, val_len, "%d", rs->ampport.write_delay);
+        SNPRINTF(val, val_len, "%d", ampp->write_delay);
         break;
 
     case TOK_POST_WRITE_DELAY:
-        SNPRINTF(val, val_len, "%d", rs->ampport.post_write_delay);
+        SNPRINTF(val, val_len, "%d", ampp->post_write_delay);
         break;
 
     case TOK_TIMEOUT:
-        SNPRINTF(val, val_len, "%d", rs->ampport.timeout);
+        SNPRINTF(val, val_len, "%d", ampp->timeout);
         break;
 
     case TOK_RETRY:
-        SNPRINTF(val, val_len, "%d", rs->ampport.retry);
+        SNPRINTF(val, val_len, "%d", ampp->retry);
         break;
 
     case TOK_SERIAL_SPEED:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->ampport.parm.serial.rate);
+        SNPRINTF(val, val_len, "%d", ampp->parm.serial.rate);
         break;
 
     case TOK_DATA_BITS:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->ampport.parm.serial.data_bits);
+        SNPRINTF(val, val_len, "%d", ampp->parm.serial.data_bits);
         break;
 
     case TOK_STOP_BITS:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        SNPRINTF(val, val_len, "%d", rs->ampport.parm.serial.stop_bits);
+        SNPRINTF(val, val_len, "%d", ampp->parm.serial.stop_bits);
         break;
 
     case TOK_PARITY:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        switch (rs->ampport.parm.serial.parity)
+        switch (ampp->parm.serial.parity)
         {
         case RIG_PARITY_NONE:
             s = "None";
@@ -464,12 +462,12 @@ int frontamp_get_conf2(AMP *amp, token_t token, char *val, int val_len)
         break;
 
     case TOK_HANDSHAKE:
-        if (rs->ampport.type.rig != RIG_PORT_SERIAL)
+        if (ampp->type.rig != RIG_PORT_SERIAL)
         {
             return -RIG_EINVAL;
         }
 
-        switch (rs->ampport.parm.serial.handshake)
+        switch (ampp->parm.serial.handshake)
         {
         case RIG_HANDSHAKE_NONE:
             s = "None";
@@ -520,7 +518,7 @@ int frontamp_get_conf2(AMP *amp, token_t token, char *val, int val_len)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The \a cfunc action completed successfully.
- * \retval RIG_EINVAL \a amp is NULL or inconsistent or \a cfunc is NULL.
+ * \retval -RIG_EINVAL \a amp is NULL or inconsistent or \a cfunc is NULL.
  */
 int HAMLIB_API amp_token_foreach(AMP *amp,
                                  int (*cfunc)(const struct confparams *,
@@ -589,7 +587,7 @@ const struct confparams *HAMLIB_API amp_confparam_lookup(AMP *amp,
         const char *name)
 {
     const struct confparams *cfp;
-    token_t token;
+    hamlib_token_t token;
 
     amp_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -646,7 +644,7 @@ const struct confparams *HAMLIB_API amp_confparam_lookup(AMP *amp,
  *
  * \sa amp_confparam_lookup()
  */
-token_t HAMLIB_API amp_token_lookup(AMP *amp, const char *name)
+hamlib_token_t HAMLIB_API amp_token_lookup(AMP *amp, const char *name)
 {
     const struct confparams *cfp;
 
@@ -676,16 +674,16 @@ token_t HAMLIB_API amp_token_lookup(AMP *amp, const char *name)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK The parameter was set successfully.
- * \retval RIG_EINVAL \a amp is NULL or inconsistent or \a token is invalid.
- * \retval RIG_ENAVAIL amp_caps#set_conf() capability is not available.
+ * \retval -RIG_EINVAL \a amp is NULL or inconsistent or \a token is invalid.
+ * \retval -RIG_ENAVAIL amp_caps#set_conf() capability is not available.
  *
  * \sa amp_get_conf()
  */
-int HAMLIB_API amp_set_conf(AMP *amp, token_t token, const char *val)
+int HAMLIB_API amp_set_conf(AMP *amp, hamlib_token_t token, const char *val)
 {
     amp_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
-    if (!amp || !amp->caps)
+    if (!amp || !amp->caps || !val)
     {
         return -RIG_EINVAL;
     }
@@ -732,12 +730,13 @@ int HAMLIB_API amp_set_conf(AMP *amp, token_t token, const char *val)
  * value** if an error occurred (in which case, cause is set appropriately).
  *
  * \retval RIG_OK Querying the parameter was successful.
- * \retval RIG_EINVAL \a amp is NULL or inconsistent.
- * \retval RIG_ENAVAIL amp_caps#get_conf() capability is not available.
+ * \retval -RIG_EINVAL \a amp is NULL or inconsistent.
+ * \retval -RIG_ENAVAIL amp_caps#get_conf() capability is not available.
  *
  * \sa amp_set_conf()
  */
-int HAMLIB_API amp_get_conf2(AMP *amp, token_t token, char *val, int val_len)
+int HAMLIB_API amp_get_conf2(AMP *amp, hamlib_token_t token, char *val,
+                             int val_len)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -759,7 +758,7 @@ int HAMLIB_API amp_get_conf2(AMP *amp, token_t token, char *val, int val_len)
     return amp->caps->get_conf(amp, token, val);
 }
 
-int HAMLIB_API amp_get_conf(AMP *amp, token_t token, char *val)
+int HAMLIB_API amp_get_conf(AMP *amp, hamlib_token_t token, char *val)
 {
     return amp_get_conf2(amp, token, val, 128);
 }

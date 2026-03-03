@@ -25,17 +25,17 @@
 //    SYSTEM INCLUDES
 // ---------------------------------------------------------------------------
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <ctype.h>
 #include <errno.h>
 
 // ---------------------------------------------------------------------------
 //    HAMLIB INCLUDES
 // ---------------------------------------------------------------------------
 
-#include <hamlib/rig.h>
+#include "hamlib/config.h"
+#include "hamlib/rig.h"
 #include "serial.h"
 #include "misc.h"
 #include "register.h"
@@ -46,7 +46,8 @@
 // ---------------------------------------------------------------------------
 
 #include "anytone.h"
-int anytone_transaction(RIG *rig, unsigned char *cmd, int cmd_len, unsigned char *reply, int reply_len, int expected_len);
+static int anytone_transaction(RIG *rig, unsigned char *cmd, int cmd_len,
+                        unsigned char *reply, int reply_len, int expected_len);
 
 DECLARE_INITRIG_BACKEND(anytone)
 {
@@ -93,10 +94,11 @@ DECLARE_PROBERIG_BACKEND(anytone)
 
 // AnyTone needs a keep-alive to emulate the MIC
 // Apparently to keep the rig from getting stuck in PTT if mic disconnects
-void *anytone_thread(void *vrig)
+static void *anytone_thread(void *vrig)
 {
     RIG *rig = (RIG *)vrig;
-    anytone_priv_data_t *p = rig->state.priv;
+    hamlib_port_t *rp = RIGPORT(rig);
+    anytone_priv_data_t *p = STATE(rig)->priv;
     rig_debug(RIG_DEBUG_TRACE, "%s: anytone_thread started\n", __func__);
     p->runflag = 1;
 
@@ -114,9 +116,9 @@ void *anytone_thread(void *vrig)
             rig_set_debug(RIG_DEBUG_WARN);    // only show WARN debug otherwise too verbose
         }
 
-        write_block(&rig->state.rigport, (unsigned char *)c, strlen(c));
+        write_block(rp, (unsigned char *)c, strlen(c));
         char buf[32];
-        read_block(&rig->state.rigport, (unsigned char*)buf, 22);
+        read_block(rp, (unsigned char *)buf, 22);
 
         if (rig_need_debug(RIG_DEBUG_CACHE) == 0)
         {
@@ -133,17 +135,17 @@ void *anytone_thread(void *vrig)
 // ---------------------------------------------------------------------------
 // anytone_send
 // ---------------------------------------------------------------------------
-int anytone_send(RIG  *rig,
+static int anytone_send(RIG  *rig,
                  unsigned char *cmd, int cmd_len)
 {
     int               retval       = RIG_OK;
-    struct rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     ENTERFUNC;
 
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
-    retval = write_block(&rs->rigport, (unsigned char *) cmd,
+    retval = write_block(rp, (unsigned char *) cmd,
                          cmd_len);
 
     RETURNFUNC(retval);
@@ -152,16 +154,16 @@ int anytone_send(RIG  *rig,
 // ---------------------------------------------------------------------------
 // anytone_receive
 // ---------------------------------------------------------------------------
-int anytone_receive(RIG  *rig, unsigned char *buf, int buf_len, int expected)
+static int anytone_receive(RIG  *rig, unsigned char *buf, int buf_len, int expected)
 {
     int               retval       = RIG_OK;
-    struct rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     ENTERFUNC;
 
-//    retval = read_string(&rs->rigport, (unsigned char *) buf, buf_len,
+//    retval = read_string(rp, (unsigned char *) buf, buf_len,
 //                         NULL, 0, 0, expected);
-    retval = read_block(&rs->rigport, buf, expected);
+    retval = read_block(rp, buf, expected);
 
     if (retval > 0)
     {
@@ -176,10 +178,11 @@ int anytone_receive(RIG  *rig, unsigned char *buf, int buf_len, int expected)
 // ---------------------------------------------------------------------------
 // anytone_transaction
 // ---------------------------------------------------------------------------
-int anytone_transaction(RIG *rig, unsigned char *cmd, int cmd_len, unsigned char *reply, int reply_len, int expected_len)
+static int anytone_transaction(RIG *rig, unsigned char *cmd, int cmd_len,
+                        unsigned char *reply, int reply_len, int expected_len)
 {
     int retval   = RIG_OK;
-    //anytone_priv_data_t *p = rig->state.priv;
+    //anytone_priv_data_t *p = STATE(rig)->priv;
 
     ENTERFUNC;
 
@@ -218,11 +221,9 @@ int anytone_init(RIG *rig)
         }
         else
         {
-            rig->state.priv = p;
+            STATE(rig)->priv = p;
             p->vfo_curr = RIG_VFO_NONE;
-#ifdef HAVE_PTHREAD
             pthread_mutex_init(&p->mutex, NULL);
-#endif
         }
     }
 
@@ -243,8 +244,8 @@ int anytone_cleanup(RIG *rig)
 
     ENTERFUNC;
 
-    free(rig->state.priv);
-    rig->state.priv = NULL;
+    free(STATE(rig)->priv);
+    STATE(rig)->priv = NULL;
 
     RETURNFUNC(retval);
 }
@@ -255,18 +256,20 @@ int anytone_cleanup(RIG *rig)
 int anytone_open(RIG *rig)
 {
     int retval = RIG_OK;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     ENTERFUNC;
 
-    unsigned char cmd[] = { 0x2B,0x41,0x44,0x41,0x54,0x41,0x3A,0x30,0x30,0x2C,0x30,0x30,0x31,0x0d,0x0a,'a',0x0d,0x0a };
-    write_block(&rig->state.rigport, cmd, sizeof(cmd));
+    unsigned char cmd[] = { 0x2B, 0x41, 0x44, 0x41, 0x54, 0x41, 0x3A, 0x30, 0x30, 0x2C, 0x30, 0x30, 0x31, 0x0d, 0x0a, 'a', 0x0d, 0x0a };
+    write_block(rp, cmd, sizeof(cmd));
     hl_usleep(500 * 1000);
     char cmd2[64];
     SNPRINTF(cmd2, sizeof(cmd2), "+ADATA:00,016\r\n%cD578UV COM MODE\r\n", 0x01);
-    write_block(&rig->state.rigport, (unsigned char *)cmd2, strlen(cmd2));
+    write_block(rp, (unsigned char *)cmd2, strlen(cmd2));
     SNPRINTF(cmd2, sizeof(cmd2), "+ADATA:00,000\r\n");
     unsigned char reply[512];
-    anytone_transaction(rig, (unsigned char*)cmd2, strlen(cmd2), reply, sizeof(reply), strlen(cmd2));
+    anytone_transaction(rig, (unsigned char *)cmd2, strlen(cmd2), reply,
+                        sizeof(reply), strlen(cmd2));
 
     pthread_t id;
     // will start the keep alive
@@ -288,10 +291,14 @@ int anytone_open(RIG *rig)
 int anytone_close(RIG *rig)
 {
     int retval = RIG_OK;
+    anytone_priv_data_t *p = STATE(rig)->priv;
 
     ENTERFUNC;
+
+    // Tell thread to give up
+    p->runflag = 0;
     char *cmd  = "+ADATA:00,000\r\n";
-    anytone_transaction(rig, (unsigned char*)cmd, strlen(cmd), NULL, 0, 0);
+    anytone_transaction(rig, (unsigned char *)cmd, strlen(cmd), NULL, 0, 0);
 
     RETURNFUNC(retval);
 }
@@ -307,12 +314,13 @@ int anytone_get_vfo(RIG *rig, vfo_t *vfo)
 
     ENTERFUNC;
 
-    const anytone_priv_data_ptr p = (anytone_priv_data_ptr) rig->state.priv;
+    const anytone_priv_data_ptr p = (anytone_priv_data_ptr) STATE(rig)->priv;
     unsigned char reply[512];
-    unsigned char cmd[] = { 0x2b,0x41,0x44,0x41,0x54,0x41,0x3a,0x30,0x30,0x2c,0x30,0x30,0x36,0x0d,0x0a,0x04,0x05,0x00,0x00,0x00,0x00,0x0d,0x0a };
+    unsigned char cmd[] = { 0x2b, 0x41, 0x44, 0x41, 0x54, 0x41, 0x3a, 0x30, 0x30, 0x2c, 0x30, 0x30, 0x36, 0x0d, 0x0a, 0x04, 0x05, 0x00, 0x00, 0x00, 0x00, 0x0d, 0x0a };
     anytone_transaction(rig, cmd, sizeof(cmd), reply, sizeof(reply), 114);
-    if (reply[113] == 0x9b) *vfo = RIG_VFO_A;
-    else if (reply[113] == 0x9c) *vfo = RIG_VFO_B;
+
+    if (reply[113] == 0x9b) { *vfo = RIG_VFO_A; }
+    else if (reply[113] == 0x9c) { *vfo = RIG_VFO_B; }
     else
     {
         *vfo = RIG_VFO_A; // default to VFOA
@@ -342,7 +350,7 @@ int anytone_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 
     ENTERFUNC;
 
-    anytone_priv_data_t *p = rig->state.priv;
+    anytone_priv_data_t *p = STATE(rig)->priv;
     *ptt = p->ptt;
 
     RETURNFUNC(retval);
@@ -357,16 +365,17 @@ int anytone_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
     ENTERFUNC;
 
     //char buf[8] = { 0x41, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x06 };
-    unsigned char ptton[] =  { 0x2B,0x41,0x44,0x41,0x54,0x41,0x3A,0x30,0x30,0x2C,0x30,0x30,0x31,0x0d,0x0a,0x61,0x0d,0x0a };
-    unsigned char pttoff[] = { 0x2B,0x41,0x44,0x41,0x54,0x41,0x3A,0x30,0x30,0x2C,0x30,0x32,0x33,0x0d,0x0a,0x56,0x0d,0x0a };
+    unsigned char ptton[] =  { 0x2B, 0x41, 0x44, 0x41, 0x54, 0x41, 0x3A, 0x30, 0x30, 0x2C, 0x30, 0x30, 0x31, 0x0d, 0x0a, 0x61, 0x0d, 0x0a };
+    unsigned char pttoff[] = { 0x2B, 0x41, 0x44, 0x41, 0x54, 0x41, 0x3A, 0x30, 0x30, 0x2C, 0x30, 0x32, 0x33, 0x0d, 0x0a, 0x56, 0x0d, 0x0a };
     void *pttcmd = ptton;
-    if (!ptt) pttcmd = pttoff;
+
+    if (!ptt) { pttcmd = pttoff; }
 
     //if (!ptt) { cmd = " (unsigned char*)+ADATA:00,023\r\nV\r\n"; }
 
     MUTEX_LOCK(p->mutex);
     anytone_transaction(rig, pttcmd, sizeof(ptton), NULL, 0, 0);
-    anytone_priv_data_t *p = rig->state.priv;
+    anytone_priv_data_t *p = STATE(rig)->priv;
     p->ptt = ptt;
     MUTEX_UNLOCK(p->mutex);
 
@@ -377,6 +386,7 @@ int anytone_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
     char cmd[32];
     int retval;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     SNPRINTF(cmd, sizeof(cmd), "+ADATA:00,006\r\n");
     cmd[15] = 0x04;
@@ -393,13 +403,13 @@ int anytone_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
     int retry = 2;
     MUTEX_LOCK(p->priv.mutex);
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
     do
     {
-        write_block(&rig->state.rigport, (unsigned char *)cmd, 25);
+        write_block(rp, (unsigned char *)cmd, 25);
         unsigned char buf[512];
-        retval = read_block(&rig->state.rigport, buf, 138);
+        retval = read_block(rp, buf, 138);
 
         if (retval == 138)
         {
@@ -409,6 +419,7 @@ int anytone_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
         }
     }
     while (retval != 138 && --retry > 0);
+
     MUTEX_UNLOCK(p->priv.mutex);
 
     return RIG_OK;
@@ -417,19 +428,26 @@ int anytone_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 int anytone_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     char cmd[64];
+    hamlib_port_t *rp = RIGPORT(rig);
+
     if (vfo == RIG_VFO_A)
-    snprintf(cmd, sizeof(cmd), "ADATA:00,005\r\n%c%c%c%c\r\n", 2, 0, 0, 0);
+    {
+        snprintf(cmd, sizeof(cmd), "ADATA:00,005\r\n%c%c%c%c\r\n", 2, 0, 0, 0);
+    }
     else
-    snprintf(cmd, sizeof(cmd), "ADATA:00,005\r\n%c%c%c%c\r\n", 1, 0, 0, 0);
+    {
+        snprintf(cmd, sizeof(cmd), "ADATA:00,005\r\n%c%c%c%c\r\n", 1, 0, 0, 0);
+    }
+
     MUTEX_LOCK(p->priv.mutex);
-    rig_flush(&rig->state.rigport);
-    write_block(&rig->state.rigport, (unsigned char*) cmd, 20);
+    rig_flush(rp);
+    write_block(rp, (unsigned char *) cmd, 20);
     unsigned char backend[] = { 0x2f, 0x03, 0x00, 0xff, 0xff, 0xff, 0xff, 0x15, 0x50, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xcf, 0x09, 0x00, 0x00, 0x0d, 0x0a};
     snprintf(cmd, sizeof(cmd), "ADATA:00,023\r\n");
     int bytes = strlen(cmd) + sizeof(backend);
     memcpy(&cmd[15], backend, sizeof(backend));
-    hl_usleep(10*1000);
-    write_block(&rig->state.rigport, (unsigned char*)cmd, bytes);
+    hl_usleep(10 * 1000);
+    write_block(rp, (unsigned char *)cmd, bytes);
     MUTEX_UNLOCK(p->priv.mutex);
 
     return -RIG_ENIMPL;

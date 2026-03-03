@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 #include "icom_defs.h"
 #include "idx_builtin.h"
@@ -102,14 +102,24 @@ static const struct icom_priv_caps ic9100_priv_caps =
     .antack_len = 2,
     .ant_count = 2,
     .extcmds = ic9100_extcmds,
+    .x25x26_always = 0,
+    .x25x26_possibly = 0,
+    .x1cx03_always = 0,
+    .x1cx03_possibly = 0,
+    .x1ax03_supported = 1,
+    .mode_with_filter = 1,
+    .data_mode_supported = 1
 };
 
-const struct rig_caps ic9100_caps =
+// borrow this as they behave the same
+extern int ic9700_set_vfo(RIG *rig, vfo_t vfo);
+
+struct rig_caps ic9100_caps =
 {
     RIG_MODEL(RIG_MODEL_IC9100),
     .model_name = "IC-9100",
     .mfg_name =  "Icom",
-    .version =  BACKEND_VER ".5",
+    .version =  BACKEND_VER ".6",
     .copyright =  "LGPL",
     .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
@@ -135,14 +145,12 @@ const struct rig_caps ic9100_caps =
     .level_gran =
     {
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 20 }, .step = { .i = 1 } },
     },
     .parm_gran =  {
         [PARM_BACKLIGHT] = {.min = {.f = 0.0f}, .max = {.f = 1.0f}, .step = {.f = 1.0f / 255.0f}},
         [PARM_BANDSELECT] = {.step = {.s = "BANDUNUSED,BAND160M,BAND80M,BAND40M,BAND30M,BAND20M,BAND17M,BAND15M,BAND12M,BAND10M,BAND6M,BANDGEN"}},
         [PARM_ANN] = {.min = {.i = 0}, .max = {.i = 2}, .step = {.i = 1}},
-        [PARM_KEYERTYPE] = {.step = {.s = "STRAIGHT, BUG, PADDLE"}},
+        [PARM_KEYERTYPE] = {.step = {.s = "STRAIGHT,BUG,PADDLE"}},
     },
 
     .ctcss_list =  common_ctcss_list,
@@ -243,10 +251,9 @@ const struct rig_caps ic9100_caps =
     .get_freq =  icom_get_freq,
     .set_freq =  icom_set_freq,
 
-    .get_mode =  icom_get_mode_with_data,
-    .set_mode =  icom_set_mode_with_data,
-
-    .set_vfo =  icom_set_vfo,
+    .get_mode =  icom_get_mode,
+    .set_mode =  icom_set_mode,
+    .set_vfo =  ic9700_set_vfo,
 //    .get_vfo =  icom_get_vfo,
     .set_ant =  icom_set_ant,
     .get_ant =  icom_get_ant,

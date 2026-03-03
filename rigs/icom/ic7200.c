@@ -26,7 +26,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 
 #include "icom.h"
@@ -95,8 +95,8 @@
     } }
 
 
-int ic7200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
-int ic7200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
+static int ic7200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val);
+static int ic7200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val);
 
 /*
  * IC-7200 rig capabilities.
@@ -116,9 +116,16 @@ static const struct icom_priv_caps IC7200_priv_caps =
         { .level = RIG_AGC_SLOW, .icom_level = 2 },
         { .level = RIG_AGC_LAST, .icom_level = -1 },
     },
+    .x25x26_always = 0,
+    .x25x26_possibly = 0,
+    .x1cx03_always = 0,
+    .x1cx03_possibly = 0,
+    .x1ax03_supported = 1,
+    .mode_with_filter = 1,
+    .data_mode_supported = 1
 };
 
-const struct rig_caps ic7200_caps =
+struct rig_caps ic7200_caps =
 {
     RIG_MODEL(RIG_MODEL_IC7200),
     .model_name = "IC-7200",
@@ -148,9 +155,11 @@ const struct rig_caps ic7200_caps =
     .has_set_parm =  RIG_PARM_SET(IC7200_PARMS),
     .level_gran =
     {
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
 #include "level_gran_icom.h"
-        [LVL_RAWSTR] = { .min = { .i = 0 }, .max = { .i = 255 } },
-        [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 20 }, .step = { .i = 1 } },
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
         [LVL_KEYSPD] = { .min = { .i = 6 }, .max = { .i = 48 }, .step = { .i = 1 } },
         [LVL_CWPITCH] = { .min = { .i = 300 }, .max = { .i = 900 }, .step = { .i = 1 } },
     },
@@ -195,7 +204,7 @@ const struct rig_caps ic7200_caps =
     },
 
     .rx_range_list2 =   { {kHz(30), MHz(60), IC7200_ALL_RX_MODES, -1, -1, IC7200_VFOS}, RIG_FRNG_END, },
-    .tx_range_list2 =  { /* needs the 5 mhz channels added */
+    .tx_range_list2 =  { /* needs the 5 MHz channels added */
         FRQ_RNG_HF(2, IC7200_OTHER_TX_MODES, W(2), W(100), IC7200_VFOS, RIG_ANT_1),
         FRQ_RNG_6m(2, IC7200_OTHER_TX_MODES, W(2), W(100), IC7200_VFOS, RIG_ANT_1),
         FRQ_RNG_HF(2, IC7200_AM_TX_MODES, W(1), W(40), IC7200_VFOS, RIG_ANT_1), /* AM class */
@@ -246,8 +255,8 @@ const struct rig_caps ic7200_caps =
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,
-    .set_mode =  icom_set_mode_with_data,
-    .get_mode =  icom_get_mode_with_data,
+    .set_mode =  icom_set_mode,
+    .get_mode =  icom_get_mode,
     .set_vfo =  icom_set_vfo,
 //    .get_vfo =  icom_get_vfo,
     .set_ant =  NULL,  /*automatically set by rig depending band */
@@ -286,7 +295,7 @@ const struct rig_caps ic7200_caps =
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };
 
-int ic7200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
+static int ic7200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     unsigned char cmdbuf[MAXFRAMELEN];
 
@@ -303,7 +312,7 @@ int ic7200_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
     }
 }
 
-int ic7200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
+static int ic7200_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     unsigned char cmdbuf[MAXFRAMELEN];
 

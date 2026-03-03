@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "tt550.h"
 
@@ -60,7 +60,7 @@
  *
  * TODO:
  */
-const struct rig_caps tt550_caps =
+struct rig_caps tt550_caps =
 {
     RIG_MODEL(RIG_MODEL_TT550),
     .model_name = "TT-550",

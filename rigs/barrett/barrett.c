@@ -19,12 +19,13 @@
  *
  */
 
+#include "hamlib/config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
-#include "serial.h"
+#include "hamlib/rig.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 
@@ -47,11 +48,62 @@ DECLARE_INITRIG_BACKEND(barrett)
     rig_register(&barrett_caps);
     rig_register(&barrett950_caps);
     rig_register(&barrett4050_caps);
+    rig_register(&barrett4100_caps);
     rig_debug(RIG_DEBUG_VERBOSE, "%s: _init back from rig_register\n", __func__);
 
     return RIG_OK;
 }
 
+void barrett_flush(RIG *rig)
+{
+    hamlib_port_t *rp = RIGPORT(rig);
+    int timesave = STATE(rig)->timeout;
+    STATE(rig)->timeout = 0;
+    rig_flush(rp);
+    STATE(rig)->timeout = timesave;
+}
+
+
+// this version is for 4100
+int barrett_transaction2(RIG *rig, char *cmd, int expected, char **result)
+{
+    char cmd_buf[MAXCMDLEN];
+    struct barrett_priv_data *priv = STATE(rig)->priv;
+    int retval;
+    hamlib_port_t *rp = RIGPORT(rig);
+
+    SNPRINTF(cmd_buf, sizeof(cmd_buf), "%c%s%s", 0x0a, cmd, EOM);
+    barrett_flush(rig);
+    retval = write_block(rp, (unsigned char *) cmd_buf, strlen(cmd_buf));
+
+    if (retval < 0)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s(%d): error in write_block\n", __func__, __LINE__);
+        return retval;
+    }
+
+    retval = read_block(RIGPORT(rig), (unsigned char *) priv->ret_data, expected);
+
+    if (retval < 0)
+    {
+        rig_debug(RIG_DEBUG_ERR, "%s(%d): error in read_block\n", __func__, __LINE__);
+        return retval;
+    }
+
+    rig_debug(RIG_DEBUG_VERBOSE, "%s(%d): %d bytes read\n", __func__, __LINE__,
+              retval);
+
+    if (priv->ret_data[0] == 0x13)   // we'll return from the 1st good char
+    {
+        *result = &(priv->ret_data[1]);
+    }
+    else     // some commands like IAL don't give XOFF but XON is there -- is this a bug?
+    {
+        *result = &(priv->ret_data[0]);
+    }
+
+    return retval;
+}
 
 int barrett_transaction(RIG *rig, char *cmd, int expected, char **result)
 {
@@ -60,15 +112,21 @@ int barrett_transaction(RIG *rig, char *cmd, int expected, char **result)
     char *p;
     char xon;
     char xoff;
-    struct rig_state *rs = &rig->state;
-    struct barrett_priv_data *priv = rig->state.priv;
+    hamlib_port_t *rp = RIGPORT(rig);
+    struct barrett_priv_data *priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: cmd=%s\n", __func__, cmd);
 
-    SNPRINTF(cmd_buf, sizeof(cmd_buf), "%s%s", cmd, EOM);
+    if (rig->caps->rig_model == RIG_MODEL_BARRETT_4100)
+    {
+    }
+    else
+    {
+        SNPRINTF(cmd_buf, sizeof(cmd_buf), "%s%s", cmd, EOM);
+    }
 
-    rig_flush(&rs->rigport);
-    retval = write_block(&rs->rigport, (unsigned char *) cmd_buf, strlen(cmd_buf));
+    barrett_flush(rig);
+    retval = write_block(rp, (unsigned char *) cmd_buf, strlen(cmd_buf));
 
     if (retval < 0)
     {
@@ -78,7 +136,7 @@ int barrett_transaction(RIG *rig, char *cmd, int expected, char **result)
     if (expected == 0)
     {
         // response format is 0x11,data...,0x0d,0x0a,0x13
-        retval = read_string(&rs->rigport, (unsigned char *) priv->ret_data,
+        retval = read_string(rp, (unsigned char *) priv->ret_data,
                              sizeof(priv->ret_data),
                              "\x11", 1, 0, 1);
         rig_debug(RIG_DEBUG_VERBOSE, "%s: resultlen=%d\n", __func__,
@@ -92,7 +150,7 @@ int barrett_transaction(RIG *rig, char *cmd, int expected, char **result)
     }
     else
     {
-        retval = read_block(&rs->rigport, (unsigned char *) priv->ret_data, expected);
+        retval = read_block(rp, (unsigned char *) priv->ret_data, expected);
 
         if (retval < 0)
         {
@@ -175,10 +233,10 @@ int barrett_init(RIG *rig)
     rig_debug(RIG_DEBUG_VERBOSE, "%s version %s\n", __func__,
               rig->caps->version);
     // cppcheck claims leak here but it's freed in cleanup
-    rig->state.priv = (struct barrett_priv_data *)calloc(1,
-                      sizeof(struct barrett_priv_data));
+    STATE(rig)->priv = (struct barrett_priv_data *)calloc(1,
+                       sizeof(struct barrett_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         return -RIG_ENOMEM;
     }
@@ -202,12 +260,12 @@ int barrett_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -215,7 +273,7 @@ int barrett_cleanup(RIG *rig)
 
 /*
  * barrett_get_freq
- * Assumes rig!=NULL, rig->state.priv!=NULL, freq!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL, freq!=NULL
  */
 int barrett_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
@@ -255,13 +313,13 @@ int barrett_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 // TC command does not work on 4050 -- not implemented as of 2022-01-12
 /*
  * barrett_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
 int barrett_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
     char cmd_buf[MAXCMDLEN];
     int retval;
-    const struct barrett_priv_data *priv = rig->state.priv;
+    const struct barrett_priv_data *priv = STATE(rig)->priv;
     freq_t tfreq;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s freq=%.0f\n", __func__,
@@ -413,7 +471,7 @@ int barrett_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     rmode_t tmode;
     pbwidth_t twidth;
 
-    //struct tt588_priv_data *priv = (struct tt588_priv_data *) rig->state.priv;
+    //struct tt588_priv_data *priv = (struct tt588_priv_data *) STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo=%s mode=%s width=%d\n", __func__,
               rig_strvfo(vfo), rig_strrmode(mode), (int)width);
@@ -579,7 +637,7 @@ int barrett_set_split_vfo(RIG *rig, vfo_t rxvfo, split_t split, vfo_t txvfo)
 {
     struct barrett_priv_data *priv;
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called rxvfo=%s, txvfo=%s, split=%d\n",
               __func__, rig_strvfo(rxvfo), rig_strvfo(txvfo), split);
@@ -593,7 +651,7 @@ int barrett_get_split_vfo(RIG *rig, vfo_t rxvfo, split_t *split, vfo_t *txvfo)
 {
     struct barrett_priv_data *priv;
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     *split = priv->split;
     *txvfo = RIG_VFO_B; // constant
@@ -678,23 +736,26 @@ int barrett_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 int barrett_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char cmd_buf[MAXCMDLEN];
-    struct rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
     int retval;
 
     switch (level)
     {
-        case RIG_LEVEL_AGC:
-            sprintf(cmd_buf,"EG%c%s", val.i==0?'N':'H' , EOM);
-            break;
-        default: return -RIG_ENIMPL;
+    case RIG_LEVEL_AGC:
+        sprintf(cmd_buf, "EG%c%s", val.i == 0 ? 'N' : 'H', EOM);
+        break;
+
+    default: return -RIG_ENIMPL;
     }
-    rig_flush(&rs->rigport);
-    retval = write_block(&rs->rigport, (unsigned char *) cmd_buf, strlen(cmd_buf));
+
+    barrett_flush(rig);
+    retval = write_block(rp, (unsigned char *) cmd_buf, strlen(cmd_buf));
 
     if (retval < 0)
     {
         return retval;
     }
+
     return RIG_OK;
 }
 
@@ -756,7 +817,7 @@ int barrett_open(RIG *rig)
 }
 
 
-const struct rig_caps barrett_caps =
+struct rig_caps barrett_caps =
 {
     RIG_MODEL(RIG_MODEL_BARRETT_2050),
     .model_name =       "2050",

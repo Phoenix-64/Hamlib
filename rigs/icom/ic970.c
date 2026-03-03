@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 
 
@@ -45,14 +45,14 @@ static const struct icom_priv_caps ic970_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic970_caps =
+struct rig_caps ic970_caps =
 {
     RIG_MODEL(RIG_MODEL_IC970),
     .model_name = "IC-970",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,
@@ -99,7 +99,7 @@ const struct rig_caps ic970_caps =
     .rx_range_list1 =   {
         {MHz(144), MHz(146), IC970_MODES, -1, -1, IC970_VFO_ALL},
         {MHz(430), MHz(440), IC970_MODES, -1, -1, IC970_VFO_ALL},
-        /* 1200MHz band module is optional */
+        /* 1200 MHz band module is optional */
 //  {MHz(1240),MHz(1300),IC970_MODES,-1,-1,IC970_VFO_ALL},
         RIG_FRNG_END,
     },
@@ -113,7 +113,7 @@ const struct rig_caps ic970_caps =
     .rx_range_list2 =   {
         {MHz(144), MHz(150), IC970_MODES, -1, -1, IC970_VFO_ALL},
         {MHz(430), MHz(450), IC970_MODES, -1, -1, IC970_VFO_ALL},
-        /* 1200MHz band module is optional */
+        /* 1200 MHz band module is optional */
 //  {MHz(1240),MHz(1300),IC970_MODES,-1,-1,IC970_VFO_ALL},
         RIG_FRNG_END,
     },
@@ -125,7 +125,7 @@ const struct rig_caps ic970_caps =
     },
 
     .tuning_steps =     {
-        {IC970_MODES, 10}, /* TBC: does this rig supports settin tuning step? */
+        {IC970_MODES, 10}, /* TBC: does this rig supports setting tuning step? */
         RIG_TS_END,
     },
     /* mode/filter list, remember: order matters! */

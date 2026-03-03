@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "iofunc.h"
 
@@ -79,14 +79,14 @@ static int cu_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op);
  * because the TRP8255 has the "CU" (Control Unit).
  *
  */
-const struct rig_caps trp8255_caps =
+struct rig_caps trp8255_caps =
 {
     RIG_MODEL(RIG_MODEL_TRP8255),
     .model_name = "TRP 8255 S R",
     .mfg_name =  "Skanti",
     .version =  "20200323.0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_RIG,
     .dcd_type =  RIG_DCD_NONE,
@@ -180,18 +180,19 @@ static int cu_transaction(RIG *rig, const char *cmd, int cmd_len)
 {
     int i;
     char retchar;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     for (i = 0; i < cmd_len; i++)
     {
 
-        int ret = write_block(&rig->state.rigport, (unsigned char *) &cmd[i], 1);
+        int ret = write_block(rp, (unsigned char *) &cmd[i], 1);
 
         if (ret != RIG_OK)
         {
             return ret;
         }
 
-        ret = read_block(&rig->state.rigport, (unsigned char *) &retchar, 1);
+        ret = read_block(rp, (unsigned char *) &retchar, 1);
 
         switch (retchar)
         {
@@ -214,14 +215,14 @@ static int cu_open(RIG *rig)
 
     rig_debug(RIG_DEBUG_TRACE, "%s called\n", __func__);
 
-    rig->state.priv = calloc(1, sizeof(struct cu_priv_data));
+    STATE(rig)->priv = calloc(1, sizeof(struct cu_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         return -RIG_ENOMEM;
     }
 
-    priv = (struct cu_priv_data *)rig->state.priv;
+    priv = (struct cu_priv_data *)STATE(rig)->priv;
 
     memset(priv, 0, sizeof(struct cu_priv_data));
     priv->split = RIG_SPLIT_OFF;
@@ -233,7 +234,7 @@ static int cu_open(RIG *rig)
 static int cu_close(RIG *rig)
 {
     const char cmd[] = { 0x16 }; /* DLE */
-    struct cu_priv_data *priv = (struct cu_priv_data *)rig->state.priv;
+    struct cu_priv_data *priv = (struct cu_priv_data *)STATE(rig)->priv;
 
     free(priv);
 
@@ -242,7 +243,7 @@ static int cu_close(RIG *rig)
 
 int cu_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    const struct cu_priv_data *priv = (struct cu_priv_data *)rig->state.priv;
+    const struct cu_priv_data *priv = (struct cu_priv_data *)STATE(rig)->priv;
     char cmdbuf[16];
     int ret;
 
@@ -271,7 +272,7 @@ int cu_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 static int cu_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 {
-    struct cu_priv_data *priv = (struct cu_priv_data *)rig->state.priv;
+    struct cu_priv_data *priv = (struct cu_priv_data *)STATE(rig)->priv;
 
     priv->split = split;
 
@@ -477,7 +478,7 @@ int cu_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
 static int cu_set_mem(RIG *rig, vfo_t vfo, int ch)
 {
-    struct cu_priv_data *priv = (struct cu_priv_data *)rig->state.priv;
+    struct cu_priv_data *priv = (struct cu_priv_data *)STATE(rig)->priv;
 
     /* memorize channel for RIG_OP_TO_VFO & RIG_OP_FROM_VFO */
     priv->ch = ch;
@@ -488,7 +489,7 @@ static int cu_set_mem(RIG *rig, vfo_t vfo, int ch)
 
 int cu_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 {
-    const struct cu_priv_data *priv = (struct cu_priv_data *)rig->state.priv;
+    const struct cu_priv_data *priv = (struct cu_priv_data *)STATE(rig)->priv;
     char cmdbuf[16];
 
     switch (op)

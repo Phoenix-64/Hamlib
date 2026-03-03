@@ -22,12 +22,26 @@
 #ifndef _DRAKE_H
 #define _DRAKE_H 1
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #define BACKEND_VER "20200319"
 
 struct drake_priv_data {
-	int curr_ch;
+	int       curr_ch;
+	dcd_t     curr_dcd;
+	freq_t    curr_freq;
+	ant_t     curr_ant;
+	vfo_t     curr_vfo;
+	int       curr_agc;
+	rmode_t   curr_mode;
+	pbwidth_t curr_width;
+	int       curr_nb;
+	int       curr_nb2;
+	int       curr_att;
+	int       curr_pre;
+	int       curr_notch;
+        int       curr_pwr;
+        int       curr_ss;	
 };
 
 int drake_set_freq(RIG *rig, vfo_t vfo, freq_t freq);
@@ -53,8 +67,9 @@ int drake_set_powerstat (RIG * rig, powerstat_t status);
 int drake_get_powerstat (RIG * rig, powerstat_t *status);
 const char *drake_get_info(RIG *rig);
 
-extern const struct rig_caps r8a_caps;
-extern const struct rig_caps r8b_caps;
+extern struct rig_caps r8_caps;
+extern struct rig_caps r8a_caps;
+extern struct rig_caps r8b_caps;
 
 #endif /* _DRAKE_H */
 

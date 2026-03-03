@@ -24,7 +24,7 @@
 #include <stdlib.h>
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "register.h"
 
@@ -66,7 +66,8 @@ const struct confparams wj_cfg_params[] =
  */
 static int wj_transaction(RIG *rig, int monitor)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     unsigned char buf[CMDSZ] = { 0x8, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     unsigned char rxbuf[CMDSZ];
@@ -158,7 +159,7 @@ static int wj_transaction(RIG *rig, int monitor)
     buf[5] |= wj_mode & 0x7;
 
     /* BFO frequency, not sure though */
-    wj_bfo = (priv->ifshift.i / 10) + 0x400; /* LSBit is 10Hz, +455kHz */
+    wj_bfo = (priv->ifshift.i / 10) + 0x400; /* LSBit is 10 Hz, +455 kHz */
     buf[6] |= (wj_bfo >> 5) & 0x3f;
     buf[7] |= (wj_bfo & 0x1f) << 2;
 
@@ -169,9 +170,9 @@ static int wj_transaction(RIG *rig, int monitor)
 
     /* buf[9]: not used if command byte, but must be transmitted */
 
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
-    retval = write_block(&rig->state.rigport, buf, CMDSZ);
+    retval = write_block(rp, buf, CMDSZ);
 
     if (retval != RIG_OK)
     {
@@ -183,7 +184,7 @@ static int wj_transaction(RIG *rig, int monitor)
         /*
         * Transceiver sends back ">"
         */
-        retval = read_block(&rig->state.rigport, rxbuf, CMDSZ);
+        retval = read_block(rp, rxbuf, CMDSZ);
 
         if (retval < 0 || retval > CMDSZ)
         {
@@ -208,15 +209,16 @@ int wj_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct wj_priv_data *)calloc(1, sizeof(struct wj_priv_data));
+    STATE(rig)->priv = (struct wj_priv_data *)calloc(1,
+                       sizeof(struct wj_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     priv->receiver_id = 0;
     priv->freq = kHz(500);
@@ -238,12 +240,12 @@ int wj_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
@@ -251,11 +253,11 @@ int wj_cleanup(RIG *rig)
 
 
 /*
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  */
-int wj_set_conf(RIG *rig, token_t token, const char *val)
+int wj_set_conf(RIG *rig, hamlib_token_t token, const char *val)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -272,12 +274,12 @@ int wj_set_conf(RIG *rig, token_t token, const char *val)
 
 /*
  * assumes rig!=NULL,
- * Assumes rig!=NULL, rig->state.priv!=NULL
+ * Assumes rig!=NULL, STATE(rig)->priv!=NULL
  *  and val points to a buffer big enough to hold the conf value.
  */
-int wj_get_conf2(RIG *rig, token_t token, char *val, int val_len)
+int wj_get_conf2(RIG *rig, hamlib_token_t token, char *val, int val_len)
 {
-    const struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    const struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
 
     switch (token)
     {
@@ -292,7 +294,7 @@ int wj_get_conf2(RIG *rig, token_t token, char *val, int val_len)
     return RIG_OK;
 }
 
-int wj_get_conf(RIG *rig, token_t token, char *val)
+int wj_get_conf(RIG *rig, hamlib_token_t token, char *val)
 {
     return wj_get_conf2(rig, token, val, 128);
 }
@@ -303,7 +305,7 @@ int wj_get_conf(RIG *rig, token_t token, char *val)
  */
 int wj_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
 
     priv->freq = freq;
 
@@ -316,7 +318,7 @@ int wj_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
  */
 int wj_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    const struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    const struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
     int retval;
 
     retval =  wj_transaction(rig, 1);
@@ -337,7 +339,7 @@ int wj_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
  */
 int wj_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
 
     priv->mode = mode;
 
@@ -360,7 +362,7 @@ int wj_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
  */
 int wj_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    const struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    const struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
     int retval;
 
     retval =  wj_transaction(rig, 1);
@@ -384,7 +386,7 @@ int wj_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  */
 int wj_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
 
     switch (level)
     {
@@ -414,7 +416,7 @@ int wj_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
  */
 int wj_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
-    struct wj_priv_data *priv = (struct wj_priv_data *)rig->state.priv;
+    struct wj_priv_data *priv = (struct wj_priv_data *)STATE(rig)->priv;
     int retval = RIG_OK;
 
     retval =  wj_transaction(rig, 1);

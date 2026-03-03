@@ -24,7 +24,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +61,7 @@ extern int read_history();
 #endif                              /* HAVE_READLINE_HISTORY */
 
 
-#include <hamlib/amplifier.h>
+#include "hamlib/amplifier.h"
 
 #include "ampctl_parse.h"
 #include "amplist.h"
@@ -70,7 +70,8 @@ extern int read_history();
 /*
  * Prototypes
  */
-void usage();
+static void usage(FILE *fout);
+static void short_usage(FILE *fout);
 
 /*
  * Reminder: when adding long options,
@@ -116,7 +117,7 @@ int main(int argc, char *argv[])
     int retcode;        /* generic return code from functions */
     int exitcode;
 
-    int verbose = 0;
+    int verbose = RIG_DEBUG_NONE;
     int show_conf = 0;
     int dump_caps_opt = 0;
 
@@ -132,6 +133,7 @@ int main(int argc, char *argv[])
     int serial_rate = 0;
     char conf_parms[MAXCONFLEN] = "";
 
+    rig_set_debug(verbose);
     while (1)
     {
         int c;
@@ -152,7 +154,7 @@ int main(int argc, char *argv[])
         switch (c)
         {
         case 'h':
-            usage();
+            usage(stdout);
             exit(0);
 
         case 'V':
@@ -160,32 +162,14 @@ int main(int argc, char *argv[])
             exit(0);
 
         case 'm':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             my_model = atoi(optarg);
             break;
 
         case 'r':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             amp_file = optarg;
             break;
 
         case 's':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (sscanf(optarg, "%d%1s", &serial_rate, dummy) != 1)
             {
                 fprintf(stderr, "Invalid baud rate of %s\n", optarg);
@@ -195,12 +179,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'C':
-            if (!optarg)
-            {
-                usage();    /* wrong arg count */
-                exit(1);
-            }
-
             if (*conf_parms != '\0')
             {
                 strcat(conf_parms, ",");
@@ -213,16 +191,10 @@ int main(int argc, char *argv[])
                 return 1;
             }
 
-            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms));
+            strncat(conf_parms, optarg, MAXCONFLEN - strlen(conf_parms) - 1);
             break;
 
         case 't':
-            if (!optarg)
-            {
-                usage();        /* wrong arg count */
-                exit(1);
-            }
-
             if (strlen(optarg) > 1)
             {
                 send_cmd_term = strtol(optarg, NULL, 0);
@@ -246,6 +218,7 @@ int main(int argc, char *argv[])
 
         case 'v':
             verbose++;
+            rig_set_debug(verbose);
             break;
 
         case 'L':
@@ -253,7 +226,6 @@ int main(int argc, char *argv[])
             break;
 
         case 'l':
-            rig_set_debug(0);
             list_models();
             exit(0);
 
@@ -266,12 +238,11 @@ int main(int argc, char *argv[])
             break;
 
         default:
-            usage();    /* unknown option? */
+            /* unknown getopt option */
+            short_usage(stderr);
             exit(1);
         }
     }
-
-    rig_set_debug(verbose);
 
     rig_debug(RIG_DEBUG_VERBOSE, "ampctl %s\n", hamlib_version2);
     rig_debug(RIG_DEBUG_VERBOSE, "%s",
@@ -298,42 +269,46 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    char *token=strtok(conf_parms,",");
+    char *token = strtok(conf_parms, ",");
 
-    while(token)
+    while (token)
     {
         char mytoken[100], myvalue[100];
-        token_t lookup;
-        sscanf(token,"%99[^=]=%99s", mytoken, myvalue);
+        hamlib_token_t lookup;
+        sscanf(token, "%99[^=]=%99s", mytoken, myvalue);
         //printf("mytoken=%s,myvalue=%s\n",mytoken, myvalue);
-        lookup = amp_token_lookup(my_amp,mytoken);
+        lookup = amp_token_lookup(my_amp, mytoken);
+
         if (lookup == 0)
         {
             rig_debug(RIG_DEBUG_ERR, "%s: no such token as '%s'\n", __func__, mytoken);
             token = strtok(NULL, ",");
             continue;
         }
-        retcode = amp_set_conf(my_amp, amp_token_lookup(my_amp,mytoken), myvalue);
+
+        retcode = amp_set_conf(my_amp, lookup, myvalue);
+
         if (retcode != RIG_OK)
         {
             fprintf(stderr, "Config parameter error: %s\n", rigerror(retcode));
             exit(2);
         }
+
         token = strtok(NULL, ",");
     }
 
     if (amp_file)
     {
-        strncpy(my_amp->state.ampport.pathname, amp_file, HAMLIB_FILPATHLEN - 1);
-        strncpy(my_amp->state.ampport_deprecated.pathname, amp_file,
+        strncpy(AMPPORT(my_amp)->pathname, amp_file, HAMLIB_FILPATHLEN - 1);
+        strncpy(AMPSTATE(my_amp)->ampport_deprecated.pathname, amp_file,
                 HAMLIB_FILPATHLEN - 1);
     }
 
     /* FIXME: bound checking and port type == serial */
     if (serial_rate != 0)
     {
-        my_amp->state.ampport.parm.serial.rate = serial_rate;
-        my_amp->state.ampport_deprecated.parm.serial.rate = serial_rate;
+        AMPPORT(my_amp)->parm.serial.rate = serial_rate;
+        AMPSTATE(my_amp)->ampport_deprecated.parm.serial.rate = serial_rate;
     }
 
     /*
@@ -465,17 +440,17 @@ int main(int argc, char *argv[])
 }
 
 
-void usage()
+static void usage(FILE *fout)
 {
-    printf("Usage: ampctl [OPTION]... [COMMAND]...\n"
+    fprintf(fout, "Usage: ampctl [OPTION]... [COMMAND]...\n"
            "Send COMMANDs to a connected amplifier.\n\n");
 
-    printf(
-        "  -m, --model=ID                select amplifier model number. See model list\n"
+    fprintf(fout,
+        "  -m, --model=ID                select amplifier model number. See model list (-l)\n"
         "  -r, --amp-file=DEVICE         set device of the amplifier to operate on\n"
         "  -s, --serial-speed=BAUD       set serial speed of the serial port\n"
         "  -t, --send-cmd-term=CHAR      set send_cmd command termination char\n"
-        "  -C, --set-conf=PARM=VAL       set config parameters\n"
+        "  -C, --set-conf=PARM=VAL[,...] set config parameters\n"
         "  -L, --show-conf               list all config parameters\n"
         "  -l, --list                    list all model numbers and exit\n"
         "  -u, --dump-caps               dump capabilities and exit\n"
@@ -483,13 +458,21 @@ void usage()
         "  -i, --read-history            read prior interactive session history\n"
         "  -I, --save-history            save current interactive session history\n"
 #endif
-        "  -v, --verbose                 set verbose mode, cumulative\n"
+        "  -v, --verbose                 set verbose mode, cumulative (-v to -vvvvv)\n"
         "  -Z, --debug-time-stamps       enable time stamps for debug messages\n"
         "  -h, --help                    display this help and exit\n"
-        "  -V, --version                 output version information and exit\n\n"
+        "  -V, --version                 output version information and exit\n"
+        "  -                             read commands from standard input\n"
+        "\n"
     );
 
-    usage_amp(stdout);
+    usage_amp(fout);
+}
 
-    printf("\nReport bugs to <hamlib-developer@lists.sourceforge.net>.\n");
+
+static void short_usage(FILE *fout)
+{
+    fprintf(fout, "Usage: ampctl [OPTION]... [-m ID] [-r DEVICE] [-s BAUD] [COMMAND...|-]\n");
+    fprintf(fout, "Send COMMANDs to a connected amplifier.\n\n");
+    fprintf(fout, "Type: ampctl --help for extended usage.\n");
 }

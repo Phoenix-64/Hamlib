@@ -27,7 +27,6 @@
 #include "hamlib/rig.h"
 #include "bandplan.h"
 #include "iofunc.h"
-#include "serial.h"
 #include "misc.h"
 #include "num_stdio.h"
 
@@ -92,7 +91,7 @@ static int tt585_get_status_data(RIG *rig);
  * tt585 transceiver capabilities,
  * with the optional model 258 RS232 Interface board.
  */
-const struct rig_caps tt585_caps =
+struct rig_caps tt585_caps =
 {
     RIG_MODEL(RIG_MODEL_TT585),
     .model_name = "TT-585 Paragon",
@@ -209,16 +208,16 @@ int tt585_init(RIG *rig)
 {
     struct tt585_priv_data *priv;
 
-    rig->state.priv = (struct tt585_priv_data *) calloc(1, sizeof(
-                          struct tt585_priv_data));
+    STATE(rig)->priv = (struct tt585_priv_data *) calloc(1, sizeof(
+                           struct tt585_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     memset(priv, 0, sizeof(struct tt585_priv_data));
 
@@ -227,10 +226,10 @@ int tt585_init(RIG *rig)
 
 int tt585_cleanup(RIG *rig)
 {
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
-        rig->state.priv = NULL;
+        free(STATE(rig)->priv);
+        STATE(rig)->priv = NULL;
     }
 
     return RIG_OK;
@@ -238,7 +237,7 @@ int tt585_cleanup(RIG *rig)
 
 int tt585_get_vfo(RIG *rig, vfo_t *vfo)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *) rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *) STATE(rig)->priv;
     int ret;
 
     ret = tt585_get_status_data(rig);
@@ -275,7 +274,7 @@ int tt585_set_vfo(RIG *rig, vfo_t vfo)
     }
 
     /* toggle VFOs */
-    return write_block(&rig->state.rigport, (unsigned char *) "F", 1);
+    return write_block(RIGPORT(rig), (unsigned char *) "F", 1);
 }
 
 int tt585_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
@@ -297,12 +296,12 @@ int tt585_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
     }
 
     /* toggle split mode */
-    return write_block(&rig->state.rigport, (unsigned char *) "J", 1);
+    return write_block(RIGPORT(rig), (unsigned char *) "J", 1);
 }
 
 int tt585_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *txvfo)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     int ret;
 
     ret = tt585_get_status_data(rig);
@@ -325,9 +324,9 @@ int tt585_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *txvfo)
  */
 int tt585_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     int ret;
-    unsigned char *p;
+    const unsigned char *p;
 
     ret = tt585_get_status_data(rig);
 
@@ -351,13 +350,13 @@ int tt585_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 /*
  * tt585_set_freq
- * assumes rig!=NULL, rig->state.priv!=NULL
+ * assumes rig!=NULL, STATE(rig)->priv!=NULL
  * assumes priv->mode in AM,CW,LSB or USB.
  */
 
 int tt585_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
 #define FREQBUFSZ 16
     char buf[FREQBUFSZ], *p;
 
@@ -370,7 +369,7 @@ int tt585_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
     rig_force_cache_timeout(&priv->status_tv);
 
-    return write_block(&rig->state.rigport, (unsigned char *) buf, strlen(buf));
+    return write_block(RIGPORT(rig), (unsigned char *) buf, strlen(buf));
 }
 
 /*
@@ -379,7 +378,7 @@ int tt585_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
  */
 int tt585_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    const struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    const struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     int ret;
 
     ret = tt585_get_status_data(rig);
@@ -452,9 +451,10 @@ int tt585_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  */
 int tt585_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     const char *mcmd, *wcmd;
     int ret;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     switch (mode)
     {
@@ -476,7 +476,7 @@ int tt585_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 
     rig_force_cache_timeout(&priv->status_tv);
 
-    ret =  write_block(&rig->state.rigport, (unsigned char *) mcmd, strlen(mcmd));
+    ret =  write_block(rp, (unsigned char *) mcmd, strlen(mcmd));
 
     if (ret < 0)
     {
@@ -511,12 +511,12 @@ int tt585_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         wcmd = "R";
     }
 
-    return write_block(&rig->state.rigport, (unsigned char *) wcmd, strlen(mcmd));
+    return write_block(rp, (unsigned char *) wcmd, strlen(mcmd));
 }
 
 int tt585_set_mem(RIG *rig, vfo_t vfo, int ch)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     char buf[16];
 
     if (ch < 0 || ch > 61)
@@ -529,12 +529,12 @@ int tt585_set_mem(RIG *rig, vfo_t vfo, int ch)
     /* does it work without a command after the channel number? */
     SNPRINTF(buf, sizeof(buf), ":%02d", ch);
 
-    return write_block(&rig->state.rigport, (unsigned char *) buf, strlen(buf));
+    return write_block(RIGPORT(rig), (unsigned char *) buf, strlen(buf));
 }
 
 int tt585_get_mem(RIG *rig, vfo_t vfo, int *ch)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *) rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *) STATE(rig)->priv;
     int ret;
 
     ret = tt585_get_status_data(rig);
@@ -564,11 +564,11 @@ int tt585_get_mem(RIG *rig, vfo_t vfo, int *ch)
  */
 int tt585_get_status_data(RIG *rig)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     hamlib_port_t *rigport;
     int ret;
 
-    rigport = &rig->state.rigport;
+    rigport = RIGPORT(rig);
 
     if (!rig_check_cache_timeout(&priv->status_tv, TT585_CACHE_TIMEOUT))
     {
@@ -608,7 +608,7 @@ int tt585_set_parm(RIG *rig, setting_t parm, value_t val)
     {
     case RIG_PARM_ANN:
         /* FIXME: > is a toggle command only */
-        ret = write_block(&rig->state.rigport, (unsigned char *) ">", 1);
+        ret = write_block(RIGPORT(rig), (unsigned char *) ">", 1);
 
         if (ret < 0)
         {
@@ -636,7 +636,7 @@ int tt585_set_parm(RIG *rig, setting_t parm, value_t val)
  */
 int tt585_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 {
-    struct tt585_priv_data *priv = (struct tt585_priv_data *)rig->state.priv;
+    struct tt585_priv_data *priv = (struct tt585_priv_data *)STATE(rig)->priv;
     const char *cmd;
     char buf[16];
 
@@ -678,5 +678,5 @@ int tt585_vfo_op(RIG *rig, vfo_t vfo, vfo_op_t op)
 
     rig_force_cache_timeout(&priv->status_tv);
 
-    return write_block(&rig->state.rigport, (unsigned char *) cmd, strlen(cmd));
+    return write_block(RIGPORT(rig), (unsigned char *) cmd, strlen(cmd));
 }

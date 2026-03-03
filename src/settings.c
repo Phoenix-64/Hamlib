@@ -33,7 +33,7 @@
  *
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -41,14 +41,15 @@
 #include <errno.h>   /* Error number definitions */
 #include <unistd.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
+#include "hamlib/rig_state.h"
 #include "cal.h"
 #include "misc.h"
 
 
 #ifndef DOC_HIDDEN
 
-#  define CHECK_RIG_ARG(r) (!(r) || !(r)->caps || !(r)->state.comm_state)
+#  define CHECK_RIG_ARG(r) (!(r) || !(r)->caps || !STATE(r)->comm_state)
 
 #endif /* !DOC_HIDDEN */
 
@@ -90,33 +91,41 @@ int HAMLIB_API rig_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         return -RIG_ENAVAIL;
     }
 
+    rig_lock(rig, 1);
     if ((caps->targetable_vfo & RIG_TARGETABLE_LEVEL)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == STATE(rig)->current_vfo)
     {
+
         if (level == RIG_LEVEL_KEYSPD)
         {
-            extern int morse_data_handler_set_keyspd(RIG *rig, int keyspd);
+            extern int morse_data_handler_set_keyspd(RIG * rig, int keyspd);
             morse_data_handler_set_keyspd(rig, val.i);
         }
-        return caps->set_level(rig, vfo, level, val);
+
+        retcode = caps->set_level(rig, vfo, level, val);
+        rig_lock(rig, 0);
+        return retcode;
     }
 
     if (!caps->set_vfo)
     {
+        rig_lock(rig, 0);
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = STATE(rig)->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
     {
+        rig_lock(rig, 0);
         return retcode;
     }
 
     retcode = caps->set_level(rig, vfo, level, val);
     caps->set_vfo(rig, curr_vfo);
+    rig_lock(rig, 0);
     return retcode;
 }
 
@@ -148,6 +157,7 @@ int HAMLIB_API rig_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 int HAMLIB_API rig_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     const struct rig_caps *caps;
+    struct rig_state *rs = STATE(rig);
     int retcode;
     vfo_t curr_vfo;
 
@@ -166,13 +176,14 @@ int HAMLIB_API rig_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
         return -RIG_ENAVAIL;
     }
 
+    rig_lock(rig, 1); // Keep Out!
     /*
      * Special case(frontend emulation): calibrated S-meter reading
      */
     if (level == RIG_LEVEL_STRENGTH
             && (caps->has_get_level & RIG_LEVEL_STRENGTH) == 0
             && rig_has_get_level(rig, RIG_LEVEL_RAWSTR)
-            && rig->state.str_cal.size)
+            && rs->str_cal.size)
     {
 
         value_t rawstr;
@@ -181,37 +192,43 @@ int HAMLIB_API rig_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (retcode != RIG_OK)
         {
+            rig_lock(rig, 0);
             return retcode;
         }
 
-        val->i = (int)rig_raw2val(rawstr.i, &rig->state.str_cal);
+        val->i = (int)rig_raw2val(rawstr.i, &rs->str_cal);
+        rig_lock(rig, 0);
         return RIG_OK;
     }
 
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_LEVEL)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == rs->current_vfo)
     {
-
-        return caps->get_level(rig, vfo, level, val);
+        retcode = caps->get_level(rig, vfo, level, val);
+        rig_lock(rig, 0);
+        return retcode;
     }
 
     if (!caps->set_vfo)
     {
+        rig_lock(rig, 0);
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = rs->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
     {
+        rig_lock(rig, 0);
         return retcode;
     }
 
     retcode = caps->get_level(rig, vfo, level, val);
     caps->set_vfo(rig, curr_vfo);
+    rig_lock(rig, 0);
     return retcode;
 }
 
@@ -310,7 +327,7 @@ setting_t HAMLIB_API rig_has_get_level(RIG *rig, setting_t level)
         return 0;
     }
 
-    return (rig->state.has_get_level & level);
+    return (STATE(rig)->has_get_level & level);
 }
 
 
@@ -340,7 +357,7 @@ setting_t HAMLIB_API rig_has_set_level(RIG *rig, setting_t level)
         return 0;
     }
 
-    return (rig->state.has_set_level & level);
+    return (STATE(rig)->has_set_level & level);
 }
 
 
@@ -369,7 +386,7 @@ setting_t HAMLIB_API rig_has_get_parm(RIG *rig, setting_t parm)
         return 0;
     }
 
-    return (rig->state.has_get_parm & parm);
+    return (STATE(rig)->has_get_parm & parm);
 }
 
 
@@ -398,7 +415,7 @@ setting_t HAMLIB_API rig_has_set_parm(RIG *rig, setting_t parm)
         return 0;
     }
 
-    return (rig->state.has_set_parm & parm);
+    return (STATE(rig)->has_set_parm & parm);
 }
 
 
@@ -428,7 +445,7 @@ setting_t HAMLIB_API rig_has_get_func(RIG *rig, setting_t func)
         return 0;
     }
 
-    return (rig->state.has_get_func & func);
+    return (STATE(rig)->has_get_func & func);
 }
 
 
@@ -457,7 +474,7 @@ setting_t HAMLIB_API rig_has_set_func(RIG *rig, setting_t func)
         return 0;
     }
 
-    return (rig->state.has_set_func & func);
+    return (STATE(rig)->has_set_func & func);
 }
 
 
@@ -482,6 +499,7 @@ setting_t HAMLIB_API rig_has_set_func(RIG *rig, setting_t func)
 int HAMLIB_API rig_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
     const struct rig_caps *caps;
+    struct rig_state *rs = STATE(rig);
     int retcode;
     vfo_t curr_vfo;
 
@@ -495,36 +513,36 @@ int HAMLIB_API rig_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     caps = rig->caps;
 
     if ((caps->set_func == NULL || !rig_has_set_func(rig, func))
-            && access(rig->state.tuner_control_pathname, X_OK) == -1)
+            && access(rs->tuner_control_pathname, X_OK) == -1)
     {
         return -RIG_ENAVAIL;
     }
 
-    if (access(rig->state.tuner_control_pathname, X_OK) != -1)
+    if (access(rs->tuner_control_pathname, X_OK) != -1)
     {
         char cmd[1024];
-        snprintf(cmd, sizeof(cmd), "%s %d", rig->state.tuner_control_pathname, status);
+        snprintf(cmd, sizeof(cmd), "%s %d", rs->tuner_control_pathname, status);
         rig_debug(RIG_DEBUG_TRACE, "%s: Calling external script '%s'\n", __func__,
-                  rig->state.tuner_control_pathname);
+                  rs->tuner_control_pathname);
         retcode = system(cmd);
 
-        if (retcode != 0) { rig_debug(RIG_DEBUG_ERR, "%s: executing %s failed\n", __func__, rig->state.tuner_control_pathname); }
+        if (retcode != 0) { rig_debug(RIG_DEBUG_ERR, "%s: executing %s failed\n", __func__, rs->tuner_control_pathname); }
 
         return (retcode == 0 ? RIG_OK : -RIG_ERJCTED);
     }
     else
     {
-        if (strcmp(rig->state.tuner_control_pathname, "hamlib_tuner_control"))
+        if (strcmp(rs->tuner_control_pathname, "hamlib_tuner_control"))
         {
             rig_debug(RIG_DEBUG_ERR, "%s: unable to find '%s'\n", __func__,
-                      rig->state.tuner_control_pathname);
+                      rs->tuner_control_pathname);
             return -RIG_EINVAL;
         }
     }
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_FUNC)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == rs->current_vfo)
     {
 
         return caps->set_func(rig, vfo, func, status);
@@ -533,7 +551,7 @@ int HAMLIB_API rig_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
     {
         int targetable = caps->targetable_vfo & RIG_TARGETABLE_FUNC;
         rig_debug(RIG_DEBUG_TRACE, "%s: targetable=%d, vfo=%s, currvfo=%s\n", __func__,
-                  targetable, rig_strvfo(vfo), rig_strvfo(rig->state.current_vfo));
+                  targetable, rig_strvfo(vfo), rig_strvfo(rs->current_vfo));
     }
 
     if (!caps->set_vfo)
@@ -541,7 +559,7 @@ int HAMLIB_API rig_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = rs->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -578,6 +596,7 @@ int HAMLIB_API rig_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 int HAMLIB_API rig_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 {
     const struct rig_caps *caps;
+    struct rig_state *rs = STATE(rig);
     int retcode;
     vfo_t curr_vfo;
 
@@ -598,7 +617,7 @@ int HAMLIB_API rig_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_FUNC)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == rs->current_vfo)
     {
 
         return caps->get_func(rig, vfo, func, status);
@@ -609,7 +628,7 @@ int HAMLIB_API rig_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = rs->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -641,7 +660,7 @@ int HAMLIB_API rig_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
  */
 int HAMLIB_API rig_set_ext_level(RIG *rig,
                                  vfo_t vfo,
-                                 token_t token,
+                                 hamlib_token_t token,
                                  value_t val)
 {
     const struct rig_caps *caps;
@@ -664,7 +683,7 @@ int HAMLIB_API rig_set_ext_level(RIG *rig,
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_LEVEL)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == STATE(rig)->current_vfo)
     {
 
         return caps->set_ext_level(rig, vfo, token, val);
@@ -675,7 +694,7 @@ int HAMLIB_API rig_set_ext_level(RIG *rig,
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = STATE(rig)->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -707,7 +726,7 @@ int HAMLIB_API rig_set_ext_level(RIG *rig,
  */
 int HAMLIB_API rig_get_ext_level(RIG *rig,
                                  vfo_t vfo,
-                                 token_t token,
+                                 hamlib_token_t token,
                                  value_t *val)
 {
     const struct rig_caps *caps;
@@ -730,7 +749,7 @@ int HAMLIB_API rig_get_ext_level(RIG *rig,
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_LEVEL)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == STATE(rig)->current_vfo)
     {
 
         return caps->get_ext_level(rig, vfo, token, val);
@@ -741,7 +760,7 @@ int HAMLIB_API rig_get_ext_level(RIG *rig,
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = STATE(rig)->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -772,7 +791,7 @@ int HAMLIB_API rig_get_ext_level(RIG *rig,
  */
 int HAMLIB_API rig_set_ext_func(RIG *rig,
                                 vfo_t vfo,
-                                token_t token,
+                                hamlib_token_t token,
                                 int status)
 {
     const struct rig_caps *caps;
@@ -795,7 +814,7 @@ int HAMLIB_API rig_set_ext_func(RIG *rig,
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_FUNC)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == STATE(rig)->current_vfo)
     {
 
         return caps->set_ext_func(rig, vfo, token, status);
@@ -806,7 +825,7 @@ int HAMLIB_API rig_set_ext_func(RIG *rig,
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = STATE(rig)->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -838,7 +857,7 @@ int HAMLIB_API rig_set_ext_func(RIG *rig,
  */
 int HAMLIB_API rig_get_ext_func(RIG *rig,
                                 vfo_t vfo,
-                                token_t token,
+                                hamlib_token_t token,
                                 int *status)
 {
     const struct rig_caps *caps;
@@ -861,7 +880,7 @@ int HAMLIB_API rig_get_ext_func(RIG *rig,
 
     if ((caps->targetable_vfo & RIG_TARGETABLE_FUNC)
             || vfo == RIG_VFO_CURR
-            || vfo == rig->state.current_vfo)
+            || vfo == STATE(rig)->current_vfo)
     {
 
         return caps->get_ext_func(rig, vfo, token, status);
@@ -872,7 +891,7 @@ int HAMLIB_API rig_get_ext_func(RIG *rig,
         return -RIG_ENTARGET;
     }
 
-    curr_vfo = rig->state.current_vfo;
+    curr_vfo = STATE(rig)->current_vfo;
     retcode = caps->set_vfo(rig, vfo);
 
     if (retcode != RIG_OK)
@@ -901,7 +920,7 @@ int HAMLIB_API rig_get_ext_func(RIG *rig,
  *
  * \sa rig_get_ext_parm()
  */
-int HAMLIB_API rig_set_ext_parm(RIG *rig, token_t token, value_t val)
+int HAMLIB_API rig_set_ext_parm(RIG *rig, hamlib_token_t token, value_t val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -933,7 +952,7 @@ int HAMLIB_API rig_set_ext_parm(RIG *rig, token_t token, value_t val)
  *
  * \sa rig_set_ext_parm()
  */
-int HAMLIB_API rig_get_ext_parm(RIG *rig, token_t token, value_t *val)
+int HAMLIB_API rig_get_ext_parm(RIG *rig, hamlib_token_t token, value_t *val)
 {
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -978,10 +997,9 @@ int HAMLIB_API rig_setting2idx(setting_t s)
     return 0;
 }
 
-#include <unistd.h>  /* UNIX standard function definitions */
 
 #if 0
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -998,7 +1016,7 @@ int HAMLIB_API rig_setting2idx(setting_t s)
 
 #include <math.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #endif
 
 
@@ -1030,7 +1048,18 @@ HAMLIB_EXPORT(int) rig_settings_get_path(char *path, int pathlen)
 
     const char *xdgpath = getenv("XDG_CONFIG_HOME");
     char *home = getenv("HOME");
-    if (home == NULL) home = "?HOME";
+
+    if (home == NULL)
+    {
+        home = getenv("HOMEPATH");
+    }
+
+    if (home == NULL)
+    {
+        home = "?HOME";
+    }
+
+    // cppcheck-suppress nullPointerRedundantCheck
     snprintf(path, pathlen, "%s/.config", home);
 
     if (xdgpath)
@@ -1070,13 +1099,13 @@ HAMLIB_EXPORT(int) rig_settings_save(const char *setting, void *value,
     FILE *fptmp;
     char path[4096];
     char buf[4096];
-    char *cvalue = (char *)value;
-    int *ivalue = (int *)value;
+    const char *cvalue = (char *)value;
+    const int *ivalue = (int *)value;
     int n = 0;
-    long *lvalue = (long *) value;
-    float *fvalue = (float *) value;
-    double *dvalue = (double *) value;
-    char *vformat = "Unknown format??";
+    const long *lvalue = (long *) value;
+    const float *fvalue = (float *) value;
+    const double *dvalue = (double *) value;
+    const char *vformat = "Unknown format??";
     char template[64];
 
     rig_settings_get_path(path, sizeof(path));
@@ -1210,9 +1239,13 @@ HAMLIB_EXPORT(int) rig_settings_load_all(char *settings_file)
 
     if (fp == NULL)
     {
+#if 0 // until we actually implement this
         rig_debug(RIG_DEBUG_VERBOSE, "%s: settings_file (%s): %s\n", __func__,
                   settings_file, strerror(errno));
         return -RIG_EINVAL;
+#else
+        return RIG_OK;
+#endif
     }
 
     rig_debug(RIG_DEBUG_TRACE, "%s: opened %s\n", __func__, settings_file);
@@ -1230,6 +1263,8 @@ HAMLIB_EXPORT(int) rig_settings_load_all(char *settings_file)
             free(sharedkey);
         }
     }
+
+    fclose(fp);
 
     return RIG_OK;
 }

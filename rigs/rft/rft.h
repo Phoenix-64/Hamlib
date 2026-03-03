@@ -22,12 +22,12 @@
 #ifndef _RFT_H
 #define _RFT_H 1
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #define BACKEND_VER "20031007"
 
 int rft_set_freq(RIG *rig, vfo_t vfo, freq_t freq);
 
-extern const struct rig_caps ekd500_caps;
+extern struct rig_caps ekd500_caps;
 
 #endif /* _RFT_H */

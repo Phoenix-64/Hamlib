@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "rs.h"
 
 
@@ -58,14 +58,14 @@
  * http://www2.rohde-schwarz.com/file/ESMC_25.pdf
  */
 
-const struct rig_caps esmc_caps =
+struct rig_caps esmc_caps =
 {
     RIG_MODEL(RIG_MODEL_ESMC),
     .model_name = "ESMC",
     .mfg_name =  "Rohde&Schwarz",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_RIG,

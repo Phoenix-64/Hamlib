@@ -18,7 +18,7 @@
  *
  */
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "ra37xx.h"
 
@@ -44,14 +44,14 @@
  * Required A6A1 serial asynchronous interface
  *
  */
-const struct rig_caps ra3702_caps =
+struct rig_caps ra3702_caps =
 {
     RIG_MODEL(RIG_MODEL_RA3702),
     .model_name = "RA3702",
     .mfg_name =  "Racal",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

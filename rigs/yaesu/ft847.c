@@ -37,7 +37,7 @@
  * Notes on limitations in RIG control capabilities. These are
  * related to the Yaesu's FT847 design, not my program :-)
  *
- * 1. Rig opcodes allow only 10Hz resolution.
+ * 1. Rig opcodes allow only 10 Hz resolution.
  * 2. Cannot select VFO B
  * 3. Using CAT and Tuner controls simultaneously  can
  *    cause problems.
@@ -48,7 +48,7 @@
 #include <string.h>  /* String function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "yaesu.h"
 #include "ft847.h"
 #include "misc.h"
@@ -216,7 +216,7 @@ struct ft847_priv_data
     /* for early ft847's we keep our own memory items */
     /* Early rigs are one-way com to the rig */
     freq_t freqA, freqB;
-    mode_t mode;
+    rmode_t mode;
     pbwidth_t width;
     ptt_t ptt;
 };
@@ -379,7 +379,7 @@ static tone_t ft650_ctcss_list[] =
  * Notice that some rigs share the same functions.
  */
 
-const struct rig_caps ft847_caps =
+struct rig_caps ft847_caps =
 {
     RIG_MODEL(RIG_MODEL_FT847),
     .model_name = "FT-847",
@@ -537,7 +537,7 @@ const struct rig_caps ft847_caps =
  * Notice that some rigs share the same functions.
  */
 
-const struct rig_caps ft650_caps =
+struct rig_caps ft650_caps =
 {
     RIG_MODEL(RIG_MODEL_FT650),
     .model_name = "FT-650",
@@ -675,7 +675,7 @@ const struct rig_caps ft650_caps =
     .hamlib_check_rig_caps = HAMLIB_CHECK_RIG_CAPS
 };
 
-const struct rig_caps mchfqrp_caps =
+struct rig_caps mchfqrp_caps =
 {
     RIG_MODEL(RIG_MODEL_MCHFQRP),
     .model_name = "mcHF QRP",
@@ -848,7 +848,7 @@ improvements. This version was made in May 1998. Later serial numbers (e.g.,
 8L09nnnn) all seem to have incorporated the earlier improvements plus new
 ones...."
  */
-const struct rig_caps ft847uni_caps =
+struct rig_caps ft847uni_caps =
 {
     RIG_MODEL(RIG_MODEL_FT847UNI),
     .model_name = "FT-847UNI",
@@ -1005,7 +1005,7 @@ const struct rig_caps ft847uni_caps =
 
 /*
  * setup *priv
- * serial port is already open (rig->state->fd)
+ * serial port is already open (STATE(rig)->fd)
  */
 
 static int ft847_init(RIG *rig)
@@ -1019,16 +1019,16 @@ static int ft847_init(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    rig->state.priv = (struct ft847_priv_data *) calloc(1,
-                      sizeof(struct ft847_priv_data));
+    STATE(rig)->priv = (struct ft847_priv_data *) calloc(1,
+                       sizeof(struct ft847_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
 
     priv->sat_mode = RIG_SPLIT_OFF;
@@ -1057,12 +1057,12 @@ static int ft847_cleanup(RIG *rig)
         return -RIG_EINVAL;
     }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: called \n", __func__);
 
@@ -1119,7 +1119,7 @@ static int ft847_send_priv_cmd(RIG *rig, int cmd_index)
         return -RIG_EINVAL;
     }
 
-    return write_block(&rig->state.rigport, ncmd[cmd_index].nseq,
+    return write_block(RIGPORT(rig), ncmd[cmd_index].nseq,
                        YAESU_CMD_LENGTH);
 }
 
@@ -1130,7 +1130,7 @@ static int ft847_send_priv_cmd(RIG *rig, int cmd_index)
  */
 static int opcode_vfo(RIG *rig, unsigned char *cmd, int cmd_index, vfo_t vfo)
 {
-    struct ft847_priv_data *p = (struct ft847_priv_data *)rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *)STATE(rig)->priv;
 
     memcpy(cmd, &ncmd[cmd_index].nseq, YAESU_CMD_LENGTH);
 
@@ -1199,7 +1199,7 @@ static int ft847_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
     if (UNIDIRECTIONAL)
     {
-        struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+        struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
 
         if (vfo == RIG_VFO_MAIN)
         {
@@ -1213,7 +1213,7 @@ static int ft847_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
         }
     }
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 
 #define MD_LSB  0x00
@@ -1230,12 +1230,12 @@ static int ft847_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
                              pbwidth_t *width)
 {
-    struct rig_state *rs = &rig->state;
+    hamlib_port_t *rp = RIGPORT(rig);
     unsigned char p_cmd[YAESU_CMD_LENGTH]; /* sequence to send */
     unsigned char cmd_index;  /* index of sequence to send */
     unsigned char data[8];
     int n;
-    struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+    struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: vfo =%s \n",
               __func__, rig_strvfo(vfo));
@@ -1270,14 +1270,14 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
         return n;
     }
 
-    n = write_block(&rs->rigport, p_cmd, YAESU_CMD_LENGTH);
+    n = write_block(rp, p_cmd, YAESU_CMD_LENGTH);
 
     if (n < 0)
     {
         return n;
     }
 
-    n = read_block(&rs->rigport, data, YAESU_CMD_LENGTH);
+    n = read_block(rp, data, YAESU_CMD_LENGTH);
 
     if (n != YAESU_CMD_LENGTH)
     {
@@ -1285,7 +1285,7 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
         return n < 0 ? n : -RIG_EPROTO;
     }
 
-    /* Remember, this is 10Hz resolution */
+    /* Remember, this is 10 Hz resolution */
     *freq = 10 * from_bcd_be(data, 8);
 
     *width = RIG_PASSBAND_NORMAL;
@@ -1298,6 +1298,7 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
 
     case MD_CWN:
         *width = rig_passband_narrow(rig, RIG_MODE_CW);
+        HL_FALLTHROUGH
 
     case MD_CW:
         *mode = RIG_MODE_CW;
@@ -1305,6 +1306,7 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
 
     case MD_CWNR:
         *width = rig_passband_narrow(rig, RIG_MODE_CW);
+        HL_FALLTHROUGH
 
     case MD_CWR:
         *mode = RIG_MODE_CWR;
@@ -1312,6 +1314,7 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
 
     case MD_AMN:
         *width = rig_passband_narrow(rig, RIG_MODE_AM);
+        HL_FALLTHROUGH
 
     case MD_AM:
         *mode = RIG_MODE_AM;
@@ -1319,6 +1322,7 @@ static int get_freq_and_mode(RIG *rig, vfo_t vfo, freq_t *freq, rmode_t *mode,
 
     case MD_FMN:
         *width = rig_passband_narrow(rig, RIG_MODE_FM);
+        HL_FALLTHROUGH
 
     case MD_FM:
         *mode = RIG_MODE_FM;
@@ -1358,7 +1362,6 @@ static int ft847_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 static int ft847_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
     unsigned char cmd_index;  /* index of sequence to send */
-    struct rig_state *rs = &rig->state;
     unsigned char p_cmd[YAESU_CMD_LENGTH]; /* sequence to send */
     int ret;
 
@@ -1371,7 +1374,7 @@ static int ft847_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 
     if (UNIDIRECTIONAL)
     {
-        struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+        struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
         priv->mode = mode;
         priv->width = width;
     }
@@ -1467,7 +1470,7 @@ static int ft847_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
         return ret;
     }
 
-    return write_block(&rs->rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 
 static int ft847_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
@@ -1483,7 +1486,7 @@ static int ft847_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
  */
 static int ft847_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 {
-    struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+    struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
     unsigned char cmd_index;  /* index of sequence to send */
     int ret;
 
@@ -1516,7 +1519,7 @@ static int ft847_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t tx_vfo)
 static int ft847_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split,
                                vfo_t *tx_vfo)
 {
-    struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+    struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -1566,7 +1569,7 @@ static int ft847_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
     if (UNIDIRECTIONAL)
     {
-        struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+        struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
         priv->ptt = ptt;
     }
 
@@ -1594,7 +1597,8 @@ static int ft847_set_ptt(RIG *rig, vfo_t vfo, ptt_t ptt)
 
 static int ft847_get_status(RIG *rig, int status_ci)
 {
-    struct ft847_priv_data *p = (struct ft847_priv_data *) rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *) STATE(rig)->priv;
+    hamlib_port_t *rp = RIGPORT(rig);
     unsigned char *data;
     int len;
     int n;
@@ -1621,17 +1625,16 @@ static int ft847_get_status(RIG *rig, int status_ci)
         return -RIG_EINTERNAL;
     }
 
-    rig_flush(&rig->state.rigport);
+    rig_flush(rp);
 
-    n = write_block(&rig->state.rigport, ncmd[status_ci].nseq,
-                    YAESU_CMD_LENGTH);
+    n = write_block(rp, ncmd[status_ci].nseq, YAESU_CMD_LENGTH);
 
     if (n < 0)
     {
         return n;
     }
 
-    n = read_block(&rig->state.rigport, data, len);
+    n = read_block(rp, data, len);
 
     if (n < 0)
     {
@@ -1649,12 +1652,12 @@ static int ft847_get_status(RIG *rig, int status_ci)
 static int ft847_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 {
 
-    struct ft847_priv_data *p = (struct ft847_priv_data *) rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *) STATE(rig)->priv;
     int n;
 
     if (UNIDIRECTIONAL)
     {
-        struct ft847_priv_data *priv = (struct ft847_priv_data *)rig->state.priv;
+        struct ft847_priv_data *priv = (struct ft847_priv_data *)STATE(rig)->priv;
         *ptt = priv->ptt;
         return RIG_OK;
     }
@@ -1674,7 +1677,7 @@ static int ft847_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
        socket DTR or RTS PTT on the rear PACKET PTT pin is likely. So we
        override if we know PTT was asserted via rig_set_ptt for any type
        of PTT */
-    if (RIG_PTT_OFF == *ptt && rig->state.transmit) { *ptt = RIG_PTT_ON; }
+    if (RIG_PTT_OFF == *ptt && STATE(rig)->transmit) { *ptt = RIG_PTT_ON; }
 
     return RIG_OK;
 }
@@ -1683,7 +1686,7 @@ static int ft847_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt)
 static int ft847_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
 {
 
-    struct ft847_priv_data *p = (struct ft847_priv_data *) rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *) STATE(rig)->priv;
     int n;
 
     if (UNIDIRECTIONAL)
@@ -1712,7 +1715,7 @@ static int ft847_get_dcd(RIG *rig, vfo_t vfo, dcd_t *dcd)
  */
 static int ft847_get_rawstr_level(RIG *rig, value_t *val)
 {
-    struct ft847_priv_data *p = (struct ft847_priv_data *) rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *) STATE(rig)->priv;
     int n;
 
     if (UNIDIRECTIONAL)
@@ -1784,7 +1787,7 @@ static int ft847_get_smeter_level(RIG *rig, value_t *val)
  */
 static int ft847_get_alc_level(RIG *rig, value_t *val)
 {
-    struct ft847_priv_data *p = (struct ft847_priv_data *) rig->state.priv;
+    struct ft847_priv_data *p = (struct ft847_priv_data *) STATE(rig)->priv;
     int n;
 
     if (UNIDIRECTIONAL)
@@ -1873,7 +1876,7 @@ static int ft847_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
         return ret;
     }
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 
 
@@ -1918,7 +1921,7 @@ static int ft847_set_ctcss_tone(RIG *rig, vfo_t vfo, tone_t tone)
     /* get associated CAT code */
     p_cmd[0] = ft847_ctcss_cat[i];
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 
 static int ft847_set_ctcss_sql(RIG *rig, vfo_t vfo, tone_t tone)
@@ -1944,7 +1947,7 @@ static int ft847_set_dcs_sql(RIG *rig, vfo_t vfo, tone_t code)
     /* DCS Code # (i.e. 07, 54=DCS Code 754) */
     to_bcd_be(p_cmd, code, 4); /* store bcd format in in p_cmd */
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 
 }
 
@@ -1987,6 +1990,6 @@ static int ft847_set_rptr_offs(RIG *rig, vfo_t vfo, shortfreq_t rptr_offs)
 
     to_bcd_be(p_cmd, rptr_offs / 10, 8); /* store bcd format in in p_cmd */
 
-    return write_block(&rig->state.rigport, p_cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), p_cmd, YAESU_CMD_LENGTH);
 }
 

@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "idx_builtin.h"
 #include "tentec2.h"
 
@@ -75,14 +75,14 @@
  * Only set_freq is supposed to work.
  * This is a skeleton.
  */
-const struct rig_caps rx350_caps =
+struct rig_caps rx350_caps =
 {
     RIG_MODEL(RIG_MODEL_RX350),
     .model_name = "RX-350",
     .mfg_name =  "Ten-Tec",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

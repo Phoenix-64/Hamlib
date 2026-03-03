@@ -23,6 +23,23 @@
 #include "flexradio.h"
 #include "register.h"
 
+#ifdef HAVE_NETINET_IN_H
+#  include <netinet/in.h>
+#endif
+
+#if HAVE_NETDB_H
+#  include <netdb.h>
+#endif
+
+#ifdef HAVE_ARPA_INET_H
+#  include <arpa/inet.h>
+#endif
+
+#if defined (HAVE_SYS_SOCKET_H) && defined (HAVE_SYS_IOCTL_H)
+#  include <sys/socket.h>
+#  include <sys/ioctl.h>
+#endif
+
 DECLARE_INITRIG_BACKEND(flexradio)
 {
     rig_debug(RIG_DEBUG_TRACE, "%s called\n", __func__);
@@ -31,6 +48,14 @@ DECLARE_INITRIG_BACKEND(flexradio)
     //rig_register(&sdr1krfe_rig_caps);
     rig_register(&dttsp_rig_caps);
     rig_register(&dttsp_udp_rig_caps);
+    rig_register(&smartsdr_a_rig_caps);
+    rig_register(&smartsdr_b_rig_caps);
+    rig_register(&smartsdr_c_rig_caps);
+    rig_register(&smartsdr_d_rig_caps);
+    rig_register(&smartsdr_e_rig_caps);
+    rig_register(&smartsdr_f_rig_caps);
+    rig_register(&smartsdr_g_rig_caps);
+    rig_register(&smartsdr_h_rig_caps);
 
     return RIG_OK;
 }

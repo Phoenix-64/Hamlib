@@ -1,7 +1,7 @@
 /* Example showing host to list all models */
 #include <stdio.h>
 #include <stdlib.h>
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 char *list[1000]; // as of 2023-01-17 we have 275 rigs so this should cover us for long time
 
@@ -16,7 +16,7 @@ static int hash_model_list(const struct rig_caps *caps, void *data)
     return 1;  /* !=0, we want them all ! */
 }
 
-int mycmp(const void *p1, const void *p2)
+static int mycmp(const void *p1, const void *p2)
 {
     const  char **s1 = (const char **)p1;
     const  char **s2 = (const char **)p2;

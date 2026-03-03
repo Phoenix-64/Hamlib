@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 #include "bandplan.h"
 
@@ -51,14 +51,14 @@ static const struct icom_priv_caps ic775_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic775_caps =
+struct rig_caps ic775_caps =
 {
     RIG_MODEL(RIG_MODEL_IC775),
     .model_name = "IC-775",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

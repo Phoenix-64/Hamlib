@@ -30,20 +30,19 @@
  * \brief Control Hamlib debugging functions.
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdarg.h>
 #include <stdio.h>  /* Standard input/output definitions */
 #include <string.h> /* String function definitions */
-#include <sys/types.h>
 #include <errno.h>
 
 #ifdef ANDROID
 #  include <android/log.h>
 #endif
 
-#include <hamlib/rig.h>
-#include <hamlib/rig_dll.h>
+#include "hamlib/rig.h"
+#include "hamlib/rig_dll.h"
 #include "misc.h"
 
 /*! @} */
@@ -199,7 +198,7 @@ void HAMLIB_API rig_set_debug_time_stamp(int flag)
  * \param debug_level Debug level from none to most output.
  * \param fmt Formatted character string to print.
  *
- * The formatted character string is passed to the `frprintf`(3) C library
+ * The formatted character string is passed to the `vfprintf`(3) C library
  * call and follows its format specification.
  */
 #undef rig_debug
@@ -325,7 +324,7 @@ vprintf_cb_t HAMLIB_API rig_set_debug_callback(vprintf_cb_t cb, rig_ptr_t arg)
 
 
 /**
- * \brief Change the output stream from `stderr` a different stream.
+ * \brief Change the output stream from `stderr` to a different stream.
  *
  * \param stream The stream to direct debugging output.
  *

@@ -18,13 +18,14 @@
  *   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 #define TS570_ALL_MODES (RIG_MODE_AM|RIG_MODE_CW|RIG_MODE_SSB|RIG_MODE_FM|RIG_MODE_RTTY)
@@ -40,9 +41,22 @@
 #define TS570_SCAN_OPS (RIG_SCAN_VFO)
 #define TS570_ANTS (RIG_ANT_1|RIG_ANT_2)
 
+#define TS570_STR_CAL {9, {\
+                       { 0, -60},\
+                       { 3, -48},\
+                       { 6, -36},\
+                       { 9, -24},\
+                       {12, -12},\
+                       {15,   0},\
+                       {20,  20},\
+                       {25,  40},\
+                       {30,  60}}\
+                       }
+
 static struct kenwood_priv_caps ts570_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,
 };
 
 static int ts570_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
@@ -228,7 +242,7 @@ static int ts570_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
  * extends kenwood_set_func
  * Assumes rig!=NULL, val!=NULL
  */
-int ts570_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
+static int ts570_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
 {
     char fctbuf[6];
 
@@ -264,7 +278,7 @@ int ts570_set_func(RIG *rig, vfo_t vfo, setting_t func, int status)
  * extends kenwood_get_func
  * Assumes rig!=NULL, val!=NULL
  */
-int ts570_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
+static int ts570_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
 {
     char fctbuf[50];
     size_t fct_len;
@@ -328,7 +342,7 @@ int ts570_get_func(RIG *rig, vfo_t vfo, setting_t func, int *status)
  *
  * set levels of most functions
  */
-int
+static int
 ts570_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char levelbuf[16];
@@ -349,7 +363,7 @@ ts570_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
             int i;
 
             for (i = 0; i < HAMLIB_MAXDBLSTSIZ; i++)
-                if (kenwood_val == rig->state.preamp[i])
+                if (kenwood_val == STATE(rig)->preamp[i])
                 {
                     SNPRINTF(levelbuf, sizeof(levelbuf), "PA%01d", i + 1);
                     break;  /* found - stop searching */
@@ -386,7 +400,7 @@ ts570_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
  * ts570_get_level
  * Assumes rig!=NULL, val!=NULL
  */
-int
+static int
 ts570_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
     char ackbuf[50];
@@ -473,7 +487,7 @@ ts570_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
             for (i = 0; i < levelint && i < HAMLIB_MAXDBLSTSIZ; i++)
             {
-                if (rig->state.preamp[i] == 0)
+                if (STATE(rig)->preamp[i] == 0)
                 {
                     rig_debug(RIG_DEBUG_ERR, "%s: unexpected att level %d\n", __func__,
                               (int)levelint);
@@ -486,7 +500,7 @@ ts570_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
                 return -RIG_EINTERNAL;
             }
 
-            val->i = rig->state.preamp[i - 1];
+            val->i = STATE(rig)->preamp[i - 1];
         }
 
         break;
@@ -501,7 +515,7 @@ ts570_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 /*
  * ts570_get_split_vfo
  */
-int ts570_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
+static int ts570_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
 {
     char ack[10];
     char ack2[10];
@@ -554,7 +568,7 @@ int ts570_get_split_vfo(RIG *rig, vfo_t vfo, split_t *split, vfo_t *tx_vfo)
 /*
  * ts570_set_split_vfo
  */
-int ts570_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
+static int ts570_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
 {
     char cmdbuf[16], ackbuf[20];
     int retval;
@@ -669,7 +683,7 @@ int ts570_set_split_vfo(RIG *rig, vfo_t vfo, split_t split, vfo_t txvfo)
     .ctcss_tone=1       \
 }
 
-int ts570_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
+static int ts570_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
 {
     char cmdbuf[30];
     int retval;
@@ -732,7 +746,7 @@ int ts570_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan)
     return RIG_OK;
 }
 
-int ts570_get_xit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
+static int ts570_get_xit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
 {
     char infobuf[50];
     int retval;
@@ -766,7 +780,7 @@ int ts570_get_xit(RIG *rig, vfo_t vfo, shortfreq_t *rit)
     return RIG_OK;
 }
 
-int ts570_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
+static int ts570_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
 {
     char buf[50];
     unsigned char c;
@@ -826,7 +840,7 @@ int ts570_set_rit(RIG *rig, vfo_t vfo, shortfreq_t rit)
     return RIG_OK;
 }
 
-int ts570_set_xit(RIG *rig, vfo_t vfo, shortfreq_t rit)
+static int ts570_set_xit(RIG *rig, vfo_t vfo, shortfreq_t rit)
 {
     char buf[50];
     unsigned char c;
@@ -891,17 +905,16 @@ int ts570_set_xit(RIG *rig, vfo_t vfo, shortfreq_t rit)
 /*
  * ts570 rig capabilities.
  * Notice that some rigs share the same functions.
- * Also this struct is READONLY!
  * RIT: Variable Range ±9.99 kHz
  *
  * part of infos comes from .http = //www.kenwood.net/
  */
-const struct rig_caps ts570s_caps =
+struct rig_caps ts570s_caps =
 {
     RIG_MODEL(RIG_MODEL_TS570S),
     .model_name = "TS-570S",
     .mfg_name =  "Kenwood",
-    .version =  BACKEND_VER ".2",
+    .version =  BACKEND_VER ".3",
     .copyright =  "LGPL",
     .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
@@ -913,7 +926,7 @@ const struct rig_caps ts570s_caps =
     .serial_data_bits =  8,
     .serial_stop_bits =  1,
     .serial_parity =  RIG_PARITY_NONE,
-    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_HARDWARE,
     .write_delay =  0,
     .post_write_delay =  30,
     .timeout = 500,
@@ -1078,12 +1091,11 @@ const struct rig_caps ts570s_caps =
 /*
  * ts570d rig capabilities, which is basically the ts570s without 6m.
  * Notice that some rigs share the same functions.
- * Also this struct is READONLY!
  * RIT: Variable Range ±9.99 kHz
  *
  * part of infos comes from .http = //www.kenwood.net/
  */
-const struct rig_caps ts570d_caps =
+struct rig_caps ts570d_caps =
 {
     RIG_MODEL(RIG_MODEL_TS570D),
     .model_name = "TS-570D",
@@ -1100,7 +1112,7 @@ const struct rig_caps ts570d_caps =
     .serial_data_bits =  8,
     .serial_stop_bits =  1,
     .serial_parity =  RIG_PARITY_NONE,
-    .serial_handshake =  RIG_HANDSHAKE_NONE,
+    .serial_handshake =  RIG_HANDSHAKE_HARDWARE,
     .write_delay =  0,
     .post_write_delay =  30,
     .timeout = 500,
@@ -1134,6 +1146,7 @@ const struct rig_caps ts570d_caps =
     .chan_list =  {
         {  0, 89, RIG_MTYPE_MEM,  TS570_MEM_CAP  },
         { 90, 99, RIG_MTYPE_EDGE, TS570_MEM_CAP  },
+        {  1,   3, RIG_MTYPE_MORSE },
         RIG_CHAN_END,
     },
     .rx_range_list1 =  {
@@ -1221,6 +1234,9 @@ const struct rig_caps ts570d_caps =
         {RIG_MODE_FM, kHz(1)},
         RIG_FLT_END,
     },
+
+    .str_cal = TS570_STR_CAL,
+
     .priv = (void *)& ts570_priv_caps,
 
     .rig_init = kenwood_init,

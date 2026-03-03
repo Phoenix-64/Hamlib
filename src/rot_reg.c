@@ -27,15 +27,13 @@
  * doc todo: Let's explain what's going on here!
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/types.h>
 
-#include <hamlib/rotator.h>
+#include "hamlib/rotator.h"
 
 #include "register.h"
 
@@ -93,6 +91,7 @@ DEFINE_INITROT_BACKEND(grbltrk);
 DEFINE_INITROT_BACKEND(flir);
 DEFINE_INITROT_BACKEND(apex);
 DEFINE_INITROT_BACKEND(saebrtrack);
+DEFINE_INITROT_BACKEND(skywatcher);
 
 //! @endcond
 
@@ -145,6 +144,7 @@ static struct
     { ROT_FLIR, ROT_BACKEND_FLIR, ROT_FUNCNAMA(flir) },
     { ROT_APEX, ROT_BACKEND_APEX, ROT_FUNCNAMA(apex) },
     { ROT_SAEBRTRACK, ROT_BACKEND_SAEBRTRACK, ROT_FUNCNAMA(saebrtrack)},
+    { ROT_SKYWATCHER, ROT_BACKEND_SKYWATCHER, ROT_FUNCNAMA(skywatcher)},
     { 0, NULL }, /* end */
 };
 
@@ -445,7 +445,7 @@ int HAMLIB_API rot_load_backend(const char *be_name)
             if (be_init == NULL)
             {
                 printf("Null\n");
-                return -EINVAL;
+                return -RIG_EINVAL;
             }
 
             status = (*be_init)(NULL);
@@ -453,7 +453,7 @@ int HAMLIB_API rot_load_backend(const char *be_name)
         }
     }
 
-    return -EINVAL;
+    return -RIG_EINVAL;
 
 }
 //! @endcond

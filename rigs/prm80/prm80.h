@@ -23,7 +23,7 @@
 #define _PRM80_H 1
 
 #include <sys/time.h>
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #define BACKEND_VER "20231002.0"
 
@@ -65,6 +65,6 @@ int prm80_get_ptt(RIG *rig, vfo_t vfo, ptt_t *ptt);
 
 const char *prm80_get_info(RIG *rig);
 
-extern const struct rig_caps prm8060_caps;
+extern struct rig_caps prm8060_caps;
 
 #endif /* _PRM80_H */

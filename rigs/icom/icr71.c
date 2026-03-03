@@ -44,14 +44,14 @@ static struct icom_priv_caps icr71_priv_caps =
     ic737_ts_sc_list    /* none actually */
 };
 
-const struct rig_caps icr71_caps =
+struct rig_caps icr71_caps =
 {
     RIG_MODEL(RIG_MODEL_ICR71),
     .model_name = "IC-R71",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_RECEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,

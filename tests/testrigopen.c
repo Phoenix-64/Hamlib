@@ -8,11 +8,11 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
 #include "misc.h"
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #define SERIAL_PORT "/dev/ttyUSB0"
 
@@ -30,7 +30,7 @@ int callback(const struct rig_caps *caps, rig_ptr_t rigp)
     }
 
     const char *port = "/dev/pts/3";
-    strcpy(rig->state.rigport.pathname, port);
+    rig_set_conf(rig, rig_token_lookup(rig, "rig_pathname"), port);
 
     printf("%20s:", caps->model_name);
     fflush(stdout);

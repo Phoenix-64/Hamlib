@@ -55,7 +55,7 @@ responds to \(lqget\(rq commands with the requested values, one per line, when
 successful, otherwise, it responds with one line \(lqRPRT x\(rq, where
 \(oqx\(cq is a negative number indicating the error code.  Commands that do
 not return values respond with the line \(lqRPRT x\(rq, where \(oqx\(cq is
-\(oq0\(cq when successful, otherwise is a regative number indicating the error
+\(oq0\(cq when successful, otherwise is a negative number indicating the error
 code.  Each line is terminated with a newline \(oq\\n\(cq character.  This
 protocol is primarily for use by the
 .B NET rotctl
@@ -138,6 +138,28 @@ Use
 as the listening IP address.
 .IP
 The default is ANY.
+.IP
+.B rotctld
+can be run and connected to like this:
+.
+.IP
+.EX
+rotctld (binds to all interfaces)
+.
+.in +4n
+rotctl -m 2
+rotctl -m 2 -r 127.0.0.1
+rotctl -m 2 -r localhost
+rotctl -m 2 -r 192.168.1.1 (local IP address)
+rotctl -m 2 -r ::1 (on Linux rotctld doesn't listen on IPV6 by default)
+.in
+.
+.IP
+rotctld -T 127.0.0.1 (bind only to 127.0.0.1)
+.in +4n
+rotctl -m 2 (binds to all interfaces)
+rotctl -m 2 -r 127.0.0.1 (bind only to 127.0.0.1)
+.EE
 .
 .TP
 .BR \-t ", " \-\-port = \fInumber\fP
@@ -149,8 +171,8 @@ The default is 4533.
 .IP
 .BR Note :
 As
-.BR rigctld \(aqs
-default port is 4532, it is advisable to use odd numbered ports for
+.BR rotctld \(aqs
+default port is 4533, it is advisable to use odd numbered ports for
 .BR rotctld ,
 e.g. 4533, 4535, 4537, etc.
 .
@@ -322,8 +344,9 @@ are returned as double precision floating point values.
 Move the rotator in a specific direction at the given rate.
 .IP
 .RI \(aq Direction \(aq
-is an integer defined as \(oq2\(cq = Up, \(oq4\(cq = Down, \(oq8\(cq = Left,
-and \(oq16\(cq = Right.
+is an integer or keyword defined as \(oq2\(cq = UP, \(oq4\(cq = DOWN, \(oq8\(cq = LEFT or CCW,
+\(oq16\(cq = RIGHT or CW, \(oq32\(cq = UP_LEFT or UP_CCW, \(oqR64\(cq = UP_RIGHT = UP_CW,
+\(oq128\(cq = DOWN_LEFT or DOWN_CCW, \(oq256\(cq = DOWN_RIGHT or DOWN_CW
 .IP
 .RI \(aq Speed \(aq
 is an integer between 1 and 100. Use -1 for no change to current speed.
@@ -881,7 +904,7 @@ for RotorEZ using COM2 on Win32:
 .PP
 .in +4n
 .EX
-> \fBrotctl \-m 401 \-r COM2\fP
+> \fBrotctld \-m 401 \-r COM2\fP
 .EE
 .in
 .

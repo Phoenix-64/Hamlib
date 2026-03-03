@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include <bandplan.h>
 #include "icom.h"
 
@@ -56,14 +56,14 @@ static const struct icom_priv_caps ic737_priv_caps =
     .ant_count = 2
 };
 
-const struct rig_caps ic737_caps =
+struct rig_caps ic737_caps =
 {
     RIG_MODEL(RIG_MODEL_IC737),
     .model_name = "IC-737",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_ALPHA,
+    .status =  RIG_STATUS_BETA,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,
@@ -157,7 +157,7 @@ const struct rig_caps ic737_caps =
     .rig_init =   icom_init,
     .rig_cleanup =   icom_cleanup,
     .rig_open =  icom_rig_open,
-    .rig_close =  icom_rig_open,
+    .rig_close =  icom_rig_close,
 
     .set_freq =  icom_set_freq,
     .get_freq =  icom_get_freq,

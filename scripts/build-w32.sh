@@ -9,18 +9,25 @@
 
 # See README.build-Windows for complete details.
 
+# running 'file' against the resulting .DLL should return the following or similar:
+# file libhamlib-4.dll
+# libhamlib-4.dll: PE32 executable for MS Windows 4.00 (DLL), Intel i386 (stripped to external PDB), 10 sections
+
 
 # Set this to a desired directory
 BUILD_DIR=~/builds
 
 # Set this to LibUSB archive extracted in $BUILD_DIR
-LIBUSB_VER=libusb-1.0.22
+LIBUSB_VER=libusb-1.0.24
 
-# Set to the correct HOST_ARCH= line for your minGW installation
+# Set to the correct HOST_ARCH= line for your MinGW installation
 HOST_ARCH=i686-w64-mingw32
 
-# Set to the strip name for your version of minGW
+# Set to the strip name for your version of MinGW
 HOST_ARCH_STRIP=i686-w64-mingw32-strip
+
+# Set to the dlltool name for your version of MinGW
+HOST_ARCH_DLLTOOL=i686-w64-mingw32-dlltool
 
 # Error return codes.  See /usr/include/sysexits.h
 EX_USAGE=64
@@ -67,8 +74,8 @@ cat > README.w32-bin <<END_OF_README
 What is it?
 ===========
 
-This ZIP archive or Windows installer contains a build of Hamlib-$RELEASE
-cross-compiled for MS Windows 32 bit using MinGW under Debian GNU/Linux 10
+This ZIP archive or Windows installer contains a build of Hamlib-${RELEASE}
+cross-compiled for MS Windows 32 bit using MinGW under Debian GNU/Linux 13
 (nice, heh!).
 
 This software is copyrighted. The library license is LGPL, and the *.EXE files
@@ -85,7 +92,21 @@ Installation and Configuration
 Extract the ZIP archive into a convenient location, C:\Program Files is a
 reasonable choice.
 
-Make sure *all* the .DLL files are in your PATH (leave them in the bin
+The archive directory structure is:
+
+hamlib-w32-4.7~git
+├── bin
+├── doc
+├── include
+│   └── hamlib
+└── lib
+    ├── gcc
+    └── msvc
+
+The 'bin' and 'doc' directories will be of interest to users while developers
+will be interested in the 'include' and 'lib' directories as well.
+
+Make sure *all* the .DLL files are in your PATH (leave them in the 'bin'
 directory and set the PATH).  To set the PATH environment variable in Windows
 2000, Windows XP, and Windows 7 (need info on Vista and Windows 8/10) do the
 following:
@@ -111,7 +132,7 @@ following:
    a semi-colon ';' after the last path before adding the Hamlib path (NB. The
    entire path is highlighted and will be erased upon typing a character so
    click in the box to unselect the text first.  The PATH is important!!)
-   Append the Hamlib path, e.g. C:\Program Files\hamlib-w32-4.0~git\bin
+   Append the Hamlib path, e.g. C:\Program Files\hamlib-w32-${RELEASE}\bin
 
  * Click OK for all three dialog boxes to save your changes.
 
@@ -121,8 +142,9 @@ Testing with the Hamlib Utilities
 
 To continue, be sure you have read the README.betatester file, especially the
 "Testing Hamlib" section.  The primary means of testing is by way of the
-rigctl utility for radios and rotctl utility for rotators.  Each is a command
-line program that is interactive or can act on a single command and exit.
+rigctl utility for radios, the rotctl utility for rotators and the ampctl
+utility for amplifiers.  Each is a command line program that is interactive
+or can act on a single command and exit.
 
 Documentation for each utility can be found as an HTML file in the doc
 directory.
@@ -141,9 +163,9 @@ In short, the command syntax is of the form:
 
 To run rigctl or rotctl open a cmd window (Start|Run|enter 'cmd' in the
 dialog).  If text scrolls off the screen, you can scroll back with the mouse.
-To copy output text into a mailer or editor (I recommend Notepad++, a free
-editor also licensed under the GPL), highlight the text as a rectangle in the
-cmd window, press <Enter> (or right-click the window icon in the upper left
+To copy output text into a mailer or editor (Notepad++, a free editor also
+licensed under the GPL is recommended), highlight the text as a rectangle in
+the cmd window, press <Enter> (or right-click the window icon in the upper left
 corner and select Edit, then Copy), and paste it into your editor with Ctl-V
 (or Edit|Paste from the typical GUI menu).
 
@@ -163,40 +185,44 @@ Information for w32 Programmers
 The DLL has a cdecl interface.
 
 There is a libhamlib-4.def definition file for MS Visual C++/Visual Studio in
-lib/msvc.  Refer to the sample commands below to generate a local
-libhamlib-4.lib file for use with the VC++/VS linker.
+lib\msvc.  Refer to the recipe below to generate a local libhamlib-4.lib file
+for use with the VC++/VS linker.
 
-Simply #include <hamlib/rig.h> (add directory to include path), include
-libhamlib-4.lib in your project and you are done.  Note: VC++/VS cannot
-compile all the Hamlib code, but the API defined by rig.h has been made MSVC
-friendly :-)
+Simply '#include <hamlib/rig.h>' (or any other header) (add directory to
+include path), include libhamlib-4.lib in your project and you are done.  Note:
+VC++/VS cannot compile all the Hamlib code, but the API defined by rig.h has
+been made MSVC friendly :-)
 
 As the source code for the library DLLs is licensed under the LGPL, your
 program is not considered a "derivative work" when using the published Hamlib
 API and normal linking to the front-end library, and may be of a license of
 your choosing.
 
-For linking the library with MS Visual C++ 2003, from the directory you
-installed Hamlib run the following commands to generate the libhamlib-4.lib
-file needed for linking with your MSVC project:
+As of 04 Aug 2025 a .lib file is generated using the MinGW dlltool utility.
+This file is now installed to the lib\gcc directory.  As it is generated
+by the MinGW dlltool utility, it is only suitable for use with MinGW/GCC.
 
-cd lib\msvc
-c:\Program Files\Microsoft Visual C++ Toolkit 2003\bin\link.exe /lib /machine:i386 /def:libhamlib-4.def
+For developers using Microsoft Visual Studio, the following recipe is
+provided by Phil Rose, GM3ZZA:
 
-To do the same for Visual Studio 2017:
+My secret sauce is:
 
-cd lib\msvc
-"c:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\Tools\MSVC\14.16.27023\bin\Hostx64\x86\bin\link.exe" /lib /machine:i386 /def:libhamlib-4.def
+Open "Developer PowerShell for VS2022" in administrator mode. This adds the
+correct directory to the path and allows update of "C:\Program Files" with the
+.dll.
 
-and for VS 2019:
+Then (in my case).
 
-cd lib\msvc
-"c:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.25.28610\bin\Hostx64\x86\bin\link.exe" /lib /machine:i386 /def:libhamlib-4.def
+cd "C:\Program Files\hamlib-w32-${RELEASE}\lib\msvc"
+lib /def:libhamlib-4.def /machine:x86
 
-cd lib/msvc
-"c:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.32.31326\bin\Hostx64\x86\link.exe" /lib /machine:i386 /def:libhamlib-4.def
+If you use any other terminal then the full path to lib.exe is needed
+(today it is
+"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\lib.exe",
+but is dependent on the version of MSVC which gets updated every few weeks).
 
-NOTE: feedback is requested on the previous two command examples!
+NOTE: feedback is requested on Phil's example!  Please let know if this works
+for you.
 
 The published Hamlib API may be found at:
 
@@ -212,6 +238,7 @@ Please report problems or success to hamlib-developer@lists.sourceforge.net
 
 Cheers,
 Stephane Fillod - F8CFE
+Mike Black - W9MDB (SK)
 Nate Bargmann - N0NB
 http://www.hamlib.org
 
@@ -225,16 +252,19 @@ END_OF_README
  --without-cxx-binding \
  --disable-static \
  CPPFLAGS="-I${LIBUSB_1_0_BIN_PATH}/include" \
- LDFLAGS="-L${LIBUSB_1_0_BIN_PATH}/MinGW32/dll"
+ LDFLAGS="-L${LIBUSB_1_0_BIN_PATH}/MinGW32/dll" \
+ LIBUSB_CFLAGS="-I${LIBUSB_1_0_BIN_PATH}/include/libusb-1.0" \
+ LIBUSB_LIBS="-lusb-1.0"
 
 
-make -j 4 install
+
+make -j 4 --no-print-directory install
 
 mkdir -p ${ZIP_DIR}/bin ${ZIP_DIR}/lib/msvc ${ZIP_DIR}/lib/gcc ${ZIP_DIR}/include ${ZIP_DIR}/doc
 cp -a src/libhamlib.def ${ZIP_DIR}/lib/msvc/libhamlib-4.def
-#todos ${ZIP_DIR}/lib/msvc/libhamlib-4.def
+todos ${ZIP_DIR}/lib/msvc/libhamlib-4.def
 cp -a ${INST_DIR}/include/hamlib ${ZIP_DIR}/include/.
-#todos ${ZIP_DIR}/include/hamlib/*.h
+todos ${ZIP_DIR}/include/hamlib/*.h
 
 # C++ binding is useless on w32 because of ABI
 for f in *class.h
@@ -286,5 +316,30 @@ if test -f "$FILE"
 then
     cp -a ${FILE} ${ZIP_DIR}/bin/.
 fi
+
+# Required for MinGW with GCC 10 (Debian 11)
+FILE="/usr/lib/gcc/i686-w64-mingw32/10-posix/libgcc_s_dw2-1.dll"
+if test -f "$FILE"
+then
+    cp -a ${FILE} ${ZIP_DIR}/bin/.
+fi
+
+# Required for MinGW with GCC 12 (Debian 12)
+FILE="/usr/lib/gcc/i686-w64-mingw32/12-posix/libgcc_s_dw2-1.dll"
+if test -f "$FILE"
+then
+    cp -a ${FILE} ${ZIP_DIR}/bin/.
+fi
+
+# Required for MinGW with GCC 14 (Debian 13)
+FILE="/usr/lib/gcc/i686-w64-mingw32/14-posix/libgcc_s_dw2-1.dll"
+if test -f "$FILE"
+then
+    cp -a ${FILE} ${ZIP_DIR}/bin/.
+fi
+
+# Generate .lib file for GCC on MinGW per Jonathan Yong from mingw-w64
+# https://sourceforge.net/p/mingw-w64/discussion/723798/thread/e23dceba20/?limit=25#51dd/3df2/3708/e62b
+${HOST_ARCH_DLLTOOL} --input-def ${ZIP_DIR}/lib/msvc/libhamlib-4.def --output-lib ${ZIP_DIR}/lib/gcc/libhamlib-4.lib
 
 /usr/bin/zip -r ${HL_FILENAME}.zip $(basename ${ZIP_DIR})

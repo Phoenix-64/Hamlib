@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 #include "tones.h"
 
@@ -68,6 +68,7 @@ static int pihspdr_set_channel(RIG *rig, vfo_t vfo, const channel_t *chan);
 static struct kenwood_priv_caps  ts2000_priv_caps  =
 {
     .cmdtrm =  EOM_KEN,
+    .tone_table_base = 1,
 };
 
 /* memory capabilities */
@@ -94,7 +95,7 @@ static struct kenwood_priv_caps  ts2000_priv_caps  =
 /*
  * PiHPSDR rig capabilities. (Emulates Kenwood TS-2000)
  */
-const struct rig_caps pihpsdr_caps =
+struct rig_caps pihpsdr_caps =
 {
     RIG_MODEL(RIG_MODEL_HPSDR),
     .model_name = "PiHPSDR",
@@ -122,7 +123,6 @@ const struct rig_caps pihpsdr_caps =
     .has_set_level =  RIG_LEVEL_SET(PIHPSDR_LEVEL_ALL),
     .has_get_parm =  RIG_PARM_NONE,
     .has_set_parm =  RIG_PARM_NONE,    /* FIXME: parms */
-    .level_gran =  {},                 /* FIXME: granularity */
     .parm_gran =  {},
     .vfo_ops =  PIHPSDR_VFO_OP,
     .scan_ops =  PIHPSDR_SCAN_OP,
@@ -248,7 +248,15 @@ const struct rig_caps pihpsdr_caps =
 
     .level_gran =
     {
+#define NO_LVL_VOXDELAY
+#define NO_LVL_KEYSPD
+#define NO_LVL_CWPITCH
+#define NO_LVL_BKIN_DLYMS
 #include "level_gran_kenwood.h"
+#undef NO_LVL_VOXDELAY
+#undef NO_LVL_KEYSPD
+#undef NO_LVL_CWPITCH
+#undef NO_LVL_BKIN_DLYMS
         [LVL_VOXDELAY] = { .min = { .i = 0 }, .max = { .i = 30 }, .step = { .i = 1 } },
         [LVL_KEYSPD] = {.min = {.i = 5}, .max = {.i = 50}, .step = {.i = 1}},
         [LVL_CWPITCH] = {.min = {.i = 400}, .max = {.i = 1000}, .step = {.i = 50}},
@@ -793,6 +801,7 @@ int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
     char levelbuf[16];
     int i, kenwood_val;
+    struct rig_state *rs = STATE(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s called\n", __func__);
 
@@ -833,7 +842,9 @@ int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         else if (kenwood_val == RIG_AGC_SLOW) { kenwood_val = 20; }
         else if (kenwood_val != RIG_AGC_OFF)
         {
-            rig_debug(RIG_DEBUG_ERR, "%s: unknown AGC level, expect OFF,SLOW,MEDIUM,FAST,SUPERFAST, got %d\n", __func__, kenwood_val);
+            rig_debug(RIG_DEBUG_ERR,
+                      "%s: unknown AGC level, expect OFF,SLOW,MEDIUM,FAST,SUPERFAST, got %d\n",
+                      __func__, kenwood_val);
             return -RIG_EINVAL;
         }
 
@@ -851,9 +862,9 @@ int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         {
             int foundit = 0;
 
-            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rig->state.attenuator[i]; i++)
+            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rs->attenuator[i]; i++)
             {
-                if (val.i == rig->state.attenuator[i])
+                if (val.i == rs->attenuator[i])
                 {
                     SNPRINTF(levelbuf, sizeof(levelbuf), "RA%02d", i + 1);
                     foundit = 1;
@@ -880,9 +891,9 @@ int pihpsdr_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
         {
             int foundit = 0;
 
-            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rig->state.preamp[i]; i++)
+            for (i = 0; i < HAMLIB_MAXDBLSTSIZ && rs->preamp[i]; i++)
             {
-                if (val.i == rig->state.preamp[i])
+                if (val.i == rs->preamp[i])
                 {
                     SNPRINTF(levelbuf, sizeof(levelbuf), "PA%01d", i + 1);
                     foundit = 1;
@@ -985,7 +996,7 @@ int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (lvl > 9)
         {
-            val->i = rig->state.preamp[0];
+            val->i = STATE(rig)->preamp[0];
         }
 
         break;
@@ -1016,7 +1027,8 @@ int pihpsdr_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
         if (lvl > 99)
         {
-            val->i = rig->state.attenuator[0];    /* Since the TS-2000 only has one step on the attenuator */
+            val->i = STATE(
+                         rig)->attenuator[0];    /* Since the TS-2000 only has one step on the attenuator */
         }
 
         break;

@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "kenwood.h"
 
 #include "bandplan.h"
@@ -85,20 +85,20 @@ int ts450_open(RIG *rig)
         return err;
     }
 
-    maxtries = rig->state.rigport.retry;
+    maxtries = RIGPORT(rig)->retry;
     /* no retry for this command that may be missing */
-    rig->state.rigport.retry = 0;
+    RIGPORT(rig)->retry = 0;
 
     err = kenwood_simple_transaction(rig, "TO", 3);
 
     if (err != RIG_OK)
     {
         rig_debug(RIG_DEBUG_VERBOSE, "%s: tone unit not detected\n", __func__);
-        rig->state.has_set_func &= ~RIG_FUNC_TONE;
-        rig->state.has_get_func &= ~RIG_FUNC_TONE;
+        STATE(rig)->has_set_func &= ~RIG_FUNC_TONE;
+        STATE(rig)->has_get_func &= ~RIG_FUNC_TONE;
     }
 
-    rig->state.rigport.retry = maxtries;
+    RIGPORT(rig)->retry = maxtries;
 
     return RIG_OK;
 }
@@ -106,7 +106,6 @@ int ts450_open(RIG *rig)
 /*
  * ts450s rig capabilities.
  * Notice that some rigs share the same functions.
- * Also this struct is READONLY!
  * RIT: Variable Range ±9.99 kHz
  *
  * TODO: protocol to be checked with manual (identical to TS690)
@@ -117,7 +116,7 @@ int ts450_open(RIG *rig)
  * specs: http://www.qsl.net/sm7vhs/radio/kenwood/ts450/specs.htm
  * infos comes from http://www.cnham.com/ts450/ts_450_ex_control.pdf
  */
-const struct rig_caps ts450s_caps =
+struct rig_caps ts450s_caps =
 {
     RIG_MODEL(RIG_MODEL_TS450S),
     .model_name = "TS-450S",

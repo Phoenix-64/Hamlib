@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <hamlib/rig.h>
-#include <misc.h>
+#include <string.h>
+#include "hamlib/rig.h"
+#include "misc.h"
 
 
 // cppcheck-suppress unusedFunction
@@ -19,7 +19,7 @@ int rig_test_cw(RIG *rig)
         cw[1] = '\0';
 
         int retval = rig_send_morse(rig, RIG_VFO_CURR, cw);
-        hl_usleep(100*1000);
+        hl_usleep(100 * 1000);
 
         if (retval != RIG_OK)
         {

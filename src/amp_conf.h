@@ -22,10 +22,10 @@
 #ifndef _AMP_CONF_H
 #define _AMP_CONF_H 1
 
-#include <hamlib/amplifier.h>
+#include "hamlib/amplifier.h"
 
-int frontamp_set_conf(AMP *amp, token_t token, const char *val);
-static int frontamp_get_conf2(AMP *amp, token_t token, char *val, int val_len);
+int frontamp_set_conf(AMP *amp, hamlib_token_t token, const char *val);
+static int frontamp_get_conf2(AMP *amp, hamlib_token_t token, char *val, int val_len);
 
 
 #endif /* _AMP_CONF_H */

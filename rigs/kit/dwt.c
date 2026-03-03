@@ -19,7 +19,7 @@
  *
  */
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #include <stdio.h>
 #include "hamlib/rig.h"
@@ -142,7 +142,7 @@ static const char *dwtdll_get_info(RIG *rig);
  * see Winradio G303 as an example
  */
 
-const struct rig_caps dwt_caps =
+struct rig_caps dwt_caps =
 {
     RIG_MODEL(RIG_MODEL_DWT),
     .model_name =       "Digital World Traveller",
@@ -226,16 +226,16 @@ int dwtdll_init(RIG *rig)
 {
     struct dwtdll_priv_data *priv;
 
-    rig->state.priv = (struct dwtdll_priv_data *)calloc(1, sizeof(
-                          struct dwtdll_priv_data));
+    STATE(rig)->priv = (struct dwtdll_priv_data *)calloc(1, sizeof(
+                           struct dwtdll_priv_data));
 
-    if (!rig->state.priv)
+    if (!STATE(rig)->priv)
     {
         /* whoops! memory shortage! */
         return -RIG_ENOMEM;
     }
 
-    priv = rig->state.priv;
+    priv = STATE(rig)->priv;
 
     /* Try to load required dll */
     priv->dll = LoadLibrary(DWTDLL);
@@ -244,7 +244,7 @@ int dwtdll_init(RIG *rig)
     {
         rig_debug(RIG_DEBUG_ERR, "%s: Unable to LoadLibrary %s\n",
                   __func__, DWTDLL);
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
         return -RIG_EIO;    /* huh! */
     }
 
@@ -295,7 +295,7 @@ int dwtdll_init(RIG *rig)
 
 int dwtdll_open(RIG *rig)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     short ret;
 
     /* Open DWT receiver */
@@ -319,7 +319,7 @@ int dwtdll_open(RIG *rig)
 
 int dwtdll_close(RIG *rig)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     short ret;
 
     /* Open DWT receiver */
@@ -335,24 +335,24 @@ int dwtdll_close(RIG *rig)
 
 int dwtdll_cleanup(RIG *rig)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
 
     /* Clean up the dll access */
     if (priv) { FreeLibrary(priv->dll); }
 
-    if (rig->state.priv)
+    if (STATE(rig)->priv)
     {
-        free(rig->state.priv);
+        free(STATE(rig)->priv);
     }
 
-    rig->state.priv = NULL;
+    STATE(rig)->priv = NULL;
 
     return RIG_OK;
 }
 
 int dwtdll_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     short ret;
 
     ret = priv->FrontendSetFrequency((double) freq);
@@ -362,7 +362,7 @@ int dwtdll_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 
 int dwtdll_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
 
     *freq = (freq_t) priv->FrontendGetFrequency();
 
@@ -371,7 +371,7 @@ int dwtdll_get_freq(RIG *rig, vfo_t vfo, freq_t *freq)
 
 int dwtdll_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     tFrontendMode dwtmode;
     short ret;
 
@@ -394,7 +394,7 @@ int dwtdll_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
 
 int dwtdll_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     tFrontendMode dwtmode;
 
     dwtmode = priv->FrontendGetMode();
@@ -419,7 +419,7 @@ int dwtdll_get_mode(RIG *rig, vfo_t vfo, rmode_t *mode, pbwidth_t *width)
 
 int dwtdll_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     short ret = 0;
 
     switch (level)
@@ -437,7 +437,7 @@ int dwtdll_set_level(RIG *rig, vfo_t vfo, setting_t level, value_t val)
 
 int dwtdll_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     signed short ret = 0;
 
     switch (level)
@@ -489,7 +489,7 @@ int dwtdll_get_level(RIG *rig, vfo_t vfo, setting_t level, value_t *val)
 
 static const char *dwtdll_get_info(RIG *rig)
 {
-    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)rig->state.priv;
+    struct dwtdll_priv_data *priv = (struct dwtdll_priv_data *)STATE(rig)->priv;
     static char info[22];
 
     if (priv->FrontendGetId(info) < 0)
@@ -503,17 +503,13 @@ static const char *dwtdll_get_info(RIG *rig)
 }
 
 
-#elif defined(HAVE_LIBUSB) && (defined(HAVE_LIBUSB_H) || defined(HAVE_LIBUSB_1_0_LIBUSB_H))
+#elif defined(HAVE_LIBUSB)
 
-#include <errno.h>
 
-#ifdef HAVE_LIBUSB_H
+// LIBUSB_CFLAGS set by pkg-config should set the include path appropriately.
+#ifdef HAVE_LIBUSB
 # include <libusb.h>
-#elif defined HAVE_LIBUSB_1_0_LIBUSB_H
-# include <libusb-1.0/libusb.h>
 #endif
-
-#include "token.h"
 
 
 #define USB_VID_CT  0x1539  /* AFG Engineering */
@@ -542,14 +538,14 @@ static const char *dwt_get_info(RIG *rig);
  * see dsbr100.c as an example
  */
 
-const struct rig_caps dwt_caps =
+struct rig_caps dwt_caps =
 {
     RIG_MODEL(RIG_MODEL_DWT),
     .model_name =       "Digital World Traveller",
     .mfg_name =     "Coding Technologies",
     .version =      BACKEND_VER ".0",
     .copyright =        "LGPL",
-    .status =       RIG_STATUS_ALPHA,
+    .status =       RIG_STATUS_BETA,
     .rig_type =     RIG_TYPE_TUNER,
     .ptt_type =     RIG_PTT_NONE,
     .dcd_type =     RIG_DCD_NONE,
@@ -621,7 +617,7 @@ const struct rig_caps dwt_caps =
 
 int dwt_init(RIG *rig)
 {
-    hamlib_port_t *rp = &rig->state.rigport;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     rp->parm.usb.vid = USB_VID_CT;
     rp->parm.usb.pid = USB_PID_CT_DWT;
@@ -635,7 +631,7 @@ int dwt_init(RIG *rig)
 #define MSG_LEN 16
 int dwt_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 {
-    libusb_device_handle *udh = rig->state.rigport.handle;
+    libusb_device_handle *udh = RIGPORT(rig)->handle;
     int request, value, index;
     unsigned char buf[MSG_LEN] = { 0x4a, 0x00, 0x03, 0x00, 0xff, 0xff, 0x32 };
     int requesttype, r;
@@ -668,7 +664,7 @@ int dwt_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
 const char *dwt_get_info(RIG *rig)
 {
     static char buf[64];
-    libusb_device_handle *udh = rig->state.rigport.handle;
+    libusb_device_handle *udh = RIGPORT(rig)->handle;
     struct libusb_device_descriptor desc;
 
     /* always succeeds since libusb-1.0.16 */

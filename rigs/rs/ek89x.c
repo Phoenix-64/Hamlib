@@ -32,7 +32,7 @@
 #include <string.h>     /* String function definitions */
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "num_stdio.h"
 
@@ -47,25 +47,23 @@
 
 /*
  * ek89x
- * We assume that rig!=NULL, rig->state!= NULL, data!=NULL, data_len!=NULL
+ * We assume that rig!=NULL, STATE(rig)!= NULL, data!=NULL, data_len!=NULL
  */
 int
 ek89x_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
                   int *data_len)
 {
     int retval;
-    struct rig_state *rs;
+    hamlib_port_t *rp = RIGPORT(rig);
 
     rig_debug(RIG_DEBUG_VERBOSE, "%s: len=%d,cmd=%s\n", __func__, cmd_len,
               cmd);
 
-    rs = &rig->state;
-
-    rig_flush(&rs->rigport);
+    rig_flush(rp);
 
     rig_debug(RIG_DEBUG_VERBOSE, "ek89x_transaction: len=%d,cmd=%s\n",
               cmd_len, cmd);
-    retval = write_block(&rs->rigport, (unsigned char *) cmd, cmd_len);
+    retval = write_block(rp, (unsigned char *) cmd, cmd_len);
 
     if (retval != RIG_OK)
     {
@@ -79,7 +77,7 @@ ek89x_transaction(RIG *rig, const char *cmd, int cmd_len, char *data,
         return RIG_OK;
     }
 
-    retval = read_string(&rs->rigport, (unsigned char *) data, RESPSZ,
+    retval = read_string(rp, (unsigned char *) data, RESPSZ,
                          CR, 1, 0, 1);
 
     if (retval < 0)
@@ -513,14 +511,14 @@ ek89x_get_info(RIG *rig)
  *  - set/get_channels
  */
 
-const struct rig_caps ek89x_caps =
+struct rig_caps ek89x_caps =
 {
     RIG_MODEL(RIG_MODEL_EK89X),
     .model_name = "EK895/6",
     .mfg_name = "Rohde&Schwarz",
     .version = "20220813.0",
     .copyright = "LGPL",
-    .status = RIG_STATUS_BETA,
+    .status = RIG_STATUS_STABLE,
     .rig_type = RIG_TYPE_RECEIVER,
     .ptt_type = RIG_PTT_NONE,
     // Need to set RTS on for some reason

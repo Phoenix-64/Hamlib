@@ -22,13 +22,13 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "icom.h"
 
 
 #define IC820H_MODES (RIG_MODE_SSB|RIG_MODE_CW|RIG_MODE_FM)
 
-#define IC820H_VFO_ALL (RIG_VFO_A|RIG_VFO_C|RIG_VFO_MEM)
+#define IC820H_VFO_ALL (RIG_VFO_A|RIG_VFO_B|RIG_VFO_MEM)
 /* FIXME: What about MAIN/SUB mode? And satellite mode? */
 
 #define IC820H_VFO_OPS (RIG_OP_FROM_VFO|RIG_OP_TO_VFO|RIG_OP_CPY|RIG_OP_MCL)
@@ -50,14 +50,14 @@ static const struct icom_priv_caps ic820h_priv_caps =
     ic737_ts_sc_list
 };
 
-const struct rig_caps ic820h_caps =
+struct rig_caps ic820h_caps =
 {
     RIG_MODEL(RIG_MODEL_IC820),
     .model_name = "IC-820H",
     .mfg_name =  "Icom",
     .version =  BACKEND_VER ".0",
     .copyright =  "LGPL",
-    .status =  RIG_STATUS_BETA,
+    .status =  RIG_STATUS_STABLE,
     .rig_type =  RIG_TYPE_TRANSCEIVER,
     .ptt_type =  RIG_PTT_NONE,
     .dcd_type =  RIG_DCD_NONE,
@@ -83,8 +83,8 @@ const struct rig_caps ic820h_caps =
     .ctcss_list =  NULL,
     .dcs_list =  NULL,
     .preamp =   { RIG_DBLST_END, },
-    .attenuator =   { RIG_DBLST_END, },    /* Attanuator 15dB for each band. manual button */
-    .max_rit =  Hz(0),     /* SSB,CW: +-1.0kHz  FM: +-5.0kHz */
+    .attenuator =   { RIG_DBLST_END, },    /* Attenuator 15dB for each band. manual button */
+    .max_rit =  Hz(0),     /* SSB,CW: +-1.0 kHz  FM: +-5.0 kHz */
     .max_xit =  Hz(0),
     .max_ifshift =  Hz(0),  /* 1.2kHz manual knob */
     .targetable_vfo =  0,

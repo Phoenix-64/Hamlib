@@ -53,7 +53,7 @@ void sha256_starts(sha256_context *ctx)
     ctx->state[7] = 0x5BE0CD19;
 }
 
-void sha256_process(sha256_context *ctx, uint8 data[64])
+static void sha256_process(sha256_context *ctx, const uint8 data[64])
 {
     uint32 temp1, temp2, W[64];
     uint32 A, B, C, D, E, F, G, H;
@@ -342,6 +342,7 @@ int main(int argc, const char *argv[])
     else
     {
         FILE *f;
+
         if (!(f = fopen(argv[1], "rb")))
         {
             perror("fopen");

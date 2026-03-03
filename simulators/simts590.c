@@ -1,23 +1,15 @@
 // can run this using rigctl/rigctld and socat pty devices
-// gcc -o simyaesu simyaesu.c
 #define _XOPEN_SOURCE 700
 // since we are POSIX here we need this
-#if 0
-struct ip_mreq
-{
-    int dummy;
-};
-#endif
-
 #include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
-#include <hamlib/rig.h>
-#include "sim.h"
+#include <sys/types.h>
 
-#define BUFSIZE 256
+#include "hamlib/rig.h"
+#include "sim.h"
+#include "misc.h"
+
 
 int mysleep = 20;
 
@@ -35,13 +27,14 @@ int usb_af_input = 9;
 int mic_gain = 50;
 
 int
-getmyline(int fd, char *buf)
+_getmyline(int fd, char *buf)
 {
     char c;
     int i = 0;
     memset(buf, 0, BUFSIZE);
 
-    hl_usleep(5*1000);
+    hl_usleep(5 * 1000);
+
     while (read(fd, &c, 1) > 0)
     {
         buf[i++] = c;
@@ -49,52 +42,16 @@ getmyline(int fd, char *buf)
         if (c == ';') { return strlen(buf); }
     }
 
+    if (strlen(buf) == 0) { hl_usleep(10 * 1000); }
+
     return strlen(buf);
 }
-
-#if defined(WIN32) || defined(_WIN32)
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd;
-    fd = open(comport, O_RDWR);
-
-    if (fd < 0)
-    {
-        perror(comport);
-    }
-
-    return fd;
-}
-
-#else
-int openPort(char *comport) // doesn't matter for using pts devices
-{
-    int fd = posix_openpt(O_RDWR);
-    char *name = ptsname(fd);
-
-    if (name == NULL)
-    {
-        perror("pstname");
-        return -1;
-    }
-
-    printf("name=%s\n", name);
-
-    if (fd == -1 || grantpt(fd) == -1 || unlockpt(fd) == -1)
-    {
-        perror("posix_openpt");
-        return -1;
-    }
-
-    return fd;
-}
-#endif
 
 
 
 int main(int argc, char *argv[])
 {
-    char buf[256];
+    char buf[BUFSIZE];
     char *pbuf;
     int fd = openPort(argv[1]);
     int freqa = 14074000, freqb = 140735000;
@@ -104,7 +61,7 @@ int main(int argc, char *argv[])
     {
         buf[0] = 0;
 
-        if (getmyline(fd, buf) > 0) { printf("Cmd:%s\n", buf); }
+        if (_getmyline(fd, buf) > 0) { printf("Cmd:%s\n", buf); }
 
 //        else { return 0; }
 
@@ -112,7 +69,7 @@ int main(int argc, char *argv[])
         {
             printf("%s\n", buf);
             hl_usleep(mysleep * 1000);
-            pbuf = "RM5100000;";
+            pbuf = "RM50005;";
             WRITE(fd, pbuf, strlen(pbuf));
         }
 
@@ -159,20 +116,20 @@ int main(int argc, char *argv[])
         }
         else if (strncmp(buf, "MG", 2) == 0)
         {
-            sscanf(buf,"MG%d", &mic_gain);
+            sscanf(buf, "MG%d", &mic_gain);
         }
         else if (strcmp(buf, "AG0;") == 0)
         {
             SNPRINTF(buf, sizeof(buf), "AG0%03d;", afgain);
             WRITE(fd, buf, strlen(buf));
         }
-        else if (strncmp(buf, "AG0",3) == 0)
+        else if (strncmp(buf, "AG0", 3) == 0)
         {
-            sscanf(buf,"AG0%d",&afgain);
+            sscanf(buf, "AG0%d", &afgain);
         }
-        else if (strncmp(buf,"AG",2) == 0)
+        else if (strncmp(buf, "AG", 2) == 0)
         {
-            WRITE(fd,"?;",2);
+            WRITE(fd, "?;", 2);
         }
         else if (strcmp(buf, "FV;") == 0)
         {
@@ -416,7 +373,7 @@ int main(int argc, char *argv[])
         else if (strncmp(buf, "SH", 2) == 0)
         {
             SNPRINTF(buf, sizeof(buf), "SH%02d;", width_high);
-            WRITE(fd,buf,strlen(buf));
+            WRITE(fd, buf, strlen(buf));
         }
         else if (strncmp(buf, "SL", 2) == 0 && strlen(buf) > 4)
         {
@@ -426,7 +383,12 @@ int main(int argc, char *argv[])
         else if (strncmp(buf, "SL", 2) == 0)
         {
             SNPRINTF(buf, sizeof(buf), "SL%02d;", width_low);
-            WRITE(fd,buf,strlen(buf));
+            WRITE(fd, buf, strlen(buf));
+        }
+        else if (strcmp(buf, "KY;") == 0)
+        {
+            SNPRINTF(buf, sizeof(buf), "KY0;");
+            WRITE(fd, buf, strlen(buf));
         }
 
         else if (strlen(buf) > 0)

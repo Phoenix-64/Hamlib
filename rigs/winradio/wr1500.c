@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 #include "winradio.h"
 
 #ifdef WINRADIO_IOCTL
@@ -37,14 +37,14 @@
 #define WR1500_MODES (RIG_MODE_AM | RIG_MODE_CW | \
                      RIG_MODE_USB | RIG_MODE_LSB | RIG_MODE_FM)
 
-const struct rig_caps wr1500_caps =
+struct rig_caps wr1500_caps =
 {
     RIG_MODEL(RIG_MODEL_WR1500),
     .model_name =     "WR-1500",
     .mfg_name =       "Winradio",
     .version =        BACKEND_VER ".0",
     .copyright =   "LGPL",
-    .status =         RIG_STATUS_ALPHA,
+    .status =         RIG_STATUS_BETA,
     .rig_type =       RIG_TYPE_PCRECEIVER,
     .port_type =      RIG_PORT_DEVICE,
     .targetable_vfo =      0,

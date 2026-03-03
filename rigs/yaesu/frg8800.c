@@ -23,7 +23,7 @@
 
 
 #include "hamlib/rig.h"
-#include "serial.h"
+#include "iofunc.h"
 #include "misc.h"
 #include "yaesu.h"
 
@@ -49,14 +49,14 @@ static int frg8800_set_powerstat(RIG *rig, powerstat_t status);
  *
  */
 
-const struct rig_caps frg8800_caps =
+struct rig_caps frg8800_caps =
 {
     RIG_MODEL(RIG_MODEL_FRG8800),
     .model_name =         "FRG-8800",
     .mfg_name =           "Yaesu",
     .version =            "20160409.0",
     .copyright =          "LGPL",
-    .status =             RIG_STATUS_ALPHA,
+    .status =             RIG_STATUS_BETA,
     .rig_type =           RIG_TYPE_RECEIVER,
     .ptt_type =           RIG_PTT_NONE,
     .dcd_type =           RIG_DCD_NONE,
@@ -160,7 +160,7 @@ int frg8800_open(RIG *rig)
     rig_debug(RIG_DEBUG_TRACE, "%s: called\n", __func__);
 
     /* send Ext Cntl ON: Activate CAT */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 
 }
 
@@ -171,7 +171,7 @@ int frg8800_close(RIG *rig)
     rig_debug(RIG_DEBUG_TRACE, "%s: called\n", __func__);
 
     /* send Ext Cntl OFF: Deactivate CAT */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 
 }
 
@@ -185,11 +185,11 @@ int frg8800_set_freq(RIG *rig, vfo_t vfo, freq_t freq)
     /* store bcd format in cmd (LSB) */
     to_bcd(cmd, freq / 10, 8);
 
-    /* Byte1: 100Hz's and 25Hz step code */
+    /* Byte1: 100 Hz's and 25 Hz step code */
     cmd[0] = (cmd[0] & 0xf0) | (1 << ((((long long)freq) % 100) / 25));
 
     /* Frequency set */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 
 
@@ -232,7 +232,7 @@ int frg8800_set_mode(RIG *rig, vfo_t vfo, rmode_t mode, pbwidth_t width)
     cmd[3] = md;
 
     /* Mode set */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 
 
@@ -246,6 +246,6 @@ int frg8800_set_powerstat(RIG *rig, powerstat_t status)
     cmd[3] = status == RIG_POWER_OFF ? 0xff : 0xfe;
 
     /* Frequency set */
-    return write_block(&rig->state.rigport, cmd, YAESU_CMD_LENGTH);
+    return write_block(RIGPORT(rig), cmd, YAESU_CMD_LENGTH);
 }
 

@@ -29,7 +29,7 @@ rigctlsync \- synchronize a rig to SDR# (or other rig)
 .YS
 .
 .SH DESCRIPTION
-Allows you to synchornize frequence from a rig to SDR#.
+Allows you to synchronize frequency from a rig to SDR#.
 Best when used with rigctld, FlRig, or a multiport radio.
 .
 .PP
@@ -274,6 +274,8 @@ to communicate with a radio connected to Flrig:
 .
 .PP
 .in +4n
+.EX
+Flrig -><- rigctlcom -> COM9 <- virt_port_pipe -> COM10 <- N1MM
 .EE
 .in
 .

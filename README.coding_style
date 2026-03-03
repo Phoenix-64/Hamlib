@@ -1,4 +1,4 @@
-This document superceeds any other prior documentation or commentary regarding
+This document supersedes any other prior documentation or commentary regarding
 the formatting of the Hamlib C and C++ source code.  This document does not
 apply to the Autotools build system, i.e. configure.ac, Makefile.am or the
 Autoconf macros in the 'macros/' directory.
@@ -110,7 +110,7 @@ The old file will be copied to 'moonmelter.c.orig' as a back up.
 
 * One space between a conditional key word and its opening parentheses.
 
-* No space between a function name and its opening paretheses.
+* No space between a function name and its opening parentheses.
 
 * No space between a pointer operator ('*') and the pointer name.  Likewise
   for the address operator ('&').  Exception:  In a function prototype and
@@ -201,6 +201,24 @@ work flawlessly.  Somehow.
 
 When indenting a line in a Makefile.am (and the resulting Makefile) that a
 real Tab character (0x09) is required.  Spaces will cause 'make' errors.
+
+3.5 Markdown
+
+Markdown (https://daringfireball.net/projects/markdown/) is characterized by
+the use of various characters, indentation, and spaces to generate HTML markup
+by various tools.  There are several dialects of Markdown in use.  The most
+pertinent dialect for our use is GitHub Flavored Markdown
+(https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
+
+Besides its conversion to HTML, the intention of Markdown is readable text
+files where the formatting cues don't distract from reading the text.  Sites
+like GitHub will process these files on the fly and render them in HTML.
+
+For Markdown files included in Hamlib, consider these suggestions:
+
+ - Markdown files should have an extension of .md
+ - Spaces should be used instead of tabs.
+ - Text width should be limited to 80-100 characters with 80 preferred.
 
 
 4. Use of code formatting tools

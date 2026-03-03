@@ -7,16 +7,16 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#include <hamlib/rig.h>
+#include "hamlib/rig.h"
 
-#include <hamlib/config.h>
+#include "hamlib/config.h"
 
 #define SERIAL_PORT "/dev/pts/2"
 
 
 int main(int argc, const char *argv[])
 {
-    RIG *my_rig;        /* handle to rig (nstance) */
+    RIG *my_rig;        /* handle to rig (instance) */
     freq_t freq;        /* frequency  */
     rmode_t rmode;      /* radio mode of operation */
     pbwidth_t width;
@@ -38,7 +38,8 @@ int main(int argc, const char *argv[])
      * allocate memory, setup & open port
      */
 
-        hamlib_port_t myport;
+    hamlib_port_t myport;
+
     if (argc < 2)
     {
         /* may be overridden by backend probe */
@@ -67,7 +68,7 @@ int main(int argc, const char *argv[])
         exit(1); /* whoops! something went wrong (mem alloc?) */
     }
 
-    //strncpy(my_rig->state.rigport.pathname, SERIAL_PORT, HAMLIB_FILPATHLEN - 1);
+    //strncpy(RIGPORT(my_rig)->pathname, SERIAL_PORT, HAMLIB_FILPATHLEN - 1);
 
     retcode = rig_open(my_rig);
 
@@ -77,16 +78,22 @@ int main(int argc, const char *argv[])
         exit(2);
     }
 
-    uint64_t levels = rig_get_caps_int(my_rig->caps->rig_model, RIG_CAPS_HAS_GET_LEVEL);
-    printf("HAS_GET_LEVEL=0x%8lx, SWR=%8llx,true=%d\n", levels, levels & RIG_LEVEL_SWR, (levels & RIG_LEVEL_SWR) == RIG_LEVEL_SWR);
+    uint64_t levels = rig_get_caps_int(my_rig->caps->rig_model,
+                                       RIG_CAPS_HAS_GET_LEVEL);
+    printf("HAS_GET_LEVEL=0x%8llx, SWR=%8llx,true=%d\n", (unsigned long long)levels,
+           (unsigned long long)(levels & RIG_LEVEL_SWR),
+           (levels & RIG_LEVEL_SWR) == RIG_LEVEL_SWR);
 
     char val[256];
     retcode = rig_get_conf2(my_rig, rig_token_lookup(my_rig, "write_delay"), val,
                             sizeof(val));
+
     if (retcode != RIG_OK)
     {
-        rig_debug(RIG_DEBUG_ERR, "%s: rig_get_conf2: %s\n", __func__, rigerror(retcode));
+        rig_debug(RIG_DEBUG_ERR, "%s: rig_get_conf2: %s\n", __func__,
+                  rigerror(retcode));
     }
+
     printf("write_delay=%s\n", val);
 
 //    printf("Port %s opened ok\n", SERIAL_PORT);
@@ -98,7 +105,7 @@ int main(int argc, const char *argv[])
      */
 
     /*
-     * Example of setting rig paameters
+     * Example of setting rig parameters
      * and some error checking on the return code.
      */
 
@@ -146,7 +153,7 @@ int main(int argc, const char *argv[])
 
     if (freq != 29620000)
     {
-        printf("rig_set_freq: error exptect %.0f got %.0f\n", 296290000.0, freq);
+        printf("rig_set_freq: error expect %.0f got %.0f\n", 296290000.0, freq);
     }
 
     if (rmode != RIG_MODE_FM || width != rig_passband_narrow(my_rig, RIG_MODE_FM))
